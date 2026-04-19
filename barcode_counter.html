@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MJM Scan Counter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+<style>
+  :root {
+    --bg: #0a0f14;
+    --bg-elev: #111821;
+    --bg-card: #0f1620;
+    --border: #1f2a38;
+    --text: #e6edf3;
+    --muted: #7d8a9c;
+    --accent: #00ff9d;
+    --accent-dim: #00cc7d;
+    --danger: #ff4d6d;
+    --grid: rgba(0, 255, 157, 0.04);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Grotesk', sans-serif;
+    min-height: 100vh;
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+      radial-gradient(ellipse at top, rgba(0, 255, 157, 0.08) 0%, transparent 60%);
+    background-size: 40px 40px, 40px 40px, 100% 100%;
+    padding: 20px;
+    padding-bottom: 40px;
+  }
+  .wrap { max-width: 520px; margin: 0 auto; }
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 0 24px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 24px;
+  }
+  .brand {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    letter-spacing: 0.2em;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+  .brand .dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    background: var(--accent);
+    border-radius: 50%;
+    margin-right: 8px;
+    box-shadow: 0 0 12px var(--accent);
+    animation: pulse 1.5s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  .status {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+  }
+  h1 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    margin-bottom: 4px;
+  }
+  .subtitle { color: var(--muted); font-size: 14px; margin-bottom: 28px; }
+
+  .counter-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px 24px;
+    text-align: center;
+    margin-bottom: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+  .counter-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  }
+  .counter-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.3em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .counter-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 96px;
+    font-weight: 800;
+    line-height: 1;
+    color: var(--accent);
+    text-shadow: 0 0 40px rgba(0, 255, 157, 0.3);
+    transition: transform 0.15s ease;
+  }
+  .counter-value.bump { transform: scale(1.15); }
+  .last-scan {
+    margin-top: 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+    min-height: 18px;
+    word-break: break-all;
+  }
+  .last-scan b { color: var(--text); font-weight: 600; }
+
+  .scanner-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  #reader {
+    border-radius: 12px;
+    overflow: hidden;
+    background: #000;
+    min-height: 220px;
+  }
+  #reader__scan_region { background: #000 !important; }
+  #reader__dashboard_section_csr button {
+    background: var(--accent) !important;
+    color: var(--bg) !important;
+    border: none !important;
+    padding: 10px 20px !important;
+    border-radius: 8px !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    font-weight: 600 !important;
+    cursor: pointer !important;
+    margin-top: 8px !important;
+  }
+
+  .controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  button.btn {
+    background: var(--bg-elev);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 14px 16px;
+    border-radius: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button.btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  button.btn.danger:hover {
+    border-color: var(--danger);
+    color: var(--danger);
+  }
+  button.btn.primary {
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
+    font-weight: 700;
+  }
+  button.btn.primary:hover {
+    background: var(--accent-dim);
+    color: var(--bg);
+  }
+
+  .log-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+  }
+  .log-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .log-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.3em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+  .log-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--accent);
+  }
+  .log {
+    max-height: 240px;
+    overflow-y: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+  }
+  .log-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .log-item:last-child { border-bottom: none; }
+  .log-item .code { color: var(--text); }
+  .log-item .time { font-size: 10px; }
+  .empty {
+    text-align: center;
+    padding: 24px 0;
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+  }
+
+  .manual {
+    margin-top: 12px;
+    display: flex;
+    gap: 8px;
+  }
+  .manual input {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 12px;
+    border-radius: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    outline: none;
+  }
+  .manual input:focus { border-color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand"><span class="dot"></span>MJM // SCAN</div>
+    <div class="status" id="status">STANDBY</div>
+  </header>
+
+  <h1>Barcode Counter</h1>
+  <p class="subtitle">Point the camera at any barcode or QR code to count automatically.</p>
+
+  <div class="counter-card">
+    <div class="counter-label">Total Scans</div>
+    <div class="counter-value" id="count">0</div>
+    <div class="last-scan" id="lastScan">Awaiting first scan…</div>
+  </div>
+
+  <div class="scanner-card">
+    <div id="reader"></div>
+    <div class="manual">
+      <input type="text" id="manualInput" placeholder="Or type/paste code + Enter" />
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="btn primary" id="startBtn">Start Camera</button>
+    <button class="btn danger" id="resetBtn">Reset Counter</button>
+  </div>
+
+  <div class="log-card">
+    <div class="log-header">
+      <div class="log-title">Scan Log</div>
+      <div class="log-count" id="logCount">0 entries</div>
+    </div>
+    <div class="log" id="log">
+      <div class="empty">No scans yet</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let count = 0;
+  let scans = [];
+  let lastCode = '';
+  let lastTime = 0;
+  const DEBOUNCE_MS = 1500; // avoid counting the same code twice in a row
+
+  const countEl = document.getElementById('count');
+  const lastEl = document.getElementById('lastScan');
+  const logEl = document.getElementById('log');
+  const logCountEl = document.getElementById('logCount');
+  const statusEl = document.getElementById('status');
+  const manualInput = document.getElementById('manualInput');
+
+  function registerScan(code) {
+    const now = Date.now();
+    if (code === lastCode && (now - lastTime) < DEBOUNCE_MS) return;
+    lastCode = code;
+    lastTime = now;
+
+    count++;
+    countEl.textContent = count;
+    countEl.classList.add('bump');
+    setTimeout(() => countEl.classList.remove('bump'), 150);
+
+    const time = new Date().toLocaleTimeString();
+    scans.unshift({ code, time });
+    lastEl.innerHTML = `Last: <b>${code}</b>`;
+    renderLog();
+
+    // Haptic feedback on phones
+    if (navigator.vibrate) navigator.vibrate(50);
+  }
+
+  function renderLog() {
+    if (scans.length === 0) {
+      logEl.innerHTML = '<div class="empty">No scans yet</div>';
+      logCountEl.textContent = '0 entries';
+      return;
+    }
+    logCountEl.textContent = scans.length + ' entr' + (scans.length === 1 ? 'y' : 'ies');
+    logEl.innerHTML = scans.slice(0, 50).map(s =>
+      `<div class="log-item"><span class="code">${s.code}</span><span class="time">${s.time}</span></div>`
+    ).join('');
+  }
+
+  // Manual / hardware scanner input (HID keyboard scanners trigger this)
+  manualInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      const val = manualInput.value.trim();
+      if (val) registerScan(val);
+      manualInput.value = '';
+    }
+  });
+
+  // Reset
+  document.getElementById('resetBtn').addEventListener('click', () => {
+    if (!confirm('Reset counter and clear log?')) return;
+    count = 0;
+    scans = [];
+    lastCode = '';
+    countEl.textContent = '0';
+    lastEl.textContent = 'Awaiting first scan…';
+    renderLog();
+  });
+
+  // Camera scanner
+  let html5QrCode = null;
+  const startBtn = document.getElementById('startBtn');
+
+  startBtn.addEventListener('click', async () => {
+    if (html5QrCode && html5QrCode.isScanning) {
+      await html5QrCode.stop();
+      startBtn.textContent = 'Start Camera';
+      statusEl.textContent = 'STANDBY';
+      return;
+    }
+    try {
+      html5QrCode = new Html5Qrcode('reader');
+      await html5QrCode.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: { width: 250, height: 150 } },
+        (decodedText) => registerScan(decodedText),
+        () => {} // ignore per-frame errors
+      );
+      startBtn.textContent = 'Stop Camera';
+      statusEl.textContent = 'SCANNING';
+    } catch (err) {
+      alert('Camera error: ' + err);
+      statusEl.textContent = 'ERROR';
+    }
+  });
+</script>
+</body>
+</html>
