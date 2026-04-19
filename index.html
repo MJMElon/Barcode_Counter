@@ -10,16 +10,17 @@
 <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 <style>
   :root {
-    --bg: #0a0f14;
-    --bg-elev: #111821;
-    --bg-card: #0f1620;
-    --border: #1f2a38;
-    --text: #e6edf3;
-    --muted: #7d8a9c;
-    --accent: #00ff9d;
-    --accent-dim: #00cc7d;
-    --danger: #ff4d6d;
-    --grid: rgba(0, 255, 157, 0.04);
+    --bg: #f5f7fa;
+    --bg-elev: #ffffff;
+    --bg-card: #ffffff;
+    --border: #d9dee5;
+    --text: #0a0f14;
+    --muted: #6b7280;
+    --accent: #00a870;
+    --accent-dim: #008c5c;
+    --on-accent: #ffffff;
+    --danger: #dc2626;
+    --grid: rgba(0, 168, 112, 0.06);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; }
@@ -31,7 +32,7 @@
     background-image:
       linear-gradient(var(--grid) 1px, transparent 1px),
       linear-gradient(90deg, var(--grid) 1px, transparent 1px),
-      radial-gradient(ellipse at top, rgba(0, 255, 157, 0.08) 0%, transparent 60%);
+      radial-gradient(ellipse at top, rgba(0, 168, 112, 0.10) 0%, transparent 60%);
     background-size: 40px 40px, 40px 40px, 100% 100%;
     padding: 20px;
     padding-bottom: 40px;
@@ -112,7 +113,7 @@
     font-weight: 800;
     line-height: 1;
     color: var(--accent);
-    text-shadow: 0 0 40px rgba(0, 255, 157, 0.3);
+    text-shadow: 0 0 40px rgba(0, 168, 112, 0.25);
     transition: transform 0.15s ease;
   }
   .counter-value.bump { transform: scale(1.15); }
@@ -142,7 +143,7 @@
   #reader__scan_region { background: #000 !important; }
   #reader__dashboard_section_csr button {
     background: var(--accent) !important;
-    color: var(--bg) !important;
+    color: var(--on-accent) !important;
     border: none !important;
     padding: 10px 20px !important;
     border-radius: 8px !important;
@@ -181,13 +182,13 @@
   }
   button.btn.primary {
     background: var(--accent);
-    color: var(--bg);
+    color: var(--on-accent);
     border-color: var(--accent);
     font-weight: 700;
   }
   button.btn.primary:hover {
     background: var(--accent-dim);
-    color: var(--bg);
+    color: var(--on-accent);
   }
 
   .log-card {
