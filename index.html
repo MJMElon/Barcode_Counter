@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <title>MJM Scan Counter</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -18,6 +18,7 @@
     --muted: #7d8a9c;
     --accent: #00ff9d;
     --accent-dim: #00cc7d;
+    --warn: #ffc857;
     --danger: #ff4d6d;
     --grid: rgba(0, 255, 157, 0.04);
   }
@@ -72,6 +73,9 @@
     color: var(--muted);
     letter-spacing: 0.1em;
   }
+  .status.scanning { color: var(--accent); }
+  .status.done { color: var(--warn); }
+  .status.error { color: var(--danger); }
   h1 {
     font-family: 'JetBrains Mono', monospace;
     font-size: 28px;
@@ -79,15 +83,15 @@
     letter-spacing: -0.02em;
     margin-bottom: 4px;
   }
-  .subtitle { color: var(--muted); font-size: 14px; margin-bottom: 28px; }
+  .subtitle { color: var(--muted); font-size: 14px; margin-bottom: 24px; }
 
   .counter-card {
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: 16px;
-    padding: 32px 24px;
+    padding: 28px 24px 24px;
     text-align: center;
-    margin-bottom: 20px;
+    margin-bottom: 16px;
     position: relative;
     overflow: hidden;
   }
@@ -104,20 +108,72 @@
     letter-spacing: 0.3em;
     color: var(--muted);
     text-transform: uppercase;
-    margin-bottom: 12px;
+    margin-bottom: 10px;
   }
   .counter-value {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 96px;
+    font-size: 84px;
     font-weight: 800;
     line-height: 1;
     color: var(--accent);
     text-shadow: 0 0 40px rgba(0, 255, 157, 0.3);
     transition: transform 0.15s ease;
   }
-  .counter-value.bump { transform: scale(1.15); }
-  .last-scan {
+  .counter-value .target {
+    font-size: 28px;
+    color: var(--muted);
+    text-shadow: none;
+    margin-left: 4px;
+  }
+  .counter-value.bump { transform: scale(1.12); }
+  .counter-value.done { color: var(--warn); text-shadow: 0 0 40px rgba(255, 200, 87, 0.4); }
+
+  .progress {
+    height: 6px;
+    background: var(--bg);
+    border-radius: 999px;
     margin-top: 16px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .progress-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--accent-dim), var(--accent));
+    transition: width 0.25s ease;
+  }
+  .progress-fill.done { background: linear-gradient(90deg, var(--warn), var(--warn)); }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-top: 16px;
+  }
+  .stat {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 8px;
+  }
+  .stat-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .stat-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .stat-value.warn { color: var(--warn); }
+
+  .last-scan {
+    margin-top: 14px;
     font-family: 'JetBrains Mono', monospace;
     font-size: 12px;
     color: var(--muted);
@@ -125,21 +181,23 @@
     word-break: break-all;
   }
   .last-scan b { color: var(--text); font-weight: 600; }
+  .last-scan.dup b { color: var(--warn); }
 
   .scanner-card {
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: 16px;
-    padding: 20px;
+    padding: 16px;
     margin-bottom: 16px;
   }
   #reader {
     border-radius: 12px;
     overflow: hidden;
     background: #000;
-    min-height: 220px;
+    min-height: 240px;
   }
   #reader__scan_region { background: #000 !important; }
+  #reader video { border-radius: 12px; }
   #reader__dashboard_section_csr button {
     background: var(--accent) !important;
     color: var(--bg) !important;
@@ -151,6 +209,54 @@
     cursor: pointer !important;
     margin-top: 8px !important;
   }
+
+  .target-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-top: 12px;
+  }
+  .target-row label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+    text-transform: uppercase;
+    flex-shrink: 0;
+  }
+  .target-row input {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    outline: none;
+    text-align: right;
+  }
+  .target-row input:focus { border-color: var(--accent); }
+
+  .toggle-row {
+    display: flex;
+    gap: 12px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+  }
+  .toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    color: var(--muted);
+    text-transform: uppercase;
+    cursor: pointer;
+    user-select: none;
+  }
+  .toggle input { accent-color: var(--accent); }
 
   .controls {
     display: grid;
@@ -189,6 +295,7 @@
     background: var(--accent-dim);
     color: var(--bg);
   }
+  button.btn.wide { grid-column: span 2; }
 
   .log-card {
     background: var(--bg-card);
@@ -215,7 +322,7 @@
     color: var(--accent);
   }
   .log {
-    max-height: 240px;
+    max-height: 260px;
     overflow-y: auto;
     font-family: 'JetBrains Mono', monospace;
     font-size: 12px;
@@ -223,13 +330,23 @@
   .log-item {
     display: flex;
     justify-content: space-between;
+    align-items: center;
+    gap: 8px;
     padding: 8px 0;
     border-bottom: 1px solid var(--border);
     color: var(--muted);
   }
   .log-item:last-child { border-bottom: none; }
-  .log-item .code { color: var(--text); }
-  .log-item .time { font-size: 10px; }
+  .log-item .code { color: var(--text); flex: 1; word-break: break-all; }
+  .log-item .time { font-size: 10px; flex-shrink: 0; }
+  .log-item.dup .code { color: var(--warn); }
+  .log-item .tag {
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    color: var(--warn);
+    text-transform: uppercase;
+    flex-shrink: 0;
+  }
   .empty {
     text-align: center;
     padding: 24px 0;
@@ -255,6 +372,28 @@
     outline: none;
   }
   .manual input:focus { border-color: var(--accent); }
+
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--bg-elev);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 12px 20px;
+    border-radius: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.25s ease;
+    z-index: 100;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.warn { border-color: var(--warn); color: var(--warn); }
+  .toast.done { border-color: var(--accent); color: var(--accent); }
 </style>
 </head>
 <body>
@@ -265,16 +404,40 @@
   </header>
 
   <h1>Barcode Counter</h1>
-  <p class="subtitle">Point the camera at any barcode or QR code to count automatically.</p>
+  <p class="subtitle">Continuous camera scanning. Duplicates are counted only once.</p>
 
   <div class="counter-card">
-    <div class="counter-label">Total Scans</div>
-    <div class="counter-value" id="count">0</div>
+    <div class="counter-label">Unique Scans</div>
+    <div class="counter-value" id="count">0<span class="target" id="targetLabel">/1300</span></div>
+    <div class="progress"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-label">Total</div>
+        <div class="stat-value" id="totalStat">0</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Duplicates</div>
+        <div class="stat-value warn" id="dupStat">0</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Remaining</div>
+        <div class="stat-value" id="remainStat">1300</div>
+      </div>
+    </div>
     <div class="last-scan" id="lastScan">Awaiting first scan…</div>
   </div>
 
   <div class="scanner-card">
     <div id="reader"></div>
+    <div class="target-row">
+      <label for="targetInput">Target</label>
+      <input type="number" id="targetInput" min="1" max="100000" value="1300" />
+    </div>
+    <div class="toggle-row">
+      <label class="toggle"><input type="checkbox" id="soundToggle" checked /> Sound</label>
+      <label class="toggle"><input type="checkbox" id="vibrateToggle" checked /> Vibrate</label>
+      <label class="toggle"><input type="checkbox" id="countDupToggle" /> Count dups</label>
+    </div>
     <div class="manual">
       <input type="text" id="manualInput" placeholder="Or type/paste code + Enter" />
     </div>
@@ -282,7 +445,8 @@
 
   <div class="controls">
     <button class="btn primary" id="startBtn">Start Camera</button>
-    <button class="btn danger" id="resetBtn">Reset Counter</button>
+    <button class="btn danger" id="resetBtn">Reset Session</button>
+    <button class="btn wide" id="exportBtn">Export CSV</button>
   </div>
 
   <div class="log-card">
@@ -296,53 +460,228 @@
   </div>
 </div>
 
+<div class="toast" id="toast"></div>
+
 <script>
-  let count = 0;
+  const STORAGE_KEY = 'mjm.scan.session.v1';
+  const SETTINGS_KEY = 'mjm.scan.settings.v1';
+  const DEDUPE_DEBOUNCE_MS = 800;
+
+  const seen = new Set();
   let scans = [];
+  let unique = 0;
+  let total = 0;
+  let dups = 0;
+  let target = 1300;
   let lastCode = '';
   let lastTime = 0;
-  const DEBOUNCE_MS = 1500; // avoid counting the same code twice in a row
+  let completedFired = false;
 
   const countEl = document.getElementById('count');
+  const targetLabel = document.getElementById('targetLabel');
+  const progressFill = document.getElementById('progressFill');
+  const totalStat = document.getElementById('totalStat');
+  const dupStat = document.getElementById('dupStat');
+  const remainStat = document.getElementById('remainStat');
   const lastEl = document.getElementById('lastScan');
   const logEl = document.getElementById('log');
   const logCountEl = document.getElementById('logCount');
   const statusEl = document.getElementById('status');
   const manualInput = document.getElementById('manualInput');
+  const targetInput = document.getElementById('targetInput');
+  const soundToggle = document.getElementById('soundToggle');
+  const vibrateToggle = document.getElementById('vibrateToggle');
+  const countDupToggle = document.getElementById('countDupToggle');
+  const toastEl = document.getElementById('toast');
 
-  function registerScan(code) {
-    const now = Date.now();
-    if (code === lastCode && (now - lastTime) < DEBOUNCE_MS) return;
-    lastCode = code;
-    lastTime = now;
-
-    count++;
-    countEl.textContent = count;
-    countEl.classList.add('bump');
-    setTimeout(() => countEl.classList.remove('bump'), 150);
-
-    const time = new Date().toLocaleTimeString();
-    scans.unshift({ code, time });
-    lastEl.innerHTML = `Last: <b>${code}</b>`;
-    renderLog();
-
-    // Haptic feedback on phones
-    if (navigator.vibrate) navigator.vibrate(50);
+  // ---------- Audio ----------
+  let audioCtx = null;
+  function ensureAudio() {
+    if (!audioCtx) {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (Ctx) audioCtx = new Ctx();
+    }
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+  function beep(freq, duration, type = 'sine', volume = 0.25) {
+    if (!soundToggle.checked) return;
+    const ctx = ensureAudio();
+    if (!ctx) return;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    gain.gain.value = 0;
+    osc.connect(gain).connect(ctx.destination);
+    const now = ctx.currentTime;
+    gain.gain.linearRampToValueAtTime(volume, now + 0.01);
+    gain.gain.linearRampToValueAtTime(0, now + duration);
+    osc.start(now);
+    osc.stop(now + duration + 0.02);
+  }
+  function beepSuccess() { beep(1150, 0.08, 'square', 0.22); }
+  function beepDuplicate() { beep(420, 0.18, 'sine', 0.18); }
+  function beepComplete() {
+    beep(900, 0.1, 'square', 0.25);
+    setTimeout(() => beep(1300, 0.1, 'square', 0.25), 110);
+    setTimeout(() => beep(1700, 0.18, 'square', 0.28), 230);
   }
 
-  function renderLog() {
+  // ---------- Toast ----------
+  let toastTimer = null;
+  function toast(msg, kind = '') {
+    toastEl.className = 'toast show' + (kind ? ' ' + kind : '');
+    toastEl.textContent = msg;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove('show'), 1400);
+  }
+
+  // ---------- Persistence ----------
+  function saveSession() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        seen: Array.from(seen),
+        scans: scans.slice(0, 2000),
+        unique, total, dups, completedFired,
+      }));
+    } catch (e) { /* ignore quota */ }
+  }
+  function loadSession() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const s = JSON.parse(raw);
+      (s.seen || []).forEach(c => seen.add(c));
+      scans = s.scans || [];
+      unique = s.unique || 0;
+      total = s.total || 0;
+      dups = s.dups || 0;
+      completedFired = !!s.completedFired;
+    } catch (e) { /* ignore */ }
+  }
+  function saveSettings() {
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+        target,
+        sound: soundToggle.checked,
+        vibrate: vibrateToggle.checked,
+        countDup: countDupToggle.checked,
+      }));
+    } catch (e) { /* ignore */ }
+  }
+  function loadSettings() {
+    try {
+      const raw = localStorage.getItem(SETTINGS_KEY);
+      if (!raw) return;
+      const s = JSON.parse(raw);
+      if (s.target) { target = s.target; targetInput.value = s.target; }
+      if (typeof s.sound === 'boolean') soundToggle.checked = s.sound;
+      if (typeof s.vibrate === 'boolean') vibrateToggle.checked = s.vibrate;
+      if (typeof s.countDup === 'boolean') countDupToggle.checked = s.countDup;
+    } catch (e) { /* ignore */ }
+  }
+
+  // ---------- Rendering ----------
+  function render() {
+    countEl.firstChild.nodeValue = String(unique);
+    targetLabel.textContent = '/' + target;
+    totalStat.textContent = String(total);
+    dupStat.textContent = String(dups);
+    const remain = Math.max(0, target - unique);
+    remainStat.textContent = String(remain);
+
+    const pct = Math.min(100, (unique / target) * 100);
+    progressFill.style.width = pct + '%';
+
+    const reached = unique >= target;
+    progressFill.classList.toggle('done', reached);
+    countEl.classList.toggle('done', reached);
+
     if (scans.length === 0) {
       logEl.innerHTML = '<div class="empty">No scans yet</div>';
       logCountEl.textContent = '0 entries';
       return;
     }
     logCountEl.textContent = scans.length + ' entr' + (scans.length === 1 ? 'y' : 'ies');
-    logEl.innerHTML = scans.slice(0, 50).map(s =>
-      `<div class="log-item"><span class="code">${s.code}</span><span class="time">${s.time}</span></div>`
+    logEl.innerHTML = scans.slice(0, 100).map(s =>
+      `<div class="log-item${s.dup ? ' dup' : ''}">
+         <span class="code">${escapeHtml(s.code)}</span>
+         ${s.dup ? '<span class="tag">DUP</span>' : ''}
+         <span class="time">${s.time}</span>
+       </div>`
     ).join('');
   }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+  }
+  function bump() {
+    countEl.classList.add('bump');
+    setTimeout(() => countEl.classList.remove('bump'), 150);
+  }
 
-  // Manual / hardware scanner input (HID keyboard scanners trigger this)
+  // ---------- Scan handling ----------
+  function registerScan(rawCode) {
+    const code = String(rawCode).trim();
+    if (!code) return;
+
+    // Hard debounce: ignore same code fired multiple frames in a row
+    const now = Date.now();
+    if (code === lastCode && (now - lastTime) < DEDUPE_DEBOUNCE_MS) return;
+    lastCode = code;
+    lastTime = now;
+
+    total++;
+    const isDup = seen.has(code);
+    const time = new Date().toLocaleTimeString();
+
+    if (!isDup) {
+      seen.add(code);
+      unique++;
+      scans.unshift({ code, time, dup: false });
+      lastEl.classList.remove('dup');
+      lastEl.innerHTML = `Last: <b>${escapeHtml(code)}</b>`;
+      beepSuccess();
+      if (vibrateToggle.checked && navigator.vibrate) navigator.vibrate(40);
+      bump();
+    } else {
+      dups++;
+      if (countDupToggle.checked) {
+        // Treat duplicates as countable scans (still tracked separately)
+        scans.unshift({ code, time, dup: true });
+        bump();
+      } else {
+        scans.unshift({ code, time, dup: true });
+      }
+      lastEl.classList.add('dup');
+      lastEl.innerHTML = `Dup: <b>${escapeHtml(code)}</b>`;
+      beepDuplicate();
+      toast('Duplicate: ' + code, 'warn');
+      if (vibrateToggle.checked && navigator.vibrate) navigator.vibrate([20, 40, 20]);
+    }
+
+    render();
+    saveSession();
+
+    if (!completedFired && unique >= target) {
+      completedFired = true;
+      saveSession();
+      onTargetReached();
+    }
+  }
+
+  function onTargetReached() {
+    statusEl.textContent = 'TARGET REACHED';
+    statusEl.classList.remove('scanning');
+    statusEl.classList.add('done');
+    beepComplete();
+    if (vibrateToggle.checked && navigator.vibrate) navigator.vibrate([80, 60, 80, 60, 200]);
+    toast(`Target ${target} reached!`, 'done');
+  }
+
+  // ---------- Manual / hardware scanner input ----------
   manualInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       const val = manualInput.value.trim();
@@ -351,43 +690,184 @@
     }
   });
 
-  // Reset
+  // ---------- Target input ----------
+  targetInput.addEventListener('change', () => {
+    const v = parseInt(targetInput.value, 10);
+    if (!isNaN(v) && v > 0) {
+      target = v;
+      // Re-arm completion if target raised above current unique
+      if (unique < target) completedFired = false;
+      saveSettings();
+      render();
+    }
+  });
+  [soundToggle, vibrateToggle, countDupToggle].forEach(el =>
+    el.addEventListener('change', saveSettings)
+  );
+
+  // ---------- Reset ----------
   document.getElementById('resetBtn').addEventListener('click', () => {
-    if (!confirm('Reset counter and clear log?')) return;
-    count = 0;
+    if (!confirm('Reset session: clear count, duplicates, and scan log?')) return;
+    seen.clear();
     scans = [];
-    lastCode = '';
-    countEl.textContent = '0';
+    unique = 0; total = 0; dups = 0;
+    lastCode = ''; lastTime = 0;
+    completedFired = false;
+    lastEl.classList.remove('dup');
     lastEl.textContent = 'Awaiting first scan…';
-    renderLog();
+    statusEl.classList.remove('done');
+    if (html5QrCode && html5QrCode.isScanning) {
+      statusEl.textContent = 'SCANNING';
+      statusEl.classList.add('scanning');
+    } else {
+      statusEl.textContent = 'STANDBY';
+      statusEl.classList.remove('scanning');
+    }
+    render();
+    saveSession();
   });
 
-  // Camera scanner
+  // ---------- Export ----------
+  document.getElementById('exportBtn').addEventListener('click', () => {
+    if (scans.length === 0) { toast('Nothing to export'); return; }
+    const rows = [['#', 'code', 'time', 'duplicate']];
+    // Reverse so row 1 = first scan
+    const ordered = scans.slice().reverse();
+    ordered.forEach((s, i) => rows.push([i + 1, s.code, s.time, s.dup ? 'yes' : 'no']));
+    const csv = rows.map(r => r.map(v => {
+      const t = String(v);
+      return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+    }).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    a.href = url;
+    a.download = `mjm-scans-${stamp}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+
+  // ---------- Camera scanner ----------
   let html5QrCode = null;
   const startBtn = document.getElementById('startBtn');
 
+  function preferredCameraId(cameras) {
+    // Prefer back/environment camera on phones
+    const back = cameras.find(c => /back|rear|environment/i.test(c.label));
+    return (back || cameras[cameras.length - 1] || cameras[0]).id;
+  }
+
+  async function startCamera() {
+    ensureAudio(); // unlock audio on user gesture
+    html5QrCode = new Html5Qrcode('reader', { verbose: false });
+    const config = {
+      fps: 15,
+      qrbox: (vw, vh) => {
+        const minEdge = Math.min(vw, vh);
+        const w = Math.floor(Math.min(vw * 0.9, 360));
+        const h = Math.floor(Math.min(vh * 0.55, 200));
+        return { width: w, height: h };
+      },
+      aspectRatio: 1.7778,
+      disableFlip: false,
+      formatsToSupport: [
+        Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.CODE_39,
+        Html5QrcodeSupportedFormats.CODE_93,
+        Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.EAN_8,
+        Html5QrcodeSupportedFormats.UPC_A,
+        Html5QrcodeSupportedFormats.UPC_E,
+        Html5QrcodeSupportedFormats.ITF,
+        Html5QrcodeSupportedFormats.CODABAR,
+        Html5QrcodeSupportedFormats.QR_CODE,
+        Html5QrcodeSupportedFormats.DATA_MATRIX,
+      ],
+      experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+    };
+
+    let cameraConfig = { facingMode: { exact: 'environment' } };
+    try {
+      const cams = await Html5Qrcode.getCameras();
+      if (cams && cams.length) cameraConfig = preferredCameraId(cams);
+    } catch (e) { /* fall back to facingMode */ }
+
+    try {
+      await html5QrCode.start(
+        cameraConfig,
+        config,
+        (decodedText) => registerScan(decodedText),
+        () => {} // ignore per-frame decode errors
+      );
+    } catch (err) {
+      // Retry without the strict 'exact' constraint
+      if (typeof cameraConfig === 'object' && cameraConfig.facingMode) {
+        await html5QrCode.start(
+          { facingMode: 'environment' },
+          config,
+          (decodedText) => registerScan(decodedText),
+          () => {}
+        );
+      } else {
+        throw err;
+      }
+    }
+
+    startBtn.textContent = 'Stop Camera';
+    statusEl.textContent = 'SCANNING';
+    statusEl.classList.add('scanning');
+    statusEl.classList.remove('error', 'done');
+  }
+
+  async function stopCamera() {
+    try {
+      if (html5QrCode && html5QrCode.isScanning) {
+        await html5QrCode.stop();
+        await html5QrCode.clear();
+      }
+    } catch (e) { /* ignore */ }
+    startBtn.textContent = 'Start Camera';
+    statusEl.classList.remove('scanning');
+    if (!completedFired) statusEl.textContent = 'STANDBY';
+  }
+
   startBtn.addEventListener('click', async () => {
     if (html5QrCode && html5QrCode.isScanning) {
-      await html5QrCode.stop();
-      startBtn.textContent = 'Start Camera';
-      statusEl.textContent = 'STANDBY';
+      await stopCamera();
       return;
     }
     try {
-      html5QrCode = new Html5Qrcode('reader');
-      await html5QrCode.start(
-        { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 250, height: 150 } },
-        (decodedText) => registerScan(decodedText),
-        () => {} // ignore per-frame errors
-      );
-      startBtn.textContent = 'Stop Camera';
-      statusEl.textContent = 'SCANNING';
+      await startCamera();
     } catch (err) {
-      alert('Camera error: ' + err);
+      console.error(err);
       statusEl.textContent = 'ERROR';
+      statusEl.classList.add('error');
+      alert('Camera error: ' + (err && err.message ? err.message : err));
     }
   });
+
+  // Pause camera if tab hidden, resume on focus
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && html5QrCode && html5QrCode.isScanning) {
+      html5QrCode.pause(true);
+      statusEl.textContent = 'PAUSED';
+      statusEl.classList.remove('scanning');
+    } else if (!document.hidden && html5QrCode && html5QrCode.isScanning) {
+      try { html5QrCode.resume(); } catch (e) {}
+      statusEl.textContent = 'SCANNING';
+      statusEl.classList.add('scanning');
+    }
+  });
+
+  // ---------- Init ----------
+  loadSettings();
+  loadSession();
+  target = parseInt(targetInput.value, 10) || 1300;
+  render();
+  if (unique >= target) completedFired = true;
 </script>
 </body>
 </html>
