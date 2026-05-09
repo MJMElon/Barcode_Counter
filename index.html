@@ -90,39 +90,6 @@
   .view.active { display: block; }
 
   /* --- Consent list --- */
-  .add-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 20px;
-    margin-bottom: 16px;
-  }
-  .section-title {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    letter-spacing: 0.3em;
-    color: var(--muted);
-    text-transform: uppercase;
-    margin-bottom: 12px;
-  }
-  .form-grid {
-    display: grid;
-    gap: 10px;
-    grid-template-columns: 1fr 110px;
-  }
-  .form-grid input {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    color: var(--text);
-    padding: 12px;
-    border-radius: 8px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 13px;
-    outline: none;
-  }
-  .form-grid input:focus { border-color: var(--accent); }
-  .form-grid .full { grid-column: span 2; }
-
   .consent-list {
     display: flex;
     flex-direction: column;
@@ -243,6 +210,36 @@
     letter-spacing: 0.1em;
   }
 
+  .scanner-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  #reader {
+    border-radius: 12px;
+    overflow: hidden;
+    background: #000;
+    min-height: 240px;
+  }
+  #reader__scan_region { background: #000 !important; }
+  #reader video { border-radius: 12px; }
+  #reader__dashboard_section_csr button {
+    background: var(--accent) !important;
+    color: var(--bg) !important;
+    border: none !important;
+    padding: 10px 20px !important;
+    border-radius: 8px !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    font-weight: 600 !important;
+    cursor: pointer !important;
+    margin-top: 8px !important;
+  }
+  .start-row {
+    margin-top: 12px;
+  }
+
   .counter-card {
     background: var(--bg-card);
     border: 1px solid var(--border);
@@ -328,7 +325,7 @@
 
   .stats {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: 1fr;
     gap: 8px;
     margin-top: 14px;
   }
@@ -336,15 +333,17 @@
     background: var(--bg);
     border: 1px solid var(--border);
     border-radius: 10px;
-    padding: 10px 8px;
+    padding: 10px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
   }
   .stat-label {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
+    font-size: 10px;
     letter-spacing: 0.2em;
     color: var(--muted);
     text-transform: uppercase;
-    margin-bottom: 4px;
   }
   .stat-value {
     font-family: 'JetBrains Mono', monospace;
@@ -352,7 +351,6 @@
     font-weight: 700;
     color: var(--text);
   }
-  .stat-value.warn { color: var(--warn); }
   .stat-value.danger { color: var(--danger); }
 
   .last-scan {
@@ -364,62 +362,8 @@
     word-break: break-all;
   }
   .last-scan b { color: var(--text); font-weight: 600; }
-  .last-scan.dup b { color: var(--warn); }
   .last-scan.over b { color: var(--danger); }
 
-  .scanner-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 16px;
-    margin-bottom: 16px;
-  }
-  #reader {
-    border-radius: 12px;
-    overflow: hidden;
-    background: #000;
-    min-height: 240px;
-  }
-  #reader__scan_region { background: #000 !important; }
-  #reader video { border-radius: 12px; }
-  #reader__dashboard_section_csr button {
-    background: var(--accent) !important;
-    color: var(--bg) !important;
-    border: none !important;
-    padding: 10px 20px !important;
-    border-radius: 8px !important;
-    font-family: 'JetBrains Mono', monospace !important;
-    font-weight: 600 !important;
-    cursor: pointer !important;
-    margin-top: 8px !important;
-  }
-
-  .toggle-row {
-    display: flex;
-    gap: 12px;
-    margin-top: 10px;
-    flex-wrap: wrap;
-  }
-  .toggle {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    letter-spacing: 0.15em;
-    color: var(--muted);
-    text-transform: uppercase;
-    cursor: pointer;
-    user-select: none;
-  }
-  .toggle input { accent-color: var(--accent); }
-
-  .controls {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-    margin-bottom: 16px;
-  }
   button.btn {
     background: var(--bg-elev);
     color: var(--text);
@@ -432,14 +376,11 @@
     text-transform: uppercase;
     cursor: pointer;
     transition: all 0.15s ease;
+    width: 100%;
   }
   button.btn:hover {
     border-color: var(--accent);
     color: var(--accent);
-  }
-  button.btn.danger:hover {
-    border-color: var(--danger);
-    color: var(--danger);
   }
   button.btn.primary {
     background: var(--accent);
@@ -454,8 +395,8 @@
   button.btn.small {
     padding: 8px 12px;
     font-size: 11px;
+    width: auto;
   }
-  button.btn.wide { grid-column: span 2; }
 
   .log-card {
     background: var(--bg-card);
@@ -499,7 +440,6 @@
   .log-item:last-child { border-bottom: none; }
   .log-item .code { color: var(--text); flex: 1; word-break: break-all; }
   .log-item .time { font-size: 10px; flex-shrink: 0; }
-  .log-item.dup .code { color: var(--warn); }
   .log-item.over .code { color: var(--danger); }
   .log-item .tag {
     font-size: 9px;
@@ -507,7 +447,6 @@
     text-transform: uppercase;
     flex-shrink: 0;
   }
-  .log-item.dup .tag { color: var(--warn); }
   .log-item.over .tag { color: var(--danger); }
   .empty {
     text-align: center;
@@ -516,24 +455,6 @@
     font-family: 'JetBrains Mono', monospace;
     font-size: 12px;
   }
-
-  .manual {
-    margin-top: 12px;
-    display: flex;
-    gap: 8px;
-  }
-  .manual input {
-    flex: 1;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    color: var(--text);
-    padding: 12px;
-    border-radius: 8px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 13px;
-    outline: none;
-  }
-  .manual input:focus { border-color: var(--accent); }
 
   .toast {
     position: fixed;
@@ -571,25 +492,9 @@
   <!-- =========== VIEW: CONSENT LIST =========== -->
   <section class="view active" id="view-list">
     <h1>Signed Consents</h1>
-    <p class="subtitle">Pick a customer to start collection. Tap a row.</p>
+    <p class="subtitle">Tap a customer to start collection.</p>
 
-    <div class="add-card">
-      <div class="section-title">Add Consent</div>
-      <div class="form-grid">
-        <input type="text" id="newName" placeholder="Customer name" />
-        <input type="number" id="newQty" placeholder="Qty" min="1" />
-        <input type="text" id="newRef" class="full" placeholder="Consent ref / notes (optional)" />
-        <button class="btn primary full" id="addConsentBtn">Add Consent</button>
-      </div>
-    </div>
-
-    <div class="section-title">Consents</div>
     <div class="consent-list" id="consentList"></div>
-
-    <div class="controls" style="margin-top:16px;">
-      <button class="btn" id="exportAllBtn">Export All</button>
-      <button class="btn danger" id="clearAllBtn">Clear All</button>
-    </div>
   </section>
 
   <!-- =========== VIEW: SCANNER =========== -->
@@ -602,45 +507,25 @@
       </div>
     </div>
 
+    <div class="scanner-card">
+      <div id="reader"></div>
+      <div class="start-row">
+        <button class="btn primary" id="startBtn">Start Camera</button>
+      </div>
+    </div>
+
     <div class="counter-card" id="counterCard">
-      <div class="counter-label" id="counterLabel">Sealed Scanned</div>
+      <div class="counter-label">Sealed Scanned</div>
       <div class="counter-value" id="count">0<span class="target" id="targetLabel">/0</span></div>
       <div class="progress"><div class="progress-fill" id="progressFill"></div></div>
       <div class="alert-banner" id="alertBanner"></div>
       <div class="stats">
         <div class="stat">
-          <div class="stat-label">Total</div>
-          <div class="stat-value" id="totalStat">0</div>
-        </div>
-        <div class="stat">
-          <div class="stat-label">Duplicates</div>
-          <div class="stat-value warn" id="dupStat">0</div>
-        </div>
-        <div class="stat">
-          <div class="stat-label">Remaining</div>
-          <div class="stat-value" id="remainStat">0</div>
+          <span class="stat-label">Remaining</span>
+          <span class="stat-value" id="remainStat">0</span>
         </div>
       </div>
       <div class="last-scan" id="lastScan">Awaiting first scan…</div>
-    </div>
-
-    <div class="scanner-card">
-      <div id="reader"></div>
-      <div class="toggle-row">
-        <label class="toggle"><input type="checkbox" id="soundToggle" checked /> Sound</label>
-        <label class="toggle"><input type="checkbox" id="vibrateToggle" checked /> Vibrate</label>
-        <label class="toggle"><input type="checkbox" id="countDupToggle" /> Count dups</label>
-      </div>
-      <div class="manual">
-        <input type="text" id="manualInput" placeholder="Or type/paste code + Enter" />
-      </div>
-    </div>
-
-    <div class="controls">
-      <button class="btn primary" id="startBtn">Start Camera</button>
-      <button class="btn danger" id="resetBtn">Reset Scans</button>
-      <button class="btn" id="exportBtn">Export CSV</button>
-      <button class="btn" id="finishBtn">Finish & Save</button>
     </div>
 
     <div class="log-card">
@@ -659,11 +544,10 @@
 
 <script>
   const CONSENTS_KEY = 'mjm.consents.v2';
-  const SETTINGS_KEY = 'mjm.scan.settings.v2';
   const DEDUPE_DEBOUNCE_MS = 800;
   const OVER_REPEAT_MS = 1200;
 
-  /** @type {Array<{id:string, customer:string, qty:number, ref:string, createdAt:number, scans:Array<{code:string,time:string,dup:boolean,over:boolean}>, seen:string[], unique:number, total:number, dups:number, over:number, completedAt:number|null, completedFired:boolean, overFired:boolean}>} */
+  /** @type {Array<{id:string, customer:string, qty:number, ref:string, createdAt:number, scans:Array<{code:string,time:string,over:boolean}>, seen:string[], unique:number, over:number, completedAt:number|null, completedFired:boolean, overFired:boolean}>} */
   let consents = [];
   let activeId = null;
   /** @type {Set<string>} */
@@ -672,15 +556,11 @@
   let lastTime = 0;
   let lastOverAlertTime = 0;
 
-  // DOM
   const $ = (id) => document.getElementById(id);
   const statusEl = $('status');
   const viewList = $('view-list');
   const viewScanner = $('view-scanner');
   const consentListEl = $('consentList');
-  const newName = $('newName');
-  const newQty = $('newQty');
-  const newRef = $('newRef');
   const scanCustomer = $('scanCustomer');
   const scanRef = $('scanRef');
   const counterCard = $('counterCard');
@@ -688,16 +568,10 @@
   const targetLabel = $('targetLabel');
   const progressFill = $('progressFill');
   const alertBanner = $('alertBanner');
-  const totalStat = $('totalStat');
-  const dupStat = $('dupStat');
   const remainStat = $('remainStat');
   const lastEl = $('lastScan');
   const logEl = $('log');
   const logCountEl = $('logCount');
-  const manualInput = $('manualInput');
-  const soundToggle = $('soundToggle');
-  const vibrateToggle = $('vibrateToggle');
-  const countDupToggle = $('countDupToggle');
   const toastEl = $('toast');
 
   // ---------- Audio ----------
@@ -711,7 +585,6 @@
     return audioCtx;
   }
   function beep(freq, duration, type = 'sine', volume = 0.25) {
-    if (!soundToggle.checked) return;
     const ctx = ensureAudio();
     if (!ctx) return;
     const osc = ctx.createOscillator();
@@ -734,7 +607,6 @@
     setTimeout(() => beep(1700, 0.18, 'square', 0.28), 230);
   }
   function beepAlarm() {
-    // Loud descending two-tone alarm
     beep(1600, 0.12, 'sawtooth', 0.32);
     setTimeout(() => beep(700, 0.18, 'sawtooth', 0.32), 130);
     setTimeout(() => beep(1600, 0.12, 'sawtooth', 0.32), 320);
@@ -759,34 +631,21 @@
       const raw = localStorage.getItem(CONSENTS_KEY);
       if (raw) consents = JSON.parse(raw) || [];
     } catch (e) { consents = []; }
-  }
-  function saveSettings() {
-    try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify({
-        sound: soundToggle.checked,
-        vibrate: vibrateToggle.checked,
-        countDup: countDupToggle.checked,
-      }));
-    } catch (e) {}
-  }
-  function loadSettings() {
-    try {
-      const raw = localStorage.getItem(SETTINGS_KEY);
-      if (!raw) return;
-      const s = JSON.parse(raw);
-      if (typeof s.sound === 'boolean') soundToggle.checked = s.sound;
-      if (typeof s.vibrate === 'boolean') vibrateToggle.checked = s.vibrate;
-      if (typeof s.countDup === 'boolean') countDupToggle.checked = s.countDup;
-    } catch (e) {}
+    // Migrate older shape if needed
+    consents.forEach(c => {
+      if (!Array.isArray(c.scans)) c.scans = [];
+      if (!Array.isArray(c.seen)) c.seen = [];
+      if (typeof c.unique !== 'number') c.unique = c.seen.length;
+      if (typeof c.over !== 'number') c.over = 0;
+      if (!('completedFired' in c)) c.completedFired = c.unique >= c.qty;
+      if (!('overFired' in c)) c.overFired = c.unique > c.qty;
+    });
   }
 
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, c => ({
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
     }[c]));
-  }
-  function uid() {
-    return 'c_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7);
   }
   function activeConsent() {
     return consents.find(c => c.id === activeId);
@@ -801,10 +660,9 @@
   // ---------- Consent list rendering ----------
   function renderConsentList() {
     if (consents.length === 0) {
-      consentListEl.innerHTML = '<div class="empty-list">No signed consents yet. Add one above.</div>';
+      consentListEl.innerHTML = '<div class="empty-list">No signed consents yet.</div>';
       return;
     }
-    // Sort: in-progress / over first, then pending, then done; newest first within
     const order = { over: 0, progress: 1, pending: 2, done: 3 };
     const sorted = consents.slice().sort((a, b) => {
       const sa = order[statusOf(a)];
@@ -821,8 +679,7 @@
         <div class="consent-row ${st === 'done' ? 'complete' : ''} ${st === 'over' ? 'over' : ''}" data-id="${c.id}">
           <div class="consent-name">${escapeHtml(c.customer)}</div>
           <div class="consent-actions">
-            <button class="btn primary small" data-act="start" data-id="${c.id}">${st === 'done' || st === 'over' ? 'Resume' : (c.unique > 0 ? 'Continue' : 'Start')}</button>
-            <button class="btn small" data-act="delete" data-id="${c.id}">Delete</button>
+            <button class="btn primary small" data-act="start" data-id="${c.id}">Start</button>
           </div>
           <div class="consent-meta">
             <span class="pill ${pillClass}">${pillLabel}</span>
@@ -836,99 +693,16 @@
     }).join('');
   }
 
-  // Delegated clicks on consent list
   consentListEl.addEventListener('click', (e) => {
-    const btn = e.target.closest('button[data-act]');
+    const btn = e.target.closest('button[data-act="start"]');
     if (btn) {
-      const id = btn.getAttribute('data-id');
-      const act = btn.getAttribute('data-act');
       e.stopPropagation();
-      if (act === 'start') openScanner(id);
-      else if (act === 'delete') deleteConsent(id);
+      openScanner(btn.getAttribute('data-id'));
       return;
     }
     const row = e.target.closest('.consent-row');
     if (row) openScanner(row.getAttribute('data-id'));
   });
-
-  // ---------- Add / delete consent ----------
-  $('addConsentBtn').addEventListener('click', () => {
-    const name = newName.value.trim();
-    const qty = parseInt(newQty.value, 10);
-    const ref = newRef.value.trim();
-    if (!name) { toast('Enter customer name', 'warn'); newName.focus(); return; }
-    if (!qty || qty < 1) { toast('Enter valid qty', 'warn'); newQty.focus(); return; }
-    consents.push({
-      id: uid(),
-      customer: name,
-      qty,
-      ref,
-      createdAt: Date.now(),
-      scans: [],
-      seen: [],
-      unique: 0,
-      total: 0,
-      dups: 0,
-      over: 0,
-      completedAt: null,
-      completedFired: false,
-      overFired: false,
-    });
-    newName.value = ''; newQty.value = ''; newRef.value = '';
-    saveAll();
-    renderConsentList();
-    toast('Consent added', 'done');
-  });
-
-  function deleteConsent(id) {
-    const c = consents.find(x => x.id === id);
-    if (!c) return;
-    if (!confirm(`Delete consent for "${c.customer}" and its ${c.scans.length} scan(s)?`)) return;
-    consents = consents.filter(x => x.id !== id);
-    saveAll();
-    renderConsentList();
-  }
-
-  $('clearAllBtn').addEventListener('click', () => {
-    if (consents.length === 0) return;
-    if (!confirm('Delete ALL consents and their scans? This cannot be undone.')) return;
-    consents = [];
-    saveAll();
-    renderConsentList();
-  });
-
-  $('exportAllBtn').addEventListener('click', () => {
-    if (consents.length === 0) { toast('Nothing to export'); return; }
-    const rows = [['consent_id', 'customer', 'qty', 'ref', 'unique', 'total', 'duplicates', 'over', 'status', 'scan_index', 'code', 'time', 'duplicate', 'over_quota']];
-    consents.forEach(c => {
-      const st = statusOf(c);
-      if (c.scans.length === 0) {
-        rows.push([c.id, c.customer, c.qty, c.ref, c.unique, c.total, c.dups, c.over, st, '', '', '', '', '']);
-      } else {
-        const ordered = c.scans.slice().reverse();
-        ordered.forEach((s, i) => {
-          rows.push([c.id, c.customer, c.qty, c.ref, c.unique, c.total, c.dups, c.over, st, i + 1, s.code, s.time, s.dup ? 'yes' : 'no', s.over ? 'yes' : 'no']);
-        });
-      }
-    });
-    downloadCSV(rows, `mjm-consents-${stamp()}.csv`);
-  });
-
-  function downloadCSV(rows, filename) {
-    const csv = rows.map(r => r.map(v => {
-      const t = String(v == null ? '' : v);
-      return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
-    }).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = filename;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }
-  function stamp() {
-    return new Date().toISOString().replace(/[:.]/g, '-');
-  }
 
   // ---------- Scanner view ----------
   async function openScanner(id) {
@@ -961,13 +735,6 @@
   }
 
   $('backBtn').addEventListener('click', closeScanner);
-  $('finishBtn').addEventListener('click', async () => {
-    const c = activeConsent();
-    if (c && c.unique >= c.qty && !c.completedAt) c.completedAt = Date.now();
-    saveAll();
-    toast('Saved');
-    await closeScanner();
-  });
 
   function renderScanner() {
     const c = activeConsent();
@@ -977,8 +744,6 @@
 
     countEl.firstChild.nodeValue = String(c.unique);
     targetLabel.textContent = '/' + c.qty;
-    totalStat.textContent = String(c.total);
-    dupStat.textContent = String(c.dups);
     remainStat.textContent = String(remain);
     remainStat.classList.toggle('danger', c.unique > c.qty);
 
@@ -999,7 +764,6 @@
       alertBanner.classList.remove('show');
     }
 
-    // Status pill in header
     if (html5QrCode && html5QrCode.isScanning) {
       if (st === 'over') { statusEl.textContent = 'OVER QUOTA'; statusEl.className = 'status over'; }
       else if (st === 'done') { statusEl.textContent = 'TARGET REACHED'; statusEl.className = 'status done'; }
@@ -1012,8 +776,8 @@
     } else {
       logCountEl.textContent = c.scans.length + ' entr' + (c.scans.length === 1 ? 'y' : 'ies');
       logEl.innerHTML = c.scans.slice(0, 100).map(s => {
-        const cls = s.over ? 'over' : (s.dup ? 'dup' : '');
-        const tag = s.over ? '<span class="tag">OVER</span>' : (s.dup ? '<span class="tag">DUP</span>' : '');
+        const cls = s.over ? 'over' : '';
+        const tag = s.over ? '<span class="tag">OVER</span>' : '';
         return `<div class="log-item ${cls}">
                   <span class="code">${escapeHtml(s.code)}</span>
                   ${tag}
@@ -1028,7 +792,7 @@
     setTimeout(() => countEl.classList.remove('bump'), 150);
   }
 
-  // ---------- Scan handling ----------
+  // ---------- Scan handling (unique only) ----------
   function registerScan(rawCode) {
     const c = activeConsent();
     if (!c) return;
@@ -1040,103 +804,52 @@
     lastCode = code;
     lastTime = now;
 
-    c.total++;
-    const isDup = seen.has(code);
-    const time = new Date().toLocaleTimeString();
-
-    if (!isDup) {
-      seen.add(code);
-      c.seen.push(code);
-      c.unique++;
-
-      const willBeOver = c.unique > c.qty;
-      const entry = { code, time, dup: false, over: willBeOver };
-      c.scans.unshift(entry);
-
-      if (willBeOver) {
-        c.over++;
-        lastEl.classList.remove('dup');
-        lastEl.classList.add('over');
-        lastEl.innerHTML = `Over: <b>${escapeHtml(code)}</b>`;
-        // Alarm sound (rate-limited to once per OVER_REPEAT_MS)
-        if ((Date.now() - lastOverAlertTime) > OVER_REPEAT_MS) {
-          beepAlarm();
-          lastOverAlertTime = Date.now();
-        }
-        if (vibrateToggle.checked && navigator.vibrate) navigator.vibrate([120, 60, 120, 60, 200]);
-        toast(`Over quota! ${c.unique}/${c.qty}`, 'danger');
-        if (!c.overFired) {
-          c.overFired = true;
-        }
-      } else {
-        lastEl.classList.remove('dup', 'over');
-        lastEl.innerHTML = `Last: <b>${escapeHtml(code)}</b>`;
-        beepSuccess();
-        if (vibrateToggle.checked && navigator.vibrate) navigator.vibrate(40);
-      }
-      bump();
-
-      if (!c.completedFired && c.unique === c.qty) {
-        c.completedFired = true;
-        c.completedAt = Date.now();
-        beepComplete();
-        if (vibrateToggle.checked && navigator.vibrate) navigator.vibrate([80, 60, 80, 60, 200]);
-        toast(`Target ${c.qty} reached!`, 'done');
-      }
-    } else {
-      c.dups++;
-      c.scans.unshift({ code, time, dup: true, over: false });
-      lastEl.classList.remove('over');
-      lastEl.classList.add('dup');
-      lastEl.innerHTML = `Dup: <b>${escapeHtml(code)}</b>`;
+    // Duplicate: do NOT count, do NOT log. Just acknowledge with a tone.
+    if (seen.has(code)) {
       beepDuplicate();
+      if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
       toast('Duplicate: ' + code, 'warn');
-      if (vibrateToggle.checked && navigator.vibrate) navigator.vibrate([20, 40, 20]);
-      if (countDupToggle.checked) bump();
+      return;
+    }
+
+    // Unique scan
+    seen.add(code);
+    c.seen.push(code);
+    c.unique++;
+    const time = new Date().toLocaleTimeString();
+    const willBeOver = c.unique > c.qty;
+    c.scans.unshift({ code, time, over: willBeOver });
+
+    if (willBeOver) {
+      c.over++;
+      lastEl.classList.add('over');
+      lastEl.innerHTML = `Over: <b>${escapeHtml(code)}</b>`;
+      if ((Date.now() - lastOverAlertTime) > OVER_REPEAT_MS) {
+        beepAlarm();
+        lastOverAlertTime = Date.now();
+      }
+      if (navigator.vibrate) navigator.vibrate([120, 60, 120, 60, 200]);
+      toast(`Over quota! ${c.unique}/${c.qty}`, 'danger');
+      c.overFired = true;
+    } else {
+      lastEl.classList.remove('over');
+      lastEl.innerHTML = `Last: <b>${escapeHtml(code)}</b>`;
+      beepSuccess();
+      if (navigator.vibrate) navigator.vibrate(40);
+    }
+    bump();
+
+    if (!c.completedFired && c.unique === c.qty) {
+      c.completedFired = true;
+      c.completedAt = Date.now();
+      beepComplete();
+      if (navigator.vibrate) navigator.vibrate([80, 60, 80, 60, 200]);
+      toast(`Target ${c.qty} reached!`, 'done');
     }
 
     renderScanner();
     saveAll();
   }
-
-  // ---------- Manual / hardware scanner input ----------
-  manualInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      const val = manualInput.value.trim();
-      if (val) registerScan(val);
-      manualInput.value = '';
-    }
-  });
-
-  [soundToggle, vibrateToggle, countDupToggle].forEach(el =>
-    el.addEventListener('change', saveSettings)
-  );
-
-  // ---------- Reset (current consent) ----------
-  $('resetBtn').addEventListener('click', () => {
-    const c = activeConsent();
-    if (!c) return;
-    if (!confirm(`Reset all scans for "${c.customer}"?`)) return;
-    c.scans = []; c.seen = []; c.unique = 0; c.total = 0; c.dups = 0; c.over = 0;
-    c.completedFired = false; c.overFired = false; c.completedAt = null;
-    seen.clear();
-    lastCode = ''; lastTime = 0;
-    lastEl.classList.remove('dup', 'over');
-    lastEl.textContent = 'Awaiting first scan…';
-    saveAll();
-    renderScanner();
-  });
-
-  // ---------- Export current consent ----------
-  $('exportBtn').addEventListener('click', () => {
-    const c = activeConsent();
-    if (!c || c.scans.length === 0) { toast('Nothing to export'); return; }
-    const rows = [['#', 'code', 'time', 'duplicate', 'over_quota']];
-    const ordered = c.scans.slice().reverse();
-    ordered.forEach((s, i) => rows.push([i + 1, s.code, s.time, s.dup ? 'yes' : 'no', s.over ? 'yes' : 'no']));
-    const safeName = c.customer.replace(/[^a-z0-9]+/gi, '_');
-    downloadCSV(rows, `mjm-${safeName}-${stamp()}.csv`);
-  });
 
   // ---------- Camera scanner ----------
   let html5QrCode = null;
@@ -1179,7 +892,7 @@
     try {
       const cams = await Html5Qrcode.getCameras();
       if (cams && cams.length) cameraConfig = preferredCameraId(cams);
-    } catch (e) { /* fall back to facingMode */ }
+    } catch (e) { /* fall back */ }
 
     try {
       await html5QrCode.start(
@@ -1233,7 +946,6 @@
     }
   });
 
-  // Pause camera if tab hidden
   document.addEventListener('visibilitychange', () => {
     if (!html5QrCode || !html5QrCode.isScanning) return;
     if (document.hidden) {
@@ -1247,7 +959,6 @@
   });
 
   // ---------- Init ----------
-  loadSettings();
   loadAll();
   renderConsentList();
 </script>
