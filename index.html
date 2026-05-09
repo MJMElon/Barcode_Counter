@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ms">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<meta name="theme-color" content="#0a0f14">
+<meta name="theme-color" content="#0a0f14" id="metaThemeColor">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="MJM Scan">
@@ -14,9 +14,19 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<script>
+  // Apply saved theme as early as possible to avoid a flash of the wrong theme.
+  (function () {
+    try {
+      var saved = localStorage.getItem('mjm.theme');
+      var theme = saved || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+      document.documentElement.setAttribute('data-theme', theme);
+    } catch (e) {}
+  })();
+</script>
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" type="text/javascript"></script>
 <style>
-  :root {
+  :root, [data-theme="dark"] {
     --bg: #0a0f14;
     --bg-elev: #111821;
     --bg-card: #0f1620;
@@ -28,6 +38,29 @@
     --warn: #ffc857;
     --danger: #ff4d6d;
     --grid: rgba(0, 255, 157, 0.04);
+    --counter-glow: 0 0 40px rgba(0, 255, 157, 0.3);
+    --done-glow: 0 0 40px rgba(255, 200, 87, 0.4);
+    --over-glow: 0 0 40px rgba(255, 77, 109, 0.45);
+    --radial: radial-gradient(ellipse at top, rgba(0, 255, 157, 0.08) 0%, transparent 60%);
+    --reader-bg: #000;
+  }
+  [data-theme="light"] {
+    --bg: #ffffff;
+    --bg-elev: #f4f7fa;
+    --bg-card: #ffffff;
+    --border: #cdd5de;
+    --text: #0b1220;
+    --muted: #4a5566;
+    --accent: #008a52;
+    --accent-dim: #006b3f;
+    --warn: #a86200;
+    --danger: #c12842;
+    --grid: rgba(0, 0, 0, 0.04);
+    --counter-glow: none;
+    --done-glow: none;
+    --over-glow: none;
+    --radial: radial-gradient(ellipse at top, rgba(0, 138, 82, 0.08) 0%, transparent 60%);
+    --reader-bg: #0b1220;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; }
@@ -39,7 +72,7 @@
     background-image:
       linear-gradient(var(--grid) 1px, transparent 1px),
       linear-gradient(90deg, var(--grid) 1px, transparent 1px),
-      radial-gradient(ellipse at top, rgba(0, 255, 157, 0.08) 0%, transparent 60%);
+      var(--radial);
     background-size: 40px 40px, 40px 40px, 100% 100%;
     padding: 20px;
     padding-bottom: 40px;
@@ -95,6 +128,28 @@
     box-shadow: 0 0 8px var(--accent);
   }
   .net-dot.offline { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
+
+  .header-actions { display: flex; align-items: center; gap: 10px; }
+  .theme-btn {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    color: var(--text);
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+    transition: border-color 0.15s ease, color 0.15s ease;
+  }
+  .theme-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .theme-btn svg { width: 16px; height: 16px; }
+  [data-theme="light"] .theme-btn .icon-moon { display: inline; }
+  [data-theme="light"] .theme-btn .icon-sun { display: none; }
+  [data-theme="dark"] .theme-btn .icon-moon { display: none; }
+  [data-theme="dark"] .theme-btn .icon-sun { display: inline; }
   h1 {
     font-family: 'JetBrains Mono', monospace;
     font-size: 26px;
@@ -283,10 +338,10 @@
   #reader {
     border-radius: 12px;
     overflow: hidden;
-    background: #000;
+    background: var(--reader-bg);
     min-height: 240px;
   }
-  #reader__scan_region { background: #000 !important; }
+  #reader__scan_region { background: var(--reader-bg) !important; }
   #reader video { border-radius: 12px; }
   #reader__dashboard_section_csr button {
     background: var(--accent) !important;
@@ -336,7 +391,7 @@
     font-weight: 800;
     line-height: 1;
     color: var(--accent);
-    text-shadow: 0 0 40px rgba(0, 255, 157, 0.3);
+    text-shadow: var(--counter-glow);
     transition: transform 0.15s ease;
   }
   .counter-value .target {
@@ -346,8 +401,8 @@
     margin-left: 4px;
   }
   .counter-value.bump { transform: scale(1.12); }
-  .counter-value.done { color: var(--warn); text-shadow: 0 0 40px rgba(255, 200, 87, 0.4); }
-  .counter-value.over { color: var(--danger); text-shadow: 0 0 40px rgba(255, 77, 109, 0.45); }
+  .counter-value.done { color: var(--warn); text-shadow: var(--done-glow); }
+  .counter-value.over { color: var(--danger); text-shadow: var(--over-glow); }
 
   .progress {
     height: 6px;
@@ -549,28 +604,39 @@
 <div class="wrap">
   <header>
     <div class="brand"><span class="dot"></span>MJM // SCAN</div>
-    <div class="status" id="status"><span class="net-dot" id="netDot"></span><span id="statusText">STANDBY</span></div>
+    <div class="header-actions">
+      <button class="theme-btn" id="themeBtn" type="button" aria-label="Tukar tema">
+        <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="4"/>
+          <path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+        </svg>
+        <svg class="icon-moon" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+      </button>
+      <div class="status" id="status"><span class="net-dot" id="netDot"></span><span id="statusText">SEDIA</span></div>
+    </div>
   </header>
 
-  <!-- =========== VIEW: CONSENT LIST =========== -->
+  <!-- =========== VIEW: SENARAI PERSETUJUAN =========== -->
   <section class="view active" id="view-list">
-    <h1>Signed Consents</h1>
-    <p class="subtitle">Tap a customer to start collection.</p>
+    <h1>Persetujuan Bertandatangan</h1>
+    <p class="subtitle">Ketuk pelanggan untuk mula kutipan.</p>
 
     <div class="list-actions">
-      <button class="btn primary" id="addToggle">+ Add Consent</button>
-      <button class="btn" id="syncBtn">Sync</button>
+      <button class="btn primary" id="addToggle">+ Tambah Persetujuan</button>
+      <button class="btn" id="syncBtn">Segerak</button>
     </div>
 
     <div class="add-card" id="addCard" hidden>
-      <div class="section-title">New Consent</div>
+      <div class="section-title">Persetujuan Baru</div>
       <div class="form-grid">
-        <input type="text" id="newName" placeholder="Customer name" />
-        <input type="number" id="newQty" placeholder="Qty" min="1" inputmode="numeric" />
-        <input type="text" id="newRef" class="full" placeholder="Consent ref / notes (optional)" />
+        <input type="text" id="newName" placeholder="Nama pelanggan" />
+        <input type="number" id="newQty" placeholder="Kuantiti" min="1" inputmode="numeric" />
+        <input type="text" id="newRef" class="full" placeholder="Rujukan / nota (pilihan)" />
         <div class="row">
-          <button class="btn" id="cancelAddBtn">Cancel</button>
-          <button class="btn primary" id="saveAddBtn">Save</button>
+          <button class="btn" id="cancelAddBtn">Batal</button>
+          <button class="btn primary" id="saveAddBtn">Simpan</button>
         </div>
       </div>
     </div>
@@ -580,10 +646,10 @@
     <input type="file" id="importFile" accept="application/json" hidden />
   </section>
 
-  <!-- =========== VIEW: SCANNER =========== -->
+  <!-- =========== VIEW: PENGIMBAS =========== -->
   <section class="view" id="view-scanner">
     <div class="scanner-header">
-      <button class="back-btn" id="backBtn">← Back</button>
+      <button class="back-btn" id="backBtn">← Kembali</button>
       <div class="scanner-title">
         <h2 id="scanCustomer">—</h2>
         <div class="meta" id="scanRef">—</div>
@@ -593,31 +659,31 @@
     <div class="scanner-card">
       <div id="reader"></div>
       <div class="start-row">
-        <button class="btn primary" id="startBtn">Start Camera</button>
+        <button class="btn primary" id="startBtn">Mula Kamera</button>
       </div>
     </div>
 
     <div class="counter-card" id="counterCard">
-      <div class="counter-label">Sealed Scanned</div>
+      <div class="counter-label">Seal Diimbas</div>
       <div class="counter-value" id="count">0<span class="target" id="targetLabel">/0</span></div>
       <div class="progress"><div class="progress-fill" id="progressFill"></div></div>
       <div class="alert-banner" id="alertBanner"></div>
       <div class="stats">
         <div class="stat">
-          <span class="stat-label">Remaining</span>
+          <span class="stat-label">Baki</span>
           <span class="stat-value" id="remainStat">0</span>
         </div>
       </div>
-      <div class="last-scan" id="lastScan">Awaiting first scan…</div>
+      <div class="last-scan" id="lastScan">Menunggu imbasan pertama…</div>
     </div>
 
     <div class="log-card">
       <div class="log-header">
-        <div class="log-title">Scan Log</div>
-        <div class="log-count" id="logCount">0 entries</div>
+        <div class="log-title">Log Imbasan</div>
+        <div class="log-count" id="logCount">0 entri</div>
       </div>
       <div class="log" id="log">
-        <div class="empty">No scans yet</div>
+        <div class="empty">Tiada imbasan</div>
       </div>
     </div>
   </section>
@@ -749,7 +815,7 @@
   // ---------- Consent list rendering ----------
   function renderConsentList() {
     if (consents.length === 0) {
-      consentListEl.innerHTML = '<div class="empty-list">No signed consents yet.</div>';
+      consentListEl.innerHTML = '<div class="empty-list">Tiada persetujuan lagi.</div>';
       return;
     }
     const order = { over: 0, progress: 1, pending: 2, done: 3 };
@@ -763,16 +829,16 @@
       const st = statusOf(c);
       const pct = c.qty > 0 ? Math.min(100, (c.unique / c.qty) * 100) : 0;
       const pillClass = st === 'done' ? 'done' : st === 'over' ? 'over' : st === 'progress' ? 'progress' : '';
-      const pillLabel = st === 'done' ? 'COMPLETE' : st === 'over' ? 'OVER' : st === 'progress' ? 'IN PROGRESS' : 'PENDING';
+      const pillLabel = st === 'done' ? 'SELESAI' : st === 'over' ? 'LEBIH' : st === 'progress' ? 'DALAM PROSES' : 'MENUNGGU';
       return `
         <div class="consent-row ${st === 'done' ? 'complete' : ''} ${st === 'over' ? 'over' : ''}" data-id="${c.id}">
           <div class="consent-name">${escapeHtml(c.customer)}</div>
           <div class="consent-actions">
-            <button class="btn primary small" data-act="start" data-id="${c.id}">Start</button>
+            <button class="btn primary small" data-act="start" data-id="${c.id}">Mula</button>
           </div>
           <div class="consent-meta">
             <span class="pill ${pillClass}">${pillLabel}</span>
-            Qty <b>${c.qty}</b> · Scanned <b>${c.unique}</b>${c.over ? ` · Over <b style="color:var(--danger)">${c.over}</b>` : ''}${c.ref ? ` · ${escapeHtml(c.ref)}` : ''}
+            Kuantiti <b>${c.qty}</b> · Diimbas <b>${c.unique}</b>${c.over ? ` · Lebih <b style="color:var(--danger)">${c.over}</b>` : ''}${c.ref ? ` · ${escapeHtml(c.ref)}` : ''}
           </div>
           <div class="row-mini-progress ${st === 'done' ? 'done' : ''} ${st === 'over' ? 'over' : ''}">
             <div style="width:${pct}%"></div>
@@ -802,7 +868,7 @@
     lastCode = ''; lastTime = 0; lastOverAlertTime = 0;
 
     scanCustomer.textContent = c.customer;
-    scanRef.textContent = `Qty ${c.qty}` + (c.ref ? ` · ${c.ref}` : '');
+    scanRef.textContent = `Kuantiti ${c.qty}` + (c.ref ? ` · ${c.ref}` : '');
     viewList.classList.remove('active');
     viewScanner.classList.add('active');
     renderScanner();
@@ -817,8 +883,8 @@
     seen = new Set();
     viewScanner.classList.remove('active');
     viewList.classList.add('active');
-    setStatus('STANDBY');
-    $('startBtn').textContent = 'Start Camera';
+    setStatus('SEDIA');
+    $('startBtn').textContent = 'Mula Kamera';
     renderConsentList();
   }
 
@@ -846,23 +912,23 @@
 
     if (st === 'over') {
       const excess = c.unique - c.qty;
-      alertBanner.textContent = `OVER QUOTA · ${c.unique} / ${c.qty} (excess ${excess})`;
+      alertBanner.textContent = `LEBIH KUOTA · ${c.unique} / ${c.qty} (lebihan ${excess})`;
       alertBanner.classList.add('show');
     } else {
       alertBanner.classList.remove('show');
     }
 
     if (html5QrCode && html5QrCode.isScanning) {
-      if (st === 'over') setStatus('OVER QUOTA', 'over');
-      else if (st === 'done') setStatus('TARGET REACHED', 'done');
-      else setStatus('SCANNING', 'scanning');
+      if (st === 'over') setStatus('LEBIH KUOTA', 'over');
+      else if (st === 'done') setStatus('SASARAN DICAPAI', 'done');
+      else setStatus('MENGIMBAS', 'scanning');
     }
 
     if (c.scans.length === 0) {
-      logEl.innerHTML = '<div class="empty">No scans yet</div>';
-      logCountEl.textContent = '0 entries';
+      logEl.innerHTML = '<div class="empty">Tiada imbasan</div>';
+      logCountEl.textContent = '0 entri';
     } else {
-      logCountEl.textContent = c.scans.length + ' entr' + (c.scans.length === 1 ? 'y' : 'ies');
+      logCountEl.textContent = c.scans.length + ' entri';
       logEl.innerHTML = c.scans.slice(0, 100).map(s => {
         const cls = s.over ? 'over' : '';
         const tag = s.over ? '<span class="tag">OVER</span>' : '';
@@ -896,7 +962,7 @@
     if (seen.has(code)) {
       beepDuplicate();
       if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
-      toast('Duplicate: ' + code, 'warn');
+      toast('Pendua: ' + code, 'warn');
       return;
     }
 
@@ -911,17 +977,17 @@
     if (willBeOver) {
       c.over++;
       lastEl.classList.add('over');
-      lastEl.innerHTML = `Over: <b>${escapeHtml(code)}</b>`;
+      lastEl.innerHTML = `Lebih: <b>${escapeHtml(code)}</b>`;
       if ((Date.now() - lastOverAlertTime) > OVER_REPEAT_MS) {
         beepAlarm();
         lastOverAlertTime = Date.now();
       }
       if (navigator.vibrate) navigator.vibrate([120, 60, 120, 60, 200]);
-      toast(`Over quota! ${c.unique}/${c.qty}`, 'danger');
+      toast(`Lebih kuota! ${c.unique}/${c.qty}`, 'danger');
       c.overFired = true;
     } else {
       lastEl.classList.remove('over');
-      lastEl.innerHTML = `Last: <b>${escapeHtml(code)}</b>`;
+      lastEl.innerHTML = `Terkini: <b>${escapeHtml(code)}</b>`;
       beepSuccess();
       if (navigator.vibrate) navigator.vibrate(40);
     }
@@ -932,7 +998,7 @@
       c.completedAt = Date.now();
       beepComplete();
       if (navigator.vibrate) navigator.vibrate([80, 60, 80, 60, 200]);
-      toast(`Target ${c.qty} reached!`, 'done');
+      toast(`Sasaran ${c.qty} dicapai!`, 'done');
     }
 
     renderScanner();
@@ -1022,7 +1088,7 @@
       }
     } catch (e) { /* ignore */ }
 
-    startBtn.textContent = 'Stop Camera';
+    startBtn.textContent = 'Henti Kamera';
     renderScanner();
   }
 
@@ -1033,12 +1099,12 @@
         await html5QrCode.clear();
       }
     } catch (e) {}
-    startBtn.textContent = 'Start Camera';
-    setStatus('STANDBY');
+    startBtn.textContent = 'Mula Kamera';
+    setStatus('SEDIA');
   }
 
   startBtn.addEventListener('click', async () => {
-    if (!activeConsent()) { toast('Open a consent first'); return; }
+    if (!activeConsent()) { toast('Buka persetujuan dahulu'); return; }
     if (html5QrCode && html5QrCode.isScanning) {
       await stopCamera();
       return;
@@ -1047,8 +1113,8 @@
       await startCamera();
     } catch (err) {
       console.error(err);
-      setStatus('ERROR', 'error');
-      alert('Camera error: ' + (err && err.message ? err.message : err));
+      setStatus('RALAT', 'error');
+      alert('Ralat kamera: ' + (err && err.message ? err.message : err));
     }
   });
 
@@ -1056,7 +1122,7 @@
     if (!html5QrCode || !html5QrCode.isScanning) return;
     if (document.hidden) {
       try { html5QrCode.pause(true); } catch (e) {}
-      setStatus('PAUSED');
+      setStatus('DIJEDA');
     } else {
       try { html5QrCode.resume(); } catch (e) {}
       renderScanner();
@@ -1068,7 +1134,7 @@
   const addToggle = $('addToggle');
   function showAddForm(show) {
     addCard.hidden = !show;
-    addToggle.textContent = show ? '× Cancel' : '+ Add Consent';
+    addToggle.textContent = show ? '× Batal' : '+ Tambah Persetujuan';
     if (show) setTimeout(() => $('newName').focus(), 50);
   }
   addToggle.addEventListener('click', () => showAddForm(addCard.hidden));
@@ -1080,8 +1146,8 @@
     const name = $('newName').value.trim();
     const qty = parseInt($('newQty').value, 10);
     const ref = $('newRef').value.trim();
-    if (!name) { toast('Enter customer name', 'warn'); $('newName').focus(); return; }
-    if (!qty || qty < 1) { toast('Enter valid qty', 'warn'); $('newQty').focus(); return; }
+    if (!name) { toast('Masukkan nama pelanggan', 'warn'); $('newName').focus(); return; }
+    if (!qty || qty < 1) { toast('Masukkan kuantiti yang sah', 'warn'); $('newQty').focus(); return; }
     consents.push({
       id: 'c_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7),
       customer: name, qty, ref,
@@ -1094,7 +1160,7 @@
     saveAll();
     showAddForm(false);
     renderConsentList();
-    toast('Consent added', 'done');
+    toast('Persetujuan ditambah', 'done');
   });
 
   // ---------- Sync (local backup / restore) ----------
@@ -1117,13 +1183,13 @@
   async function syncAction() {
     if (consents.length === 0) {
       // Nothing local to back up — offer to import instead.
-      if (confirm('No data to back up. Import a backup file?')) {
+      if (confirm('Tiada data untuk disandar. Import fail sandaran?')) {
         const file = await pickFile();
         if (file) await importBackup(file);
       }
       return;
     }
-    const choice = prompt('Sync:\n  1 = Download backup (this phone)\n  2 = Import backup (replace data)\n  3 = Import backup (merge)\n\nEnter 1, 2 or 3:', '1');
+    const choice = prompt('Segerak:\n  1 = Muat turun sandaran (telefon ini)\n  2 = Import sandaran (gantikan data)\n  3 = Import sandaran (gabung)\n\nMasukkan 1, 2 atau 3:', '1');
     if (choice === '1' || choice == null) return downloadBackup();
     if (choice === '2') {
       const file = await pickFile();
@@ -1150,7 +1216,7 @@
     a.download = `mjm-scan-backup-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    toast('Backup downloaded', 'done');
+    toast('Sandaran dimuat turun', 'done');
   }
   async function importBackup(file, replace) {
     try {
@@ -1174,9 +1240,9 @@
       }
       saveAll();
       renderConsentList();
-      toast(`Imported ${incoming.length} consent(s)`, 'done');
+      toast(`${incoming.length} persetujuan diimport`, 'done');
     } catch (e) {
-      alert('Import failed: ' + e.message);
+      alert('Import gagal: ' + e.message);
     }
   }
   $('syncBtn').addEventListener('click', syncAction);
@@ -1188,11 +1254,42 @@
     netDot.classList.toggle('offline', !online);
     // Only override status text if we're not actively scanning
     if (!html5QrCode || !html5QrCode.isScanning) {
-      setStatus(online ? 'STANDBY' : 'OFFLINE', online ? '' : 'offline');
+      setStatus(online ? 'SEDIA' : 'LUAR TALIAN', online ? '' : 'offline');
     }
   }
   window.addEventListener('online', updateNetwork);
   window.addEventListener('offline', updateNetwork);
+
+  // ---------- Theme toggle (sun/moon) ----------
+  const THEME_KEY = 'mjm.theme';
+  const themeBtn = $('themeBtn');
+  const metaThemeColor = $('metaThemeColor');
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (metaThemeColor) {
+      metaThemeColor.setAttribute('content', theme === 'light' ? '#ffffff' : '#0a0f14');
+    }
+  }
+  function currentTheme() {
+    return document.documentElement.getAttribute('data-theme') || 'dark';
+  }
+  themeBtn.addEventListener('click', () => {
+    const next = currentTheme() === 'light' ? 'dark' : 'light';
+    applyTheme(next);
+    try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
+  });
+  // Sync on system change only when user has not chosen explicitly.
+  if (window.matchMedia) {
+    matchMedia('(prefers-color-scheme: light)').addEventListener('change', (ev) => {
+      try {
+        if (localStorage.getItem(THEME_KEY)) return;
+      } catch (e) {}
+      applyTheme(ev.matches ? 'light' : 'dark');
+    });
+  }
+  // Re-sync meta theme-color on load (the early inline script set the attr but
+  // not the meta).
+  applyTheme(currentTheme());
 
   // ---------- Service worker (offline support) ----------
   if ('serviceWorker' in navigator) {
