@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <title>MJM Scan Counter</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -18,6 +18,7 @@
     --muted: #7d8a9c;
     --accent: #00ff9d;
     --accent-dim: #00cc7d;
+    --warn: #ffc857;
     --danger: #ff4d6d;
     --grid: rgba(0, 255, 157, 0.04);
   }
@@ -36,7 +37,7 @@
     padding: 20px;
     padding-bottom: 40px;
   }
-  .wrap { max-width: 520px; margin: 0 auto; }
+  .wrap { max-width: 560px; margin: 0 auto; }
   header {
     display: flex;
     align-items: center;
@@ -72,22 +73,183 @@
     color: var(--muted);
     letter-spacing: 0.1em;
   }
+  .status.scanning { color: var(--accent); }
+  .status.done { color: var(--warn); }
+  .status.over { color: var(--danger); }
+  .status.error { color: var(--danger); }
   h1 {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 28px;
+    font-size: 26px;
     font-weight: 800;
     letter-spacing: -0.02em;
     margin-bottom: 4px;
   }
-  .subtitle { color: var(--muted); font-size: 14px; margin-bottom: 28px; }
+  .subtitle { color: var(--muted); font-size: 14px; margin-bottom: 20px; }
+
+  .view { display: none; }
+  .view.active { display: block; }
+
+  /* --- Consent list --- */
+  .add-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  .section-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.3em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .form-grid {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: 1fr 110px;
+  }
+  .form-grid input {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 12px;
+    border-radius: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    outline: none;
+  }
+  .form-grid input:focus { border-color: var(--accent); }
+  .form-grid .full { grid-column: span 2; }
+
+  .consent-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .consent-row {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px 16px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px 12px;
+    align-items: center;
+    cursor: pointer;
+    transition: border-color 0.15s ease;
+  }
+  .consent-row:hover { border-color: var(--accent); }
+  .consent-row.complete { border-color: var(--accent-dim); }
+  .consent-row.over { border-color: var(--danger); }
+  .consent-name {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+    word-break: break-word;
+  }
+  .consent-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+    grid-column: 1 / 2;
+  }
+  .consent-meta b { color: var(--text); font-weight: 600; }
+  .consent-meta .pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    margin-right: 6px;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+  .consent-meta .pill.done { color: var(--accent); border-color: var(--accent-dim); }
+  .consent-meta .pill.over { color: var(--danger); border-color: var(--danger); }
+  .consent-meta .pill.progress { color: var(--warn); border-color: var(--warn); }
+  .consent-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    grid-row: 1 / span 2;
+    grid-column: 2;
+  }
+  .row-mini-progress {
+    grid-column: 1 / 2;
+    height: 4px;
+    background: var(--bg);
+    border-radius: 999px;
+    overflow: hidden;
+    margin-top: 4px;
+  }
+  .row-mini-progress > div {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent-dim), var(--accent));
+    transition: width 0.25s ease;
+  }
+  .row-mini-progress.over > div { background: var(--danger); }
+  .row-mini-progress.done > div { background: var(--warn); }
+
+  .empty-list {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    background: var(--bg-card);
+    border: 1px dashed var(--border);
+    border-radius: 14px;
+  }
+
+  /* --- Scanner --- */
+  .scanner-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .back-btn {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .back-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .scanner-title { flex: 1; min-width: 0; }
+  .scanner-title h2 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: 2px;
+    word-break: break-word;
+  }
+  .scanner-title .meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+  }
 
   .counter-card {
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: 16px;
-    padding: 32px 24px;
+    padding: 24px 20px 20px;
     text-align: center;
-    margin-bottom: 20px;
+    margin-bottom: 16px;
     position: relative;
     overflow: hidden;
   }
@@ -98,26 +260,103 @@
     height: 1px;
     background: linear-gradient(90deg, transparent, var(--accent), transparent);
   }
+  .counter-card.over { border-color: var(--danger); }
+  .counter-card.over::before { background: linear-gradient(90deg, transparent, var(--danger), transparent); }
   .counter-label {
     font-family: 'JetBrains Mono', monospace;
     font-size: 11px;
     letter-spacing: 0.3em;
     color: var(--muted);
     text-transform: uppercase;
-    margin-bottom: 12px;
+    margin-bottom: 10px;
   }
   .counter-value {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 96px;
+    font-size: 78px;
     font-weight: 800;
     line-height: 1;
     color: var(--accent);
     text-shadow: 0 0 40px rgba(0, 255, 157, 0.3);
     transition: transform 0.15s ease;
   }
-  .counter-value.bump { transform: scale(1.15); }
+  .counter-value .target {
+    font-size: 26px;
+    color: var(--muted);
+    text-shadow: none;
+    margin-left: 4px;
+  }
+  .counter-value.bump { transform: scale(1.12); }
+  .counter-value.done { color: var(--warn); text-shadow: 0 0 40px rgba(255, 200, 87, 0.4); }
+  .counter-value.over { color: var(--danger); text-shadow: 0 0 40px rgba(255, 77, 109, 0.45); }
+
+  .progress {
+    height: 6px;
+    background: var(--bg);
+    border-radius: 999px;
+    margin-top: 14px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .progress-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--accent-dim), var(--accent));
+    transition: width 0.25s ease;
+  }
+  .progress-fill.done { background: var(--warn); }
+  .progress-fill.over { background: var(--danger); }
+
+  .alert-banner {
+    display: none;
+    margin-top: 14px;
+    background: rgba(255, 77, 109, 0.08);
+    border: 1px solid var(--danger);
+    color: var(--danger);
+    padding: 12px;
+    border-radius: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.05em;
+    line-height: 1.5;
+    animation: alertFlash 0.8s ease infinite alternate;
+  }
+  .alert-banner.show { display: block; }
+  @keyframes alertFlash {
+    from { background: rgba(255, 77, 109, 0.08); }
+    to { background: rgba(255, 77, 109, 0.18); }
+  }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-top: 14px;
+  }
+  .stat {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 8px;
+  }
+  .stat-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .stat-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .stat-value.warn { color: var(--warn); }
+  .stat-value.danger { color: var(--danger); }
+
   .last-scan {
-    margin-top: 16px;
+    margin-top: 12px;
     font-family: 'JetBrains Mono', monospace;
     font-size: 12px;
     color: var(--muted);
@@ -125,21 +364,24 @@
     word-break: break-all;
   }
   .last-scan b { color: var(--text); font-weight: 600; }
+  .last-scan.dup b { color: var(--warn); }
+  .last-scan.over b { color: var(--danger); }
 
   .scanner-card {
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: 16px;
-    padding: 20px;
+    padding: 16px;
     margin-bottom: 16px;
   }
   #reader {
     border-radius: 12px;
     overflow: hidden;
     background: #000;
-    min-height: 220px;
+    min-height: 240px;
   }
   #reader__scan_region { background: #000 !important; }
+  #reader video { border-radius: 12px; }
   #reader__dashboard_section_csr button {
     background: var(--accent) !important;
     color: var(--bg) !important;
@@ -151,6 +393,26 @@
     cursor: pointer !important;
     margin-top: 8px !important;
   }
+
+  .toggle-row {
+    display: flex;
+    gap: 12px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+  }
+  .toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    color: var(--muted);
+    text-transform: uppercase;
+    cursor: pointer;
+    user-select: none;
+  }
+  .toggle input { accent-color: var(--accent); }
 
   .controls {
     display: grid;
@@ -189,6 +451,11 @@
     background: var(--accent-dim);
     color: var(--bg);
   }
+  button.btn.small {
+    padding: 8px 12px;
+    font-size: 11px;
+  }
+  button.btn.wide { grid-column: span 2; }
 
   .log-card {
     background: var(--bg-card);
@@ -215,7 +482,7 @@
     color: var(--accent);
   }
   .log {
-    max-height: 240px;
+    max-height: 260px;
     overflow-y: auto;
     font-family: 'JetBrains Mono', monospace;
     font-size: 12px;
@@ -223,13 +490,25 @@
   .log-item {
     display: flex;
     justify-content: space-between;
+    align-items: center;
+    gap: 8px;
     padding: 8px 0;
     border-bottom: 1px solid var(--border);
     color: var(--muted);
   }
   .log-item:last-child { border-bottom: none; }
-  .log-item .code { color: var(--text); }
-  .log-item .time { font-size: 10px; }
+  .log-item .code { color: var(--text); flex: 1; word-break: break-all; }
+  .log-item .time { font-size: 10px; flex-shrink: 0; }
+  .log-item.dup .code { color: var(--warn); }
+  .log-item.over .code { color: var(--danger); }
+  .log-item .tag {
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    flex-shrink: 0;
+  }
+  .log-item.dup .tag { color: var(--warn); }
+  .log-item.over .tag { color: var(--danger); }
   .empty {
     text-align: center;
     padding: 24px 0;
@@ -255,6 +534,31 @@
     outline: none;
   }
   .manual input:focus { border-color: var(--accent); }
+
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--bg-elev);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 12px 20px;
+    border-radius: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.25s ease;
+    z-index: 100;
+    max-width: 90%;
+    text-align: center;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.warn { border-color: var(--warn); color: var(--warn); }
+  .toast.danger { border-color: var(--danger); color: var(--danger); }
+  .toast.done { border-color: var(--accent); color: var(--accent); }
 </style>
 </head>
 <body>
@@ -264,85 +568,538 @@
     <div class="status" id="status">STANDBY</div>
   </header>
 
-  <h1>Barcode Counter</h1>
-  <p class="subtitle">Point the camera at any barcode or QR code to count automatically.</p>
+  <!-- =========== VIEW: CONSENT LIST =========== -->
+  <section class="view active" id="view-list">
+    <h1>Signed Consents</h1>
+    <p class="subtitle">Pick a customer to start collection. Tap a row.</p>
 
-  <div class="counter-card">
-    <div class="counter-label">Total Scans</div>
-    <div class="counter-value" id="count">0</div>
-    <div class="last-scan" id="lastScan">Awaiting first scan…</div>
-  </div>
-
-  <div class="scanner-card">
-    <div id="reader"></div>
-    <div class="manual">
-      <input type="text" id="manualInput" placeholder="Or type/paste code + Enter" />
+    <div class="add-card">
+      <div class="section-title">Add Consent</div>
+      <div class="form-grid">
+        <input type="text" id="newName" placeholder="Customer name" />
+        <input type="number" id="newQty" placeholder="Qty" min="1" />
+        <input type="text" id="newRef" class="full" placeholder="Consent ref / notes (optional)" />
+        <button class="btn primary full" id="addConsentBtn">Add Consent</button>
+      </div>
     </div>
-  </div>
 
-  <div class="controls">
-    <button class="btn primary" id="startBtn">Start Camera</button>
-    <button class="btn danger" id="resetBtn">Reset Counter</button>
-  </div>
+    <div class="section-title">Consents</div>
+    <div class="consent-list" id="consentList"></div>
 
-  <div class="log-card">
-    <div class="log-header">
-      <div class="log-title">Scan Log</div>
-      <div class="log-count" id="logCount">0 entries</div>
+    <div class="controls" style="margin-top:16px;">
+      <button class="btn" id="exportAllBtn">Export All</button>
+      <button class="btn danger" id="clearAllBtn">Clear All</button>
     </div>
-    <div class="log" id="log">
-      <div class="empty">No scans yet</div>
+  </section>
+
+  <!-- =========== VIEW: SCANNER =========== -->
+  <section class="view" id="view-scanner">
+    <div class="scanner-header">
+      <button class="back-btn" id="backBtn">← Back</button>
+      <div class="scanner-title">
+        <h2 id="scanCustomer">—</h2>
+        <div class="meta" id="scanRef">—</div>
+      </div>
     </div>
-  </div>
+
+    <div class="counter-card" id="counterCard">
+      <div class="counter-label" id="counterLabel">Sealed Scanned</div>
+      <div class="counter-value" id="count">0<span class="target" id="targetLabel">/0</span></div>
+      <div class="progress"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="alert-banner" id="alertBanner"></div>
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-label">Total</div>
+          <div class="stat-value" id="totalStat">0</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Duplicates</div>
+          <div class="stat-value warn" id="dupStat">0</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Remaining</div>
+          <div class="stat-value" id="remainStat">0</div>
+        </div>
+      </div>
+      <div class="last-scan" id="lastScan">Awaiting first scan…</div>
+    </div>
+
+    <div class="scanner-card">
+      <div id="reader"></div>
+      <div class="toggle-row">
+        <label class="toggle"><input type="checkbox" id="soundToggle" checked /> Sound</label>
+        <label class="toggle"><input type="checkbox" id="vibrateToggle" checked /> Vibrate</label>
+        <label class="toggle"><input type="checkbox" id="countDupToggle" /> Count dups</label>
+      </div>
+      <div class="manual">
+        <input type="text" id="manualInput" placeholder="Or type/paste code + Enter" />
+      </div>
+    </div>
+
+    <div class="controls">
+      <button class="btn primary" id="startBtn">Start Camera</button>
+      <button class="btn danger" id="resetBtn">Reset Scans</button>
+      <button class="btn" id="exportBtn">Export CSV</button>
+      <button class="btn" id="finishBtn">Finish & Save</button>
+    </div>
+
+    <div class="log-card">
+      <div class="log-header">
+        <div class="log-title">Scan Log</div>
+        <div class="log-count" id="logCount">0 entries</div>
+      </div>
+      <div class="log" id="log">
+        <div class="empty">No scans yet</div>
+      </div>
+    </div>
+  </section>
 </div>
 
+<div class="toast" id="toast"></div>
+
 <script>
-  let count = 0;
-  let scans = [];
+  const CONSENTS_KEY = 'mjm.consents.v2';
+  const SETTINGS_KEY = 'mjm.scan.settings.v2';
+  const DEDUPE_DEBOUNCE_MS = 800;
+  const OVER_REPEAT_MS = 1200;
+
+  /** @type {Array<{id:string, customer:string, qty:number, ref:string, createdAt:number, scans:Array<{code:string,time:string,dup:boolean,over:boolean}>, seen:string[], unique:number, total:number, dups:number, over:number, completedAt:number|null, completedFired:boolean, overFired:boolean}>} */
+  let consents = [];
+  let activeId = null;
+  /** @type {Set<string>} */
+  let seen = new Set();
   let lastCode = '';
   let lastTime = 0;
-  const DEBOUNCE_MS = 1500; // avoid counting the same code twice in a row
+  let lastOverAlertTime = 0;
 
-  const countEl = document.getElementById('count');
-  const lastEl = document.getElementById('lastScan');
-  const logEl = document.getElementById('log');
-  const logCountEl = document.getElementById('logCount');
-  const statusEl = document.getElementById('status');
-  const manualInput = document.getElementById('manualInput');
+  // DOM
+  const $ = (id) => document.getElementById(id);
+  const statusEl = $('status');
+  const viewList = $('view-list');
+  const viewScanner = $('view-scanner');
+  const consentListEl = $('consentList');
+  const newName = $('newName');
+  const newQty = $('newQty');
+  const newRef = $('newRef');
+  const scanCustomer = $('scanCustomer');
+  const scanRef = $('scanRef');
+  const counterCard = $('counterCard');
+  const countEl = $('count');
+  const targetLabel = $('targetLabel');
+  const progressFill = $('progressFill');
+  const alertBanner = $('alertBanner');
+  const totalStat = $('totalStat');
+  const dupStat = $('dupStat');
+  const remainStat = $('remainStat');
+  const lastEl = $('lastScan');
+  const logEl = $('log');
+  const logCountEl = $('logCount');
+  const manualInput = $('manualInput');
+  const soundToggle = $('soundToggle');
+  const vibrateToggle = $('vibrateToggle');
+  const countDupToggle = $('countDupToggle');
+  const toastEl = $('toast');
 
-  function registerScan(code) {
+  // ---------- Audio ----------
+  let audioCtx = null;
+  function ensureAudio() {
+    if (!audioCtx) {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (Ctx) audioCtx = new Ctx();
+    }
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+  function beep(freq, duration, type = 'sine', volume = 0.25) {
+    if (!soundToggle.checked) return;
+    const ctx = ensureAudio();
+    if (!ctx) return;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    gain.gain.value = 0;
+    osc.connect(gain).connect(ctx.destination);
+    const now = ctx.currentTime;
+    gain.gain.linearRampToValueAtTime(volume, now + 0.01);
+    gain.gain.linearRampToValueAtTime(0, now + duration);
+    osc.start(now);
+    osc.stop(now + duration + 0.02);
+  }
+  function beepSuccess() { beep(1150, 0.08, 'square', 0.22); }
+  function beepDuplicate() { beep(420, 0.18, 'sine', 0.18); }
+  function beepComplete() {
+    beep(900, 0.1, 'square', 0.25);
+    setTimeout(() => beep(1300, 0.1, 'square', 0.25), 110);
+    setTimeout(() => beep(1700, 0.18, 'square', 0.28), 230);
+  }
+  function beepAlarm() {
+    // Loud descending two-tone alarm
+    beep(1600, 0.12, 'sawtooth', 0.32);
+    setTimeout(() => beep(700, 0.18, 'sawtooth', 0.32), 130);
+    setTimeout(() => beep(1600, 0.12, 'sawtooth', 0.32), 320);
+    setTimeout(() => beep(700, 0.22, 'sawtooth', 0.32), 450);
+  }
+
+  // ---------- Toast ----------
+  let toastTimer = null;
+  function toast(msg, kind = '') {
+    toastEl.className = 'toast show' + (kind ? ' ' + kind : '');
+    toastEl.textContent = msg;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove('show'), 1600);
+  }
+
+  // ---------- Persistence ----------
+  function saveAll() {
+    try { localStorage.setItem(CONSENTS_KEY, JSON.stringify(consents)); } catch (e) {}
+  }
+  function loadAll() {
+    try {
+      const raw = localStorage.getItem(CONSENTS_KEY);
+      if (raw) consents = JSON.parse(raw) || [];
+    } catch (e) { consents = []; }
+  }
+  function saveSettings() {
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+        sound: soundToggle.checked,
+        vibrate: vibrateToggle.checked,
+        countDup: countDupToggle.checked,
+      }));
+    } catch (e) {}
+  }
+  function loadSettings() {
+    try {
+      const raw = localStorage.getItem(SETTINGS_KEY);
+      if (!raw) return;
+      const s = JSON.parse(raw);
+      if (typeof s.sound === 'boolean') soundToggle.checked = s.sound;
+      if (typeof s.vibrate === 'boolean') vibrateToggle.checked = s.vibrate;
+      if (typeof s.countDup === 'boolean') countDupToggle.checked = s.countDup;
+    } catch (e) {}
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+  }
+  function uid() {
+    return 'c_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7);
+  }
+  function activeConsent() {
+    return consents.find(c => c.id === activeId);
+  }
+  function statusOf(c) {
+    if (c.unique > c.qty) return 'over';
+    if (c.unique >= c.qty && c.qty > 0) return 'done';
+    if (c.unique > 0) return 'progress';
+    return 'pending';
+  }
+
+  // ---------- Consent list rendering ----------
+  function renderConsentList() {
+    if (consents.length === 0) {
+      consentListEl.innerHTML = '<div class="empty-list">No signed consents yet. Add one above.</div>';
+      return;
+    }
+    // Sort: in-progress / over first, then pending, then done; newest first within
+    const order = { over: 0, progress: 1, pending: 2, done: 3 };
+    const sorted = consents.slice().sort((a, b) => {
+      const sa = order[statusOf(a)];
+      const sb = order[statusOf(b)];
+      if (sa !== sb) return sa - sb;
+      return b.createdAt - a.createdAt;
+    });
+    consentListEl.innerHTML = sorted.map(c => {
+      const st = statusOf(c);
+      const pct = c.qty > 0 ? Math.min(100, (c.unique / c.qty) * 100) : 0;
+      const pillClass = st === 'done' ? 'done' : st === 'over' ? 'over' : st === 'progress' ? 'progress' : '';
+      const pillLabel = st === 'done' ? 'COMPLETE' : st === 'over' ? 'OVER' : st === 'progress' ? 'IN PROGRESS' : 'PENDING';
+      return `
+        <div class="consent-row ${st === 'done' ? 'complete' : ''} ${st === 'over' ? 'over' : ''}" data-id="${c.id}">
+          <div class="consent-name">${escapeHtml(c.customer)}</div>
+          <div class="consent-actions">
+            <button class="btn primary small" data-act="start" data-id="${c.id}">${st === 'done' || st === 'over' ? 'Resume' : (c.unique > 0 ? 'Continue' : 'Start')}</button>
+            <button class="btn small" data-act="delete" data-id="${c.id}">Delete</button>
+          </div>
+          <div class="consent-meta">
+            <span class="pill ${pillClass}">${pillLabel}</span>
+            Qty <b>${c.qty}</b> · Scanned <b>${c.unique}</b>${c.over ? ` · Over <b style="color:var(--danger)">${c.over}</b>` : ''}${c.ref ? ` · ${escapeHtml(c.ref)}` : ''}
+          </div>
+          <div class="row-mini-progress ${st === 'done' ? 'done' : ''} ${st === 'over' ? 'over' : ''}">
+            <div style="width:${pct}%"></div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  // Delegated clicks on consent list
+  consentListEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-act]');
+    if (btn) {
+      const id = btn.getAttribute('data-id');
+      const act = btn.getAttribute('data-act');
+      e.stopPropagation();
+      if (act === 'start') openScanner(id);
+      else if (act === 'delete') deleteConsent(id);
+      return;
+    }
+    const row = e.target.closest('.consent-row');
+    if (row) openScanner(row.getAttribute('data-id'));
+  });
+
+  // ---------- Add / delete consent ----------
+  $('addConsentBtn').addEventListener('click', () => {
+    const name = newName.value.trim();
+    const qty = parseInt(newQty.value, 10);
+    const ref = newRef.value.trim();
+    if (!name) { toast('Enter customer name', 'warn'); newName.focus(); return; }
+    if (!qty || qty < 1) { toast('Enter valid qty', 'warn'); newQty.focus(); return; }
+    consents.push({
+      id: uid(),
+      customer: name,
+      qty,
+      ref,
+      createdAt: Date.now(),
+      scans: [],
+      seen: [],
+      unique: 0,
+      total: 0,
+      dups: 0,
+      over: 0,
+      completedAt: null,
+      completedFired: false,
+      overFired: false,
+    });
+    newName.value = ''; newQty.value = ''; newRef.value = '';
+    saveAll();
+    renderConsentList();
+    toast('Consent added', 'done');
+  });
+
+  function deleteConsent(id) {
+    const c = consents.find(x => x.id === id);
+    if (!c) return;
+    if (!confirm(`Delete consent for "${c.customer}" and its ${c.scans.length} scan(s)?`)) return;
+    consents = consents.filter(x => x.id !== id);
+    saveAll();
+    renderConsentList();
+  }
+
+  $('clearAllBtn').addEventListener('click', () => {
+    if (consents.length === 0) return;
+    if (!confirm('Delete ALL consents and their scans? This cannot be undone.')) return;
+    consents = [];
+    saveAll();
+    renderConsentList();
+  });
+
+  $('exportAllBtn').addEventListener('click', () => {
+    if (consents.length === 0) { toast('Nothing to export'); return; }
+    const rows = [['consent_id', 'customer', 'qty', 'ref', 'unique', 'total', 'duplicates', 'over', 'status', 'scan_index', 'code', 'time', 'duplicate', 'over_quota']];
+    consents.forEach(c => {
+      const st = statusOf(c);
+      if (c.scans.length === 0) {
+        rows.push([c.id, c.customer, c.qty, c.ref, c.unique, c.total, c.dups, c.over, st, '', '', '', '', '']);
+      } else {
+        const ordered = c.scans.slice().reverse();
+        ordered.forEach((s, i) => {
+          rows.push([c.id, c.customer, c.qty, c.ref, c.unique, c.total, c.dups, c.over, st, i + 1, s.code, s.time, s.dup ? 'yes' : 'no', s.over ? 'yes' : 'no']);
+        });
+      }
+    });
+    downloadCSV(rows, `mjm-consents-${stamp()}.csv`);
+  });
+
+  function downloadCSV(rows, filename) {
+    const csv = rows.map(r => r.map(v => {
+      const t = String(v == null ? '' : v);
+      return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+    }).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+  function stamp() {
+    return new Date().toISOString().replace(/[:.]/g, '-');
+  }
+
+  // ---------- Scanner view ----------
+  async function openScanner(id) {
+    const c = consents.find(x => x.id === id);
+    if (!c) return;
+    activeId = id;
+    seen = new Set(c.seen || []);
+    lastCode = ''; lastTime = 0; lastOverAlertTime = 0;
+
+    scanCustomer.textContent = c.customer;
+    scanRef.textContent = `Qty ${c.qty}` + (c.ref ? ` · ${c.ref}` : '');
+    viewList.classList.remove('active');
+    viewScanner.classList.add('active');
+    renderScanner();
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }
+
+  async function closeScanner() {
+    if (html5QrCode && html5QrCode.isScanning) {
+      try { await html5QrCode.stop(); await html5QrCode.clear(); } catch (e) {}
+    }
+    activeId = null;
+    seen = new Set();
+    viewScanner.classList.remove('active');
+    viewList.classList.add('active');
+    statusEl.textContent = 'STANDBY';
+    statusEl.className = 'status';
+    $('startBtn').textContent = 'Start Camera';
+    renderConsentList();
+  }
+
+  $('backBtn').addEventListener('click', closeScanner);
+  $('finishBtn').addEventListener('click', async () => {
+    const c = activeConsent();
+    if (c && c.unique >= c.qty && !c.completedAt) c.completedAt = Date.now();
+    saveAll();
+    toast('Saved');
+    await closeScanner();
+  });
+
+  function renderScanner() {
+    const c = activeConsent();
+    if (!c) return;
+    const st = statusOf(c);
+    const remain = Math.max(0, c.qty - c.unique);
+
+    countEl.firstChild.nodeValue = String(c.unique);
+    targetLabel.textContent = '/' + c.qty;
+    totalStat.textContent = String(c.total);
+    dupStat.textContent = String(c.dups);
+    remainStat.textContent = String(remain);
+    remainStat.classList.toggle('danger', c.unique > c.qty);
+
+    const pct = c.qty > 0 ? Math.min(100, (c.unique / c.qty) * 100) : 0;
+    progressFill.style.width = pct + '%';
+    progressFill.classList.toggle('done', st === 'done');
+    progressFill.classList.toggle('over', st === 'over');
+
+    countEl.classList.toggle('done', st === 'done');
+    countEl.classList.toggle('over', st === 'over');
+    counterCard.classList.toggle('over', st === 'over');
+
+    if (st === 'over') {
+      const excess = c.unique - c.qty;
+      alertBanner.textContent = `OVER QUOTA · ${c.unique} / ${c.qty} (excess ${excess})`;
+      alertBanner.classList.add('show');
+    } else {
+      alertBanner.classList.remove('show');
+    }
+
+    // Status pill in header
+    if (html5QrCode && html5QrCode.isScanning) {
+      if (st === 'over') { statusEl.textContent = 'OVER QUOTA'; statusEl.className = 'status over'; }
+      else if (st === 'done') { statusEl.textContent = 'TARGET REACHED'; statusEl.className = 'status done'; }
+      else { statusEl.textContent = 'SCANNING'; statusEl.className = 'status scanning'; }
+    }
+
+    if (c.scans.length === 0) {
+      logEl.innerHTML = '<div class="empty">No scans yet</div>';
+      logCountEl.textContent = '0 entries';
+    } else {
+      logCountEl.textContent = c.scans.length + ' entr' + (c.scans.length === 1 ? 'y' : 'ies');
+      logEl.innerHTML = c.scans.slice(0, 100).map(s => {
+        const cls = s.over ? 'over' : (s.dup ? 'dup' : '');
+        const tag = s.over ? '<span class="tag">OVER</span>' : (s.dup ? '<span class="tag">DUP</span>' : '');
+        return `<div class="log-item ${cls}">
+                  <span class="code">${escapeHtml(s.code)}</span>
+                  ${tag}
+                  <span class="time">${s.time}</span>
+                </div>`;
+      }).join('');
+    }
+  }
+
+  function bump() {
+    countEl.classList.add('bump');
+    setTimeout(() => countEl.classList.remove('bump'), 150);
+  }
+
+  // ---------- Scan handling ----------
+  function registerScan(rawCode) {
+    const c = activeConsent();
+    if (!c) return;
+    const code = String(rawCode).trim();
+    if (!code) return;
+
     const now = Date.now();
-    if (code === lastCode && (now - lastTime) < DEBOUNCE_MS) return;
+    if (code === lastCode && (now - lastTime) < DEDUPE_DEBOUNCE_MS) return;
     lastCode = code;
     lastTime = now;
 
-    count++;
-    countEl.textContent = count;
-    countEl.classList.add('bump');
-    setTimeout(() => countEl.classList.remove('bump'), 150);
-
+    c.total++;
+    const isDup = seen.has(code);
     const time = new Date().toLocaleTimeString();
-    scans.unshift({ code, time });
-    lastEl.innerHTML = `Last: <b>${code}</b>`;
-    renderLog();
 
-    // Haptic feedback on phones
-    if (navigator.vibrate) navigator.vibrate(50);
-  }
+    if (!isDup) {
+      seen.add(code);
+      c.seen.push(code);
+      c.unique++;
 
-  function renderLog() {
-    if (scans.length === 0) {
-      logEl.innerHTML = '<div class="empty">No scans yet</div>';
-      logCountEl.textContent = '0 entries';
-      return;
+      const willBeOver = c.unique > c.qty;
+      const entry = { code, time, dup: false, over: willBeOver };
+      c.scans.unshift(entry);
+
+      if (willBeOver) {
+        c.over++;
+        lastEl.classList.remove('dup');
+        lastEl.classList.add('over');
+        lastEl.innerHTML = `Over: <b>${escapeHtml(code)}</b>`;
+        // Alarm sound (rate-limited to once per OVER_REPEAT_MS)
+        if ((Date.now() - lastOverAlertTime) > OVER_REPEAT_MS) {
+          beepAlarm();
+          lastOverAlertTime = Date.now();
+        }
+        if (vibrateToggle.checked && navigator.vibrate) navigator.vibrate([120, 60, 120, 60, 200]);
+        toast(`Over quota! ${c.unique}/${c.qty}`, 'danger');
+        if (!c.overFired) {
+          c.overFired = true;
+        }
+      } else {
+        lastEl.classList.remove('dup', 'over');
+        lastEl.innerHTML = `Last: <b>${escapeHtml(code)}</b>`;
+        beepSuccess();
+        if (vibrateToggle.checked && navigator.vibrate) navigator.vibrate(40);
+      }
+      bump();
+
+      if (!c.completedFired && c.unique === c.qty) {
+        c.completedFired = true;
+        c.completedAt = Date.now();
+        beepComplete();
+        if (vibrateToggle.checked && navigator.vibrate) navigator.vibrate([80, 60, 80, 60, 200]);
+        toast(`Target ${c.qty} reached!`, 'done');
+      }
+    } else {
+      c.dups++;
+      c.scans.unshift({ code, time, dup: true, over: false });
+      lastEl.classList.remove('over');
+      lastEl.classList.add('dup');
+      lastEl.innerHTML = `Dup: <b>${escapeHtml(code)}</b>`;
+      beepDuplicate();
+      toast('Duplicate: ' + code, 'warn');
+      if (vibrateToggle.checked && navigator.vibrate) navigator.vibrate([20, 40, 20]);
+      if (countDupToggle.checked) bump();
     }
-    logCountEl.textContent = scans.length + ' entr' + (scans.length === 1 ? 'y' : 'ies');
-    logEl.innerHTML = scans.slice(0, 50).map(s =>
-      `<div class="log-item"><span class="code">${s.code}</span><span class="time">${s.time}</span></div>`
-    ).join('');
+
+    renderScanner();
+    saveAll();
   }
 
-  // Manual / hardware scanner input (HID keyboard scanners trigger this)
+  // ---------- Manual / hardware scanner input ----------
   manualInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       const val = manualInput.value.trim();
@@ -351,43 +1108,148 @@
     }
   });
 
-  // Reset
-  document.getElementById('resetBtn').addEventListener('click', () => {
-    if (!confirm('Reset counter and clear log?')) return;
-    count = 0;
-    scans = [];
-    lastCode = '';
-    countEl.textContent = '0';
+  [soundToggle, vibrateToggle, countDupToggle].forEach(el =>
+    el.addEventListener('change', saveSettings)
+  );
+
+  // ---------- Reset (current consent) ----------
+  $('resetBtn').addEventListener('click', () => {
+    const c = activeConsent();
+    if (!c) return;
+    if (!confirm(`Reset all scans for "${c.customer}"?`)) return;
+    c.scans = []; c.seen = []; c.unique = 0; c.total = 0; c.dups = 0; c.over = 0;
+    c.completedFired = false; c.overFired = false; c.completedAt = null;
+    seen.clear();
+    lastCode = ''; lastTime = 0;
+    lastEl.classList.remove('dup', 'over');
     lastEl.textContent = 'Awaiting first scan…';
-    renderLog();
+    saveAll();
+    renderScanner();
   });
 
-  // Camera scanner
+  // ---------- Export current consent ----------
+  $('exportBtn').addEventListener('click', () => {
+    const c = activeConsent();
+    if (!c || c.scans.length === 0) { toast('Nothing to export'); return; }
+    const rows = [['#', 'code', 'time', 'duplicate', 'over_quota']];
+    const ordered = c.scans.slice().reverse();
+    ordered.forEach((s, i) => rows.push([i + 1, s.code, s.time, s.dup ? 'yes' : 'no', s.over ? 'yes' : 'no']));
+    const safeName = c.customer.replace(/[^a-z0-9]+/gi, '_');
+    downloadCSV(rows, `mjm-${safeName}-${stamp()}.csv`);
+  });
+
+  // ---------- Camera scanner ----------
   let html5QrCode = null;
-  const startBtn = document.getElementById('startBtn');
+  const startBtn = $('startBtn');
+
+  function preferredCameraId(cameras) {
+    const back = cameras.find(c => /back|rear|environment/i.test(c.label));
+    return (back || cameras[cameras.length - 1] || cameras[0]).id;
+  }
+
+  async function startCamera() {
+    ensureAudio();
+    html5QrCode = new Html5Qrcode('reader', { verbose: false });
+    const config = {
+      fps: 15,
+      qrbox: (vw, vh) => {
+        const w = Math.floor(Math.min(vw * 0.9, 360));
+        const h = Math.floor(Math.min(vh * 0.55, 200));
+        return { width: w, height: h };
+      },
+      aspectRatio: 1.7778,
+      disableFlip: false,
+      formatsToSupport: [
+        Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.CODE_39,
+        Html5QrcodeSupportedFormats.CODE_93,
+        Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.EAN_8,
+        Html5QrcodeSupportedFormats.UPC_A,
+        Html5QrcodeSupportedFormats.UPC_E,
+        Html5QrcodeSupportedFormats.ITF,
+        Html5QrcodeSupportedFormats.CODABAR,
+        Html5QrcodeSupportedFormats.QR_CODE,
+        Html5QrcodeSupportedFormats.DATA_MATRIX,
+      ],
+      experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+    };
+
+    let cameraConfig = { facingMode: { exact: 'environment' } };
+    try {
+      const cams = await Html5Qrcode.getCameras();
+      if (cams && cams.length) cameraConfig = preferredCameraId(cams);
+    } catch (e) { /* fall back to facingMode */ }
+
+    try {
+      await html5QrCode.start(
+        cameraConfig,
+        config,
+        (decodedText) => registerScan(decodedText),
+        () => {}
+      );
+    } catch (err) {
+      if (typeof cameraConfig === 'object' && cameraConfig.facingMode) {
+        await html5QrCode.start(
+          { facingMode: 'environment' },
+          config,
+          (decodedText) => registerScan(decodedText),
+          () => {}
+        );
+      } else {
+        throw err;
+      }
+    }
+
+    startBtn.textContent = 'Stop Camera';
+    renderScanner();
+  }
+
+  async function stopCamera() {
+    try {
+      if (html5QrCode && html5QrCode.isScanning) {
+        await html5QrCode.stop();
+        await html5QrCode.clear();
+      }
+    } catch (e) {}
+    startBtn.textContent = 'Start Camera';
+    statusEl.textContent = 'STANDBY';
+    statusEl.className = 'status';
+  }
 
   startBtn.addEventListener('click', async () => {
+    if (!activeConsent()) { toast('Open a consent first'); return; }
     if (html5QrCode && html5QrCode.isScanning) {
-      await html5QrCode.stop();
-      startBtn.textContent = 'Start Camera';
-      statusEl.textContent = 'STANDBY';
+      await stopCamera();
       return;
     }
     try {
-      html5QrCode = new Html5Qrcode('reader');
-      await html5QrCode.start(
-        { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 250, height: 150 } },
-        (decodedText) => registerScan(decodedText),
-        () => {} // ignore per-frame errors
-      );
-      startBtn.textContent = 'Stop Camera';
-      statusEl.textContent = 'SCANNING';
+      await startCamera();
     } catch (err) {
-      alert('Camera error: ' + err);
+      console.error(err);
       statusEl.textContent = 'ERROR';
+      statusEl.className = 'status error';
+      alert('Camera error: ' + (err && err.message ? err.message : err));
     }
   });
+
+  // Pause camera if tab hidden
+  document.addEventListener('visibilitychange', () => {
+    if (!html5QrCode || !html5QrCode.isScanning) return;
+    if (document.hidden) {
+      try { html5QrCode.pause(true); } catch (e) {}
+      statusEl.textContent = 'PAUSED';
+      statusEl.className = 'status';
+    } else {
+      try { html5QrCode.resume(); } catch (e) {}
+      renderScanner();
+    }
+  });
+
+  // ---------- Init ----------
+  loadSettings();
+  loadAll();
+  renderConsentList();
 </script>
 </body>
 </html>
