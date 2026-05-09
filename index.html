@@ -3,11 +3,18 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0f14">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="MJM Scan">
 <title>MJM Scan Counter</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="apple-touch-icon" href="icon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
-<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" type="text/javascript"></script>
 <style>
   :root {
     --bg: #0a0f14;
@@ -77,6 +84,17 @@
   .status.done { color: var(--warn); }
   .status.over { color: var(--danger); }
   .status.error { color: var(--danger); }
+  .status.offline { color: var(--warn); }
+  .net-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-right: 6px;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+  }
+  .net-dot.offline { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
   h1 {
     font-family: 'JetBrains Mono', monospace;
     font-size: 26px;
@@ -88,6 +106,51 @@
 
   .view { display: none; }
   .view.active { display: block; }
+
+  /* --- Top bar (list) --- */
+  .list-actions {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .list-actions .btn { padding: 12px 14px; font-size: 12px; }
+
+  .add-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 14px;
+  }
+  .add-card .section-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.3em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .form-grid {
+    display: grid;
+    gap: 8px;
+    grid-template-columns: 1fr 110px;
+  }
+  .form-grid input {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 11px 12px;
+    border-radius: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    outline: none;
+    width: 100%;
+  }
+  .form-grid input:focus { border-color: var(--accent); }
+  .form-grid .full { grid-column: span 2; }
+  .form-grid .row { display: flex; gap: 8px; grid-column: span 2; }
+  .form-grid .row .btn { flex: 1; }
 
   /* --- Consent list --- */
   .consent-list {
@@ -486,7 +549,7 @@
 <div class="wrap">
   <header>
     <div class="brand"><span class="dot"></span>MJM // SCAN</div>
-    <div class="status" id="status">STANDBY</div>
+    <div class="status" id="status"><span class="net-dot" id="netDot"></span><span id="statusText">STANDBY</span></div>
   </header>
 
   <!-- =========== VIEW: CONSENT LIST =========== -->
@@ -494,7 +557,27 @@
     <h1>Signed Consents</h1>
     <p class="subtitle">Tap a customer to start collection.</p>
 
+    <div class="list-actions">
+      <button class="btn primary" id="addToggle">+ Add Consent</button>
+      <button class="btn" id="syncBtn">Sync</button>
+    </div>
+
+    <div class="add-card" id="addCard" hidden>
+      <div class="section-title">New Consent</div>
+      <div class="form-grid">
+        <input type="text" id="newName" placeholder="Customer name" />
+        <input type="number" id="newQty" placeholder="Qty" min="1" inputmode="numeric" />
+        <input type="text" id="newRef" class="full" placeholder="Consent ref / notes (optional)" />
+        <div class="row">
+          <button class="btn" id="cancelAddBtn">Cancel</button>
+          <button class="btn primary" id="saveAddBtn">Save</button>
+        </div>
+      </div>
+    </div>
+
     <div class="consent-list" id="consentList"></div>
+
+    <input type="file" id="importFile" accept="application/json" hidden />
   </section>
 
   <!-- =========== VIEW: SCANNER =========== -->
@@ -557,7 +640,13 @@
   let lastOverAlertTime = 0;
 
   const $ = (id) => document.getElementById(id);
-  const statusEl = $('status');
+  const statusWrap = $('status');
+  const statusEl = $('statusText');
+  const netDot = $('netDot');
+  function setStatus(text, kind) {
+    statusEl.textContent = text;
+    statusWrap.className = 'status' + (kind ? ' ' + kind : '');
+  }
   const viewList = $('view-list');
   const viewScanner = $('view-scanner');
   const consentListEl = $('consentList');
@@ -728,8 +817,7 @@
     seen = new Set();
     viewScanner.classList.remove('active');
     viewList.classList.add('active');
-    statusEl.textContent = 'STANDBY';
-    statusEl.className = 'status';
+    setStatus('STANDBY');
     $('startBtn').textContent = 'Start Camera';
     renderConsentList();
   }
@@ -765,9 +853,9 @@
     }
 
     if (html5QrCode && html5QrCode.isScanning) {
-      if (st === 'over') { statusEl.textContent = 'OVER QUOTA'; statusEl.className = 'status over'; }
-      else if (st === 'done') { statusEl.textContent = 'TARGET REACHED'; statusEl.className = 'status done'; }
-      else { statusEl.textContent = 'SCANNING'; statusEl.className = 'status scanning'; }
+      if (st === 'over') setStatus('OVER QUOTA', 'over');
+      else if (st === 'done') setStatus('TARGET REACHED', 'done');
+      else setStatus('SCANNING', 'scanning');
     }
 
     if (c.scans.length === 0) {
@@ -863,15 +951,21 @@
   async function startCamera() {
     ensureAudio();
     html5QrCode = new Html5Qrcode('reader', { verbose: false });
+    const hiRes = {
+      width: { ideal: 1920 },
+      height: { ideal: 1080 },
+    };
     const config = {
       fps: 15,
       qrbox: (vw, vh) => {
-        const w = Math.floor(Math.min(vw * 0.9, 360));
-        const h = Math.floor(Math.min(vh * 0.55, 200));
+        // Wide, generous scan window so the user can hold the phone further back.
+        const w = Math.floor(Math.min(vw * 0.95, 520));
+        const h = Math.floor(Math.min(vh * 0.7, 300));
         return { width: w, height: h };
       },
       aspectRatio: 1.7778,
       disableFlip: false,
+      videoConstraints: { ...hiRes, facingMode: 'environment' },
       formatsToSupport: [
         Html5QrcodeSupportedFormats.CODE_128,
         Html5QrcodeSupportedFormats.CODE_39,
@@ -888,10 +982,16 @@
       experimentalFeatures: { useBarCodeDetectorIfSupported: true },
     };
 
-    let cameraConfig = { facingMode: { exact: 'environment' } };
+    // Build camera selection with hi-res constraints so phones pick a sensor
+    // capable of focusing on small, distant barcodes.
+    let cameraConfig = { ...hiRes, facingMode: 'environment' };
     try {
       const cams = await Html5Qrcode.getCameras();
-      if (cams && cams.length) cameraConfig = preferredCameraId(cams);
+      if (cams && cams.length) {
+        const back = cams.find(c => /back|rear|environment/i.test(c.label));
+        const chosen = back || cams[cams.length - 1];
+        cameraConfig = { ...hiRes, deviceId: { exact: chosen.id } };
+      }
     } catch (e) { /* fall back */ }
 
     try {
@@ -902,17 +1002,25 @@
         () => {}
       );
     } catch (err) {
-      if (typeof cameraConfig === 'object' && cameraConfig.facingMode) {
-        await html5QrCode.start(
-          { facingMode: 'environment' },
-          config,
-          (decodedText) => registerScan(decodedText),
-          () => {}
-        );
-      } else {
-        throw err;
-      }
+      // Retry with looser constraints if hi-res fails.
+      await html5QrCode.start(
+        { facingMode: 'environment' },
+        config,
+        (decodedText) => registerScan(decodedText),
+        () => {}
+      );
     }
+
+    // Try to enable continuous autofocus on the active video track. Optional —
+    // not all devices/browsers expose it.
+    try {
+      const video = document.querySelector('#reader video');
+      const stream = video && video.srcObject;
+      const track = stream && stream.getVideoTracks && stream.getVideoTracks()[0];
+      if (track && track.applyConstraints) {
+        await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
+      }
+    } catch (e) { /* ignore */ }
 
     startBtn.textContent = 'Stop Camera';
     renderScanner();
@@ -926,8 +1034,7 @@
       }
     } catch (e) {}
     startBtn.textContent = 'Start Camera';
-    statusEl.textContent = 'STANDBY';
-    statusEl.className = 'status';
+    setStatus('STANDBY');
   }
 
   startBtn.addEventListener('click', async () => {
@@ -940,8 +1047,7 @@
       await startCamera();
     } catch (err) {
       console.error(err);
-      statusEl.textContent = 'ERROR';
-      statusEl.className = 'status error';
+      setStatus('ERROR', 'error');
       alert('Camera error: ' + (err && err.message ? err.message : err));
     }
   });
@@ -950,17 +1056,157 @@
     if (!html5QrCode || !html5QrCode.isScanning) return;
     if (document.hidden) {
       try { html5QrCode.pause(true); } catch (e) {}
-      statusEl.textContent = 'PAUSED';
-      statusEl.className = 'status';
+      setStatus('PAUSED');
     } else {
       try { html5QrCode.resume(); } catch (e) {}
       renderScanner();
     }
   });
 
+  // ---------- Add Consent ----------
+  const addCard = $('addCard');
+  const addToggle = $('addToggle');
+  function showAddForm(show) {
+    addCard.hidden = !show;
+    addToggle.textContent = show ? '× Cancel' : '+ Add Consent';
+    if (show) setTimeout(() => $('newName').focus(), 50);
+  }
+  addToggle.addEventListener('click', () => showAddForm(addCard.hidden));
+  $('cancelAddBtn').addEventListener('click', () => {
+    $('newName').value = ''; $('newQty').value = ''; $('newRef').value = '';
+    showAddForm(false);
+  });
+  $('saveAddBtn').addEventListener('click', () => {
+    const name = $('newName').value.trim();
+    const qty = parseInt($('newQty').value, 10);
+    const ref = $('newRef').value.trim();
+    if (!name) { toast('Enter customer name', 'warn'); $('newName').focus(); return; }
+    if (!qty || qty < 1) { toast('Enter valid qty', 'warn'); $('newQty').focus(); return; }
+    consents.push({
+      id: 'c_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7),
+      customer: name, qty, ref,
+      createdAt: Date.now(),
+      scans: [], seen: [],
+      unique: 0, over: 0,
+      completedAt: null, completedFired: false, overFired: false,
+    });
+    $('newName').value = ''; $('newQty').value = ''; $('newRef').value = '';
+    saveAll();
+    showAddForm(false);
+    renderConsentList();
+    toast('Consent added', 'done');
+  });
+
+  // ---------- Sync (local backup / restore) ----------
+  // No remote backend: "sync" downloads a JSON snapshot of all consents +
+  // scans. The same file can be re-imported on another device, so progress can
+  // be moved between phones manually. Data already persists offline via
+  // localStorage; this button is for explicit backup / transfer.
+  function pickFile() {
+    return new Promise((resolve) => {
+      const input = $('importFile');
+      input.value = '';
+      const onChange = () => {
+        input.removeEventListener('change', onChange);
+        resolve(input.files && input.files[0] ? input.files[0] : null);
+      };
+      input.addEventListener('change', onChange, { once: true });
+      input.click();
+    });
+  }
+  async function syncAction() {
+    if (consents.length === 0) {
+      // Nothing local to back up — offer to import instead.
+      if (confirm('No data to back up. Import a backup file?')) {
+        const file = await pickFile();
+        if (file) await importBackup(file);
+      }
+      return;
+    }
+    const choice = prompt('Sync:\n  1 = Download backup (this phone)\n  2 = Import backup (replace data)\n  3 = Import backup (merge)\n\nEnter 1, 2 or 3:', '1');
+    if (choice === '1' || choice == null) return downloadBackup();
+    if (choice === '2') {
+      const file = await pickFile();
+      if (file) await importBackup(file, /*replace*/ true);
+      return;
+    }
+    if (choice === '3') {
+      const file = await pickFile();
+      if (file) await importBackup(file, /*replace*/ false);
+      return;
+    }
+  }
+  function downloadBackup() {
+    const payload = {
+      app: 'mjm-scan-counter',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      consents,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `mjm-scan-backup-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast('Backup downloaded', 'done');
+  }
+  async function importBackup(file, replace) {
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      const incoming = Array.isArray(data) ? data : (Array.isArray(data.consents) ? data.consents : null);
+      if (!incoming) throw new Error('Unrecognised file');
+      if (replace) {
+        consents = incoming;
+      } else {
+        // Merge by id; incoming with more recent scans wins per consent
+        const byId = new Map(consents.map(c => [c.id, c]));
+        incoming.forEach(c => {
+          const existing = byId.get(c.id);
+          if (!existing) {
+            consents.push(c);
+          } else if ((c.unique || 0) >= (existing.unique || 0)) {
+            Object.assign(existing, c);
+          }
+        });
+      }
+      saveAll();
+      renderConsentList();
+      toast(`Imported ${incoming.length} consent(s)`, 'done');
+    } catch (e) {
+      alert('Import failed: ' + e.message);
+    }
+  }
+  $('syncBtn').addEventListener('click', syncAction);
+  $('importFile').addEventListener('click', e => e.stopPropagation());
+
+  // ---------- Online / offline indicator ----------
+  function updateNetwork() {
+    const online = navigator.onLine;
+    netDot.classList.toggle('offline', !online);
+    // Only override status text if we're not actively scanning
+    if (!html5QrCode || !html5QrCode.isScanning) {
+      setStatus(online ? 'STANDBY' : 'OFFLINE', online ? '' : 'offline');
+    }
+  }
+  window.addEventListener('online', updateNetwork);
+  window.addEventListener('offline', updateNetwork);
+
+  // ---------- Service worker (offline support) ----------
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(err =>
+        console.warn('SW registration failed', err)
+      );
+    });
+  }
+
   // ---------- Init ----------
   loadAll();
   renderConsentList();
+  updateNetwork();
 </script>
 </body>
 </html>
