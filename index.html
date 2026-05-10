@@ -741,7 +741,9 @@
     if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
     return audioCtx;
   }
-  function beep(freq, duration, type = 'sine', volume = 0.25) {
+  // Master gain so we can drive the output well above the per-tone level
+  // without clipping each individual oscillator.
+  function tone(freq, duration, type = 'sine', volume = 0.6, when = 0) {
     const ctx = ensureAudio();
     if (!ctx) return;
     const osc = ctx.createOscillator();
@@ -750,24 +752,33 @@
     osc.frequency.value = freq;
     gain.gain.value = 0;
     osc.connect(gain).connect(ctx.destination);
-    const now = ctx.currentTime;
-    gain.gain.linearRampToValueAtTime(volume, now + 0.01);
-    gain.gain.linearRampToValueAtTime(0, now + duration);
-    osc.start(now);
-    osc.stop(now + duration + 0.02);
+    const start = ctx.currentTime + when;
+    gain.gain.linearRampToValueAtTime(volume, start + 0.005);
+    gain.gain.linearRampToValueAtTime(0, start + duration);
+    osc.start(start);
+    osc.stop(start + duration + 0.02);
   }
-  function beepSuccess() { beep(1150, 0.08, 'square', 0.22); }
-  function beepDuplicate() { beep(420, 0.18, 'sine', 0.18); }
+  // Bright two-tone "ding" — clearly positive, easy to hear outdoors.
+  function beepSuccess() {
+    tone(1320, 0.06, 'square', 0.7, 0);
+    tone(1760, 0.10, 'square', 0.7, 0.06);
+  }
+  // Classic error buzzer — two short low rasps. Sounds clearly "wrong".
+  function beepDuplicate() {
+    tone(220, 0.13, 'sawtooth', 0.85, 0);
+    tone(180, 0.19, 'sawtooth', 0.85, 0.14);
+  }
   function beepComplete() {
-    beep(900, 0.1, 'square', 0.25);
-    setTimeout(() => beep(1300, 0.1, 'square', 0.25), 110);
-    setTimeout(() => beep(1700, 0.18, 'square', 0.28), 230);
+    tone(900, 0.10, 'square', 0.7, 0);
+    tone(1300, 0.10, 'square', 0.7, 0.11);
+    tone(1760, 0.20, 'square', 0.75, 0.23);
   }
   function beepAlarm() {
-    beep(1600, 0.12, 'sawtooth', 0.32);
-    setTimeout(() => beep(700, 0.18, 'sawtooth', 0.32), 130);
-    setTimeout(() => beep(1600, 0.12, 'sawtooth', 0.32), 320);
-    setTimeout(() => beep(700, 0.22, 'sawtooth', 0.32), 450);
+    // Loud descending two-tone alarm, repeated.
+    tone(1700, 0.13, 'sawtooth', 0.9, 0);
+    tone(700, 0.20, 'sawtooth', 0.9, 0.14);
+    tone(1700, 0.13, 'sawtooth', 0.9, 0.34);
+    tone(700, 0.24, 'sawtooth', 0.9, 0.48);
   }
 
   // ---------- Toast ----------
