@@ -576,6 +576,80 @@
     font-size: 12px;
   }
 
+  /* --- Modal --- */
+  .modal-back {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: none;
+    align-items: flex-end;
+    justify-content: center;
+    z-index: 90;
+    padding: 16px;
+  }
+  .modal-back.show { display: flex; }
+  .modal {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 18px;
+    width: 100%;
+    max-width: 520px;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+  .modal h3 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    letter-spacing: 0.2em;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .modal p { color: var(--muted); font-size: 12px; line-height: 1.5; margin-bottom: 10px; }
+  .modal p b { color: var(--text); }
+  .modal a { color: var(--accent); }
+  .modal textarea {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    line-height: 1.4;
+    outline: none;
+    min-height: 130px;
+    resize: vertical;
+  }
+  .modal textarea:focus { border-color: var(--accent); }
+  .modal-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 14px;
+  }
+  .modal-actions .btn { flex: 1; }
+  .sync-status {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    margin-bottom: 12px;
+  }
+  .sync-status.ok { color: var(--accent); border-color: var(--accent-dim); }
+  .sync-status.err { color: var(--danger); border-color: var(--danger); }
+  .sync-status.warn { color: var(--warn); border-color: var(--warn); }
+  .modal-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .modal-list .btn { width: 100%; text-align: left; }
+
   .toast {
     position: fixed;
     left: 50%;
@@ -692,6 +766,10 @@
 </div>
 
 <div class="toast" id="toast"></div>
+
+<div class="modal-back" id="modalBack">
+  <div class="modal" id="modal"></div>
+</div>
 
 <script>
   const CONSENTS_KEY = 'mjm.consents.v2';
@@ -1194,27 +1272,40 @@
       input.click();
     });
   }
-  async function syncAction() {
-    if (consents.length === 0) {
-      // Nothing local to back up — offer to import instead.
-      if (confirm('Tiada data untuk disandar. Import fail sandaran?')) {
-        const file = await pickFile();
-        if (file) await importBackup(file);
-      }
-      return;
-    }
-    const choice = prompt('Segerak:\n  1 = Muat turun sandaran (telefon ini)\n  2 = Import sandaran (gantikan data)\n  3 = Import sandaran (gabung)\n\nMasukkan 1, 2 atau 3:', '1');
-    if (choice === '1' || choice == null) return downloadBackup();
-    if (choice === '2') {
-      const file = await pickFile();
-      if (file) await importBackup(file, /*replace*/ true);
-      return;
-    }
-    if (choice === '3') {
-      const file = await pickFile();
-      if (file) await importBackup(file, /*replace*/ false);
-      return;
-    }
+  // ---------- Modal helpers ----------
+  const modalBack = $('modalBack');
+  const modalEl = $('modal');
+  function openModal(html) {
+    modalEl.innerHTML = html;
+    modalBack.classList.add('show');
+  }
+  function closeModal() { modalBack.classList.remove('show'); }
+  modalBack.addEventListener('click', (e) => { if (e.target === modalBack) closeModal(); });
+
+  function syncAction() {
+    const fbStatus = firebaseStatus();
+    const cls = fbStatus.kind === 'ok' ? 'ok' : (fbStatus.kind === 'err' ? 'err' : 'warn');
+    openModal(`
+      <h3>Segerak</h3>
+      <div class="sync-status ${cls}">${escapeHtml(fbStatus.label)}</div>
+      <div class="modal-list">
+        <button class="btn primary" data-act="fb-setup">${fbStatus.kind === 'ok' ? 'Tukar Akaun Awan / Putuskan' : 'Setup Sync Awan (Firebase)'}</button>
+        <button class="btn" data-act="dl">Muat Turun Sandaran (JSON)</button>
+        <button class="btn" data-act="imp-replace">Import Sandaran (Gantikan)</button>
+        <button class="btn" data-act="imp-merge">Import Sandaran (Gabung)</button>
+        <button class="btn" data-act="cancel">Batal</button>
+      </div>
+    `);
+    modalEl.querySelectorAll('button[data-act]').forEach(b => {
+      b.addEventListener('click', async () => {
+        const act = b.getAttribute('data-act');
+        if (act === 'cancel') return closeModal();
+        if (act === 'dl') { closeModal(); return downloadBackup(); }
+        if (act === 'imp-replace') { closeModal(); const f = await pickFile(); if (f) await importBackup(f, true); return; }
+        if (act === 'imp-merge') { closeModal(); const f = await pickFile(); if (f) await importBackup(f, false); return; }
+        if (act === 'fb-setup') return openFirebaseSetup();
+      });
+    });
   }
   function downloadBackup() {
     const payload = {
@@ -1261,6 +1352,252 @@
   }
   $('syncBtn').addEventListener('click', syncAction);
   $('importFile').addEventListener('click', e => e.stopPropagation());
+
+  // ---------- Firebase Firestore sync ----------
+  // All devices that paste the same Firebase config share data through a
+  // single `consents` collection. Anonymous auth keeps the rules simple
+  // (`allow read, write: if request.auth != null;`) and Firestore's built-in
+  // offline persistence queues writes when there's no signal.
+  const FB_CFG_KEY = 'mjm.firebase.cfg.v1';
+  const FB_SDK_VERSION = '10.7.1';
+  let fbConfig = null;
+  let fbApp = null, fbAuth = null, fbDb = null, fbUnsub = null;
+  let fbState = 'idle'; // idle | loading | ready | error
+  let fbError = '';
+  const fbPushQueue = new Map();
+  let fbPushTimer = null;
+  // Track docs we just wrote so the snapshot echo is ignored cleanly.
+  const recentLocalWrites = new Map();
+
+  function loadFirebaseSDK() {
+    if (window.firebase && firebase.firestore) return Promise.resolve();
+    const base = `https://www.gstatic.com/firebasejs/${FB_SDK_VERSION}/`;
+    const files = [
+      'firebase-app-compat.js',
+      'firebase-auth-compat.js',
+      'firebase-firestore-compat.js',
+    ];
+    return files.reduce((p, name) => p.then(() => loadScript(base + name)), Promise.resolve());
+  }
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      if (document.querySelector(`script[data-src="${src}"]`)) return resolve();
+      const s = document.createElement('script');
+      s.src = src;
+      s.dataset.src = src;
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error('Gagal memuatkan ' + src));
+      document.head.appendChild(s);
+    });
+  }
+
+  function loadFirebaseConfig() {
+    try {
+      const raw = localStorage.getItem(FB_CFG_KEY);
+      if (raw) fbConfig = JSON.parse(raw);
+    } catch (e) {}
+  }
+  function saveFirebaseConfig(cfg) {
+    fbConfig = cfg;
+    if (cfg) localStorage.setItem(FB_CFG_KEY, JSON.stringify(cfg));
+    else localStorage.removeItem(FB_CFG_KEY);
+  }
+
+  function parseFirebaseConfig(text) {
+    text = (text || '').trim();
+    if (!text) throw new Error('Config kosong');
+    // Accept "const firebaseConfig = { ... };" or just "{ ... }"
+    const eq = text.indexOf('=');
+    if (eq > -1 && text.slice(0, eq).match(/^[a-zA-Z_$][\w$\s]*\s*$/)) {
+      text = text.slice(eq + 1);
+    }
+    text = text.replace(/;\s*$/, '').trim();
+    let obj;
+    try {
+      obj = (new Function('return ' + text))();
+    } catch (e) {
+      throw new Error('Format config tidak sah');
+    }
+    if (!obj || typeof obj !== 'object' || !obj.apiKey || !obj.projectId) {
+      throw new Error('Config kena ada apiKey dan projectId');
+    }
+    return obj;
+  }
+
+  async function initFirebase() {
+    if (!fbConfig) return;
+    fbState = 'loading'; fbError = '';
+    try {
+      await loadFirebaseSDK();
+      fbApp = firebase.apps.length ? firebase.app() : firebase.initializeApp(fbConfig);
+      fbAuth = firebase.auth();
+      fbDb = firebase.firestore();
+      try {
+        await fbDb.enablePersistence({ synchronizeTabs: true });
+      } catch (e) { /* unsupported or already enabled */ }
+      if (!fbAuth.currentUser) {
+        await fbAuth.signInAnonymously();
+      }
+      subscribeFirestore();
+      pushAllConsents();
+      fbState = 'ready';
+    } catch (e) {
+      console.warn('Firebase init failed', e);
+      fbState = 'error';
+      fbError = e && e.message ? e.message : String(e);
+    }
+  }
+
+  function subscribeFirestore() {
+    if (!fbDb) return;
+    if (fbUnsub) { try { fbUnsub(); } catch (e) {} fbUnsub = null; }
+    fbUnsub = fbDb.collection('consents').onSnapshot((snap) => {
+      let touched = false;
+      snap.docChanges().forEach(change => {
+        const data = change.doc.data();
+        if (!data || !data.id) return;
+        // Ignore the echo of our own pending write
+        if (change.doc.metadata.hasPendingWrites) return;
+        const recent = recentLocalWrites.get(data.id);
+        if (recent && (data.updatedAt || 0) <= recent) return;
+        if (mergeRemoteConsent(data)) touched = true;
+      });
+      if (touched) {
+        try { localStorage.setItem(CONSENTS_KEY, JSON.stringify(consents)); } catch (e) {}
+        renderConsentList();
+        if (activeId) {
+          // Re-sync local seen set if active consent changed
+          const c = activeConsent();
+          if (c) seen = new Set(c.seen || []);
+          renderScanner();
+        }
+      }
+    }, (err) => {
+      console.warn('Firestore listen error', err);
+      fbState = 'error'; fbError = err && err.message ? err.message : String(err);
+    });
+  }
+
+  function mergeRemoteConsent(remote) {
+    const idx = consents.findIndex(c => c.id === remote.id);
+    if (idx === -1) {
+      consents.push(remote);
+      return true;
+    }
+    const local = consents[idx];
+    const lu = local.updatedAt || 0;
+    const ru = remote.updatedAt || 0;
+    if (ru > lu) {
+      consents[idx] = { ...local, ...remote };
+      return true;
+    }
+    return false;
+  }
+
+  function pushConsent(consent) {
+    if (fbState !== 'ready') return;
+    fbPushQueue.set(consent.id, consent);
+    if (fbPushTimer) clearTimeout(fbPushTimer);
+    fbPushTimer = setTimeout(flushPushes, 500);
+  }
+  function pushAllConsents() {
+    if (fbState !== 'ready') return;
+    consents.forEach(c => fbPushQueue.set(c.id, c));
+    if (fbPushTimer) clearTimeout(fbPushTimer);
+    fbPushTimer = setTimeout(flushPushes, 50);
+  }
+  async function flushPushes() {
+    if (!fbDb || fbPushQueue.size === 0) return;
+    const batch = fbDb.batch();
+    const entries = Array.from(fbPushQueue.entries());
+    fbPushQueue.clear();
+    const now = Date.now();
+    entries.forEach(([id, c]) => {
+      c.updatedAt = now;
+      recentLocalWrites.set(id, now);
+      batch.set(fbDb.collection('consents').doc(id), JSON.parse(JSON.stringify(c)));
+    });
+    try { await batch.commit(); }
+    catch (e) { console.warn('Firestore write failed', e); }
+    // Drop tracking after 30s
+    setTimeout(() => entries.forEach(([id]) => {
+      if ((recentLocalWrites.get(id) || 0) <= now) recentLocalWrites.delete(id);
+    }), 30000);
+  }
+  async function disconnectFirebase() {
+    try { if (fbUnsub) fbUnsub(); } catch (e) {}
+    fbUnsub = null;
+    try { if (fbAuth && fbAuth.currentUser) await fbAuth.signOut(); } catch (e) {}
+    saveFirebaseConfig(null);
+    fbState = 'idle'; fbError = '';
+    fbApp = null; fbAuth = null; fbDb = null;
+  }
+
+  function firebaseStatus() {
+    if (fbState === 'ready') return { kind: 'ok', label: `Tersambung ke ${fbConfig.projectId}` };
+    if (fbState === 'loading') return { kind: 'warn', label: 'Menyambung…' };
+    if (fbState === 'error') return { kind: 'err', label: 'Ralat: ' + fbError };
+    return { kind: 'warn', label: 'Belum disetup — data hanya pada peranti ini' };
+  }
+
+  function openFirebaseSetup() {
+    const fb = firebaseStatus();
+    const cls = fb.kind === 'ok' ? 'ok' : fb.kind === 'err' ? 'err' : 'warn';
+    openModal(`
+      <h3>Setup Sync Awan</h3>
+      <div class="sync-status ${cls}">${escapeHtml(fb.label)}</div>
+      <p><b>Langkah ringkas:</b></p>
+      <p>
+        1. Pergi ke <a href="https://console.firebase.google.com" target="_blank" rel="noopener">console.firebase.google.com</a> → buat projek baru.<br>
+        2. <b>Build → Firestore Database</b> → Create database (start in production mode).<br>
+        3. <b>Build → Authentication → Sign-in method</b> → enable <b>Anonymous</b>.<br>
+        4. <b>Project settings → General → Your apps</b> → tambah Web app → salin <code>firebaseConfig</code> object.<br>
+        5. Tampal config di bawah, tekan Simpan.<br>
+        6. Set Firestore rules: <code>allow read, write: if request.auth != null;</code>
+      </p>
+      <textarea id="fbCfgInput" placeholder='{ "apiKey": "...", "authDomain": "...", "projectId": "...", "appId": "..." }'>${fbConfig ? escapeHtml(JSON.stringify(fbConfig, null, 2)) : ''}</textarea>
+      <div class="modal-actions">
+        <button class="btn" data-act="cancel">Batal</button>
+        ${fbConfig ? '<button class="btn danger" data-act="disconnect">Putuskan</button>' : ''}
+        <button class="btn primary" data-act="save">Simpan</button>
+      </div>
+    `);
+    modalEl.querySelectorAll('button[data-act]').forEach(b => {
+      b.addEventListener('click', async () => {
+        const act = b.getAttribute('data-act');
+        if (act === 'cancel') return closeModal();
+        if (act === 'disconnect') {
+          if (!confirm('Putuskan sambungan awan? Data tempatan kekal di telefon ini.')) return;
+          await disconnectFirebase();
+          closeModal();
+          toast('Disambungkan semula ke mod tempatan', 'warn');
+          return;
+        }
+        if (act === 'save') {
+          const text = $('fbCfgInput').value;
+          let cfg;
+          try { cfg = parseFirebaseConfig(text); }
+          catch (e) { alert(e.message); return; }
+          saveFirebaseConfig(cfg);
+          closeModal();
+          toast('Menyambung ke awan…', 'warn');
+          await initFirebase();
+          if (fbState === 'ready') toast('Tersambung — data sedang disegerak', 'done');
+          else toast('Gagal: ' + (fbError || 'tidak diketahui'), 'danger');
+        }
+      });
+    });
+  }
+
+  // Wrap saveAll so we also push changed consents to Firestore (debounced).
+  const _origSaveAll = saveAll;
+  saveAll = function () {
+    _origSaveAll();
+    if (fbState === 'ready') {
+      // Push every consent — flushPushes is debounced and batches.
+      consents.forEach(c => pushConsent(c));
+    }
+  };
 
   // ---------- Online / offline indicator ----------
   function updateNetwork() {
@@ -1318,6 +1655,12 @@
   loadAll();
   renderConsentList();
   updateNetwork();
+  loadFirebaseConfig();
+  if (fbConfig) {
+    initFirebase().then(() => {
+      if (fbState === 'ready') toast('Awan tersambung', 'done');
+    });
+  }
 </script>
 </body>
 </html>
