@@ -1,7 +1,7 @@
 /* MJM Scan Counter — service worker for offline use.
  * Bump CACHE_VERSION when shipping a new index.html so clients pull fresh code.
  */
-const CACHE_VERSION = 'v8';
+const CACHE_VERSION = 'v9';
 const CACHE_NAME = 'mjm-scan-' + CACHE_VERSION;
 
 const PRECACHE = [
@@ -32,7 +32,15 @@ self.addEventListener('activate', (event) => {
     const keys = await caches.keys();
     await Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)));
     await self.clients.claim();
+    // Tell every open page that a new shell is now active so it can reload.
+    const all = await self.clients.matchAll({ includeUncontrolled: true, type: 'window' });
+    all.forEach(c => c.postMessage({ type: 'SW_UPDATED', version: CACHE_VERSION }));
   })());
+});
+
+self.addEventListener('message', (event) => {
+  // Allow the page to ask us to take over immediately on update.
+  if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 // URLs the SW must NOT touch — Firestore long-polling and Firebase auth

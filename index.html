@@ -1665,12 +1665,43 @@ service cloud.firestore {
   // not the meta).
   applyTheme(currentTheme());
 
-  // ---------- Service worker (offline support) ----------
+  // ---------- Service worker (offline support + auto-update) ----------
   if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js').catch(err =>
-        console.warn('SW registration failed', err)
-      );
+    let reloading = false;
+    // When a new SW takes control (via skipWaiting + clients.claim), reload
+    // exactly once so the user always sees the latest UI.
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (reloading) return;
+      reloading = true;
+      location.reload();
+    });
+    navigator.serviceWorker.addEventListener('message', (event) => {
+      if (event.data && event.data.type === 'SW_UPDATED') {
+        if (reloading) return;
+        reloading = true;
+        location.reload();
+      }
+    });
+    window.addEventListener('load', async () => {
+      try {
+        const reg = await navigator.serviceWorker.register('sw.js');
+        // Force a fresh check for an updated SW each time the page loads.
+        reg.update().catch(() => {});
+        // If there's already a waiting worker, tell it to activate now.
+        if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        reg.addEventListener('updatefound', () => {
+          const nw = reg.installing;
+          if (!nw) return;
+          nw.addEventListener('statechange', () => {
+            if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+              // New version ready — activate immediately.
+              nw.postMessage({ type: 'SKIP_WAITING' });
+            }
+          });
+        });
+      } catch (err) {
+        console.warn('SW registration failed', err);
+      }
     });
   }
 
