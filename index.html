@@ -1544,22 +1544,45 @@
     const fb = firebaseStatus();
     const cls = fb.kind === 'ok' ? 'ok' : fb.kind === 'err' ? 'err' : 'warn';
     openModal(`
-      <h3>Setup Sync Awan</h3>
+      <h3>Sync Awan (Firebase)</h3>
       <div class="sync-status ${cls}">${escapeHtml(fb.label)}</div>
-      <p><b>Langkah ringkas:</b></p>
-      <p>
-        1. Pergi ke <a href="https://console.firebase.google.com" target="_blank" rel="noopener">console.firebase.google.com</a> → buat projek baru.<br>
-        2. <b>Build → Firestore Database</b> → Create database (start in production mode).<br>
-        3. <b>Build → Authentication → Sign-in method</b> → enable <b>Anonymous</b>.<br>
-        4. <b>Project settings → General → Your apps</b> → tambah Web app → salin <code>firebaseConfig</code> object.<br>
-        5. Tampal config di bawah, tekan Simpan.<br>
-        6. Set Firestore rules: <code>allow read, write: if request.auth != null;</code>
-      </p>
-      <textarea id="fbCfgInput" placeholder='{ "apiKey": "...", "authDomain": "...", "projectId": "...", "appId": "..." }'>${fbConfig ? escapeHtml(JSON.stringify(fbConfig, null, 2)) : ''}</textarea>
+      <p><b>Apa benda ni?</b><br>
+      Tanpa setup ini, data anda hanya tersimpan dalam telefon / web yang anda guna sahaja. Apa yang ditambah di telefon TIDAK akan nampak di web, dan sebaliknya.</p>
+      <p>Setup ni sambungkan semua peranti ke satu pangkalan data Google (percuma). Lepas setup, persetujuan dibuat di mana-mana akan auto sync ke semua peranti dalam beberapa saat.</p>
+      <p><b>Setup sekali sahaja, ~5 minit. Kena ada akaun Google.</b></p>
+      <p style="border-top:1px solid var(--border);padding-top:12px;margin-top:14px;"><b>Langkah:</b></p>
+      <ol style="color:var(--muted);font-size:12px;line-height:1.7;padding-left:20px;">
+        <li>Pada <b>komputer / laptop</b> (lebih senang dari telefon), buka <a href="https://console.firebase.google.com" target="_blank" rel="noopener">console.firebase.google.com</a> dan log masuk dengan Gmail.</li>
+        <li>Tekan <b>Add project</b> → namakan <i>mjm-scan</i> (atau apa-apa) → next, next, <b>Create project</b>.</li>
+        <li>Selepas projek dibuka, di sidebar kiri pilih <b>Build → Firestore Database</b> → tekan <b>Create database</b> → pilih lokasi <i>asia-southeast1</i> → <b>Start in production mode</b> → Enable.</li>
+        <li>Sidebar <b>Build → Authentication</b> → tekan <b>Get started</b> → pilih tab <b>Sign-in method</b> → klik <b>Anonymous</b> → toggle <b>Enable</b> → Save.</li>
+        <li>Pergi ke <b>Firestore Database → Rules</b>. Padam semua text dan tampal:<br>
+          <code style="display:block;background:var(--bg);padding:8px;border-radius:6px;margin:6px 0;font-size:11px;white-space:pre-wrap;">rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}</code>
+          Tekan <b>Publish</b>.
+        </li>
+        <li>Tekan ikon <b>gear ⚙️</b> di sebelah <i>Project Overview</i> → <b>Project settings</b> → scroll ke bawah → <b>Your apps</b> → tekan butang <b>&lt;/&gt;</b> (Web).</li>
+        <li>Namakan app (apa-apa), tekan <b>Register app</b>. Skip step Hosting. Anda akan nampak satu blok kod dengan <code>const firebaseConfig = {...}</code>.</li>
+        <li><b>Salin keseluruhan blok</b> (dari <code>{</code> sampai <code>}</code>) dan tampal di kotak bawah ni. Tekan <b>Simpan</b>.</li>
+        <li>Ulang langkah ni di telefon (atau peranti lain): buka MJM Scan → Segerak → Setup Sync Awan → tampal config yang sama → Simpan.</li>
+      </ol>
+      <p style="margin-top:8px;"><b>Tampal config di sini:</b></p>
+      <textarea id="fbCfgInput" placeholder='{
+  "apiKey": "AIza...",
+  "authDomain": "...",
+  "projectId": "...",
+  "appId": "1:..."
+}'>${fbConfig ? escapeHtml(JSON.stringify(fbConfig, null, 2)) : ''}</textarea>
       <div class="modal-actions">
-        <button class="btn" data-act="cancel">Batal</button>
+        <button class="btn" data-act="cancel">Tutup</button>
         ${fbConfig ? '<button class="btn danger" data-act="disconnect">Putuskan</button>' : ''}
-        <button class="btn primary" data-act="save">Simpan</button>
+        <button class="btn primary" data-act="save">Simpan & Sambung</button>
       </div>
     `);
     modalEl.querySelectorAll('button[data-act]').forEach(b => {
