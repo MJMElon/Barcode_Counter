@@ -1,7 +1,7 @@
 /* MJM Scan Counter — service worker for offline use.
  * Bump CACHE_VERSION when shipping a new index.html so clients pull fresh code.
  */
-const CACHE_VERSION = 'v7';
+const CACHE_VERSION = 'v8';
 const CACHE_NAME = 'mjm-scan-' + CACHE_VERSION;
 
 const PRECACHE = [
