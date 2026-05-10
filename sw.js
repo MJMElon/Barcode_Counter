@@ -1,7 +1,7 @@
 /* MJM Scan Counter — service worker for offline use.
  * Bump CACHE_VERSION when shipping a new index.html so clients pull fresh code.
  */
-const CACHE_VERSION = 'v6';
+const CACHE_VERSION = 'v7';
 const CACHE_NAME = 'mjm-scan-' + CACHE_VERSION;
 
 const PRECACHE = [
@@ -35,9 +35,22 @@ self.addEventListener('activate', (event) => {
   })());
 });
 
+// URLs the SW must NOT touch — Firestore long-polling and Firebase auth
+// negotiate their own transport and will break if intercepted.
+const BYPASS_HOSTS = [
+  'firestore.googleapis.com',
+  'firebaseinstallations.googleapis.com',
+  'identitytoolkit.googleapis.com',
+  'securetoken.googleapis.com',
+];
+
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
+  try {
+    const url = new URL(req.url);
+    if (BYPASS_HOSTS.some(h => url.hostname === h || url.hostname.endsWith('.' + h))) return;
+  } catch (e) {}
 
   // Network-first for the document so updates land quickly when online,
   // falling back to the cached shell when offline.
