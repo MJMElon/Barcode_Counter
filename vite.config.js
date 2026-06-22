@@ -2,9 +2,11 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
-// Custom domain (scan.mjmnursery.com) serves from the root, so base = '/'.
+// Relative base ('./') so the app works whether served from the custom domain
+// root (scan.mjmnursery.com) OR the project sub-path
+// (mjmelon.github.io/Barcode_Counter/). Safe because routing uses HashRouter.
 export default defineConfig({
-  base: '/',
+  base: './',
   plugins: [
     react(),
     VitePWA({
@@ -17,8 +19,8 @@ export default defineConfig({
         theme_color: '#0a0f14',
         background_color: '#0a0f14',
         display: 'standalone',
-        start_url: '/',
-        scope: '/',
+        start_url: '.',
+        scope: './',
         icons: [
           { src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' },
         ],
