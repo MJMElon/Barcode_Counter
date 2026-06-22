@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useLang, LangToggle } from '../context/LanguageContext.jsx';
 
 // Login / Sign-up / Forgot-password / Recovery screen. Ported from the Mobile
 // app's auth UI, using the shared Supabase project.
 export default function AuthScreen() {
   const { recovering, setRecovering, allowed } = useAuth();
+  const { t } = useLang();
   const [mode, setMode] = useState('login'); // login | signup
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -17,7 +19,7 @@ export default function AuthScreen() {
   const note = (kind, text) => setMsg({ kind, text });
 
   async function handleMain() {
-    if (!email || !password) return note('error', 'Please enter email and password.');
+    if (!email || !password) return note('error', t('auth.enterEmailPw'));
     setBusy(true);
     setMsg(null);
     if (mode === 'signup') {
@@ -26,35 +28,34 @@ export default function AuthScreen() {
         password,
         options: { data: { full_name: name } },
       });
-      if (error) note('error', 'Signup error: ' + error.message);
+      if (error) note('error', t('auth.signupErr', { msg: error.message }));
       else {
-        note('ok', 'Account created! You can now log in.');
+        note('ok', t('auth.accountCreated'));
         setMode('login');
       }
     } else {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) note('error', 'Login error: ' + error.message);
+      if (error) note('error', t('auth.loginErr', { msg: error.message }));
       // On success the AuthContext listener flips the view.
     }
     setBusy(false);
   }
 
   async function handleForgot() {
-    if (!email) return note('error', 'Enter your email first.');
+    if (!email) return note('error', t('auth.enterEmailFirst'));
     setBusy(true);
     const { error } = await supabase.auth.resetPasswordForEmail(email);
-    note(error ? 'error' : 'ok', error ? error.message : 'Reset link sent! Check your inbox.');
+    note(error ? 'error' : 'ok', error ? error.message : t('auth.resetSent'));
     setBusy(false);
   }
 
   async function handleUpdatePassword() {
-    if (!newPassword || newPassword.length < 6)
-      return note('error', 'Password must be at least 6 characters.');
+    if (!newPassword || newPassword.length < 6) return note('error', t('auth.pwTooShort'));
     setBusy(true);
     const { error } = await supabase.auth.updateUser({ password: newPassword });
     if (error) note('error', error.message);
     else {
-      note('ok', 'Password updated! Please log in.');
+      note('ok', t('auth.pwUpdated'));
       setRecovering(false);
       window.location.hash = '';
     }
@@ -72,6 +73,11 @@ export default function AuthScreen() {
           backgroundSize: '60px 60px',
         }}
       />
+
+      <div className="absolute top-4 right-4 z-20">
+        <LangToggle dark />
+      </div>
+
       <div className="relative z-10 w-full max-w-md rounded-[2.5rem] p-10 border border-emerald-400/20 bg-[rgba(5,20,12,.88)] backdrop-blur-2xl shadow-2xl">
         <div className="flex flex-col items-center mb-8">
           <div className="text-center" style={{ fontSize: 'clamp(2.2rem,6vw,3.2rem)', lineHeight: 1.1, fontWeight: 900, color: '#ecfdf5' }}>
@@ -83,12 +89,12 @@ export default function AuthScreen() {
           <div className="inline-flex items-center justify-center px-4 py-1.5 rounded-[10px] mt-3 text-white font-black tracking-[0.12em] border border-emerald-400" style={{ background: 'linear-gradient(135deg,#059669,#10b981)' }}>
             AI
           </div>
-          <p className="text-[11px] font-black text-emerald-500 uppercase tracking-[0.35em] mt-5 text-center">Scan &amp; DO Portal</p>
+          <p className="text-[11px] font-black text-emerald-500 uppercase tracking-[0.35em] mt-5 text-center">{t('auth.portal')}</p>
         </div>
 
         {allowed === false && (
           <div className="mb-4 text-[11px] font-bold text-amber-300 bg-amber-900/30 border border-amber-500/40 rounded-xl px-4 py-3 text-center">
-            Your account does not yet have operations access. Please contact an admin.
+            {t('auth.noAccess')}
           </div>
         )}
 
@@ -107,17 +113,17 @@ export default function AuthScreen() {
         {recovering ? (
           <div className="space-y-3">
             <div className="text-center text-[10px] font-bold text-emerald-500 uppercase tracking-widest mb-2">
-              Create New Password
+              {t('auth.newPasswordTitle')}
             </div>
             <input
               type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="Enter New Password"
+              placeholder={t('auth.newPasswordPlaceholder')}
               className="auth-input"
             />
             <button onClick={handleUpdatePassword} disabled={busy} className="auth-btn">
-              {busy ? 'Updating…' : 'Save Password'}
+              {busy ? t('auth.updating') : t('auth.savePassword')}
             </button>
           </div>
         ) : (
@@ -127,7 +133,7 @@ export default function AuthScreen() {
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Full Name"
+                placeholder={t('auth.fullName')}
                 className="auth-input"
               />
             )}
@@ -135,7 +141,7 @@ export default function AuthScreen() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="Email Address"
+              placeholder={t('auth.email')}
               className="auth-input"
             />
             <input
@@ -143,11 +149,11 @@ export default function AuthScreen() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleMain()}
-              placeholder="Password"
+              placeholder={t('auth.password')}
               className="auth-input"
             />
             <button onClick={handleMain} disabled={busy} className="auth-btn mt-1">
-              {busy ? 'Processing…' : mode === 'signup' ? 'Sign Up' : 'Login'}
+              {busy ? t('auth.processing') : mode === 'signup' ? t('auth.signup') : t('auth.login')}
             </button>
             <div className="flex justify-between items-center pt-2">
               {mode === 'login' && (
@@ -155,7 +161,7 @@ export default function AuthScreen() {
                   onClick={handleForgot}
                   className="text-[10px] font-bold text-emerald-600/70 hover:text-emerald-400 uppercase tracking-widest bg-transparent border-none cursor-pointer"
                 >
-                  Forgot Password?
+                  {t('auth.forgot')}
                 </button>
               )}
               <button
@@ -165,7 +171,7 @@ export default function AuthScreen() {
                 }}
                 className="text-[10px] font-bold text-slate-400 hover:text-emerald-400 uppercase tracking-widest bg-transparent border-none cursor-pointer ml-auto"
               >
-                {mode === 'login' ? 'Create Account' : 'Back to Login'}
+                {mode === 'login' ? t('auth.createAccount') : t('auth.backToLogin')}
               </button>
             </div>
           </div>

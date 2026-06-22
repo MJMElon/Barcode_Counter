@@ -1,7 +1,9 @@
 import { useEffect, useImperativeHandle, useRef, forwardRef, useState } from 'react';
+import { useLang } from '../../context/LanguageContext.jsx';
 
 // Touch/mouse signature pad. Exposes { hasSig(), clear(), toDataURL() } via ref.
 const SignaturePad = forwardRef(function SignaturePad({ height = 160 }, ref) {
+  const { t } = useLang();
   const canvasRef = useRef(null);
   const drawing = useRef(false);
   const hasSig = useRef(false);
@@ -89,14 +91,14 @@ const SignaturePad = forwardRef(function SignaturePad({ height = 160 }, ref) {
     <div>
       <div className="sig-wrap" style={{ cursor: 'crosshair' }}>
         <canvas ref={canvasRef} height={height} style={{ display: 'block', width: '100%' }} />
-        {hintVisible && <div className="sig-hint">Touch or click here to sign</div>}
+        {hintVisible && <div className="sig-hint">{t('do.signHere')}</div>}
       </div>
       <div className="flex justify-between items-center mt-2">
         <button
           onClick={() => ref.current?.clear()}
           className="text-[10px] font-black text-slate-400 hover:text-red-500 uppercase tracking-widest bg-slate-50 px-4 py-2 rounded-full border border-slate-200 cursor-pointer transition-colors"
         >
-          ✕ Clear
+          {t('do.clearSig')}
         </button>
         <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">{time}</span>
       </div>

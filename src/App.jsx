@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext.jsx';
 import AuthScreen from './components/AuthScreen.jsx';
 import Dashboard from './components/Dashboard.jsx';
+import { useLang } from './context/LanguageContext.jsx';
 
 // Heavy modules (camera scanner, PDF generation, Supabase queries) are loaded
 // on demand so the initial app shell stays small.
@@ -10,10 +11,11 @@ const ScanModule = lazy(() => import('./modules/scan/ScanModule.jsx'));
 const DoModule = lazy(() => import('./modules/do/DoModule.jsx'));
 
 function Loading() {
+  const { t } = useLang();
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#050a0e]">
       <div className="text-emerald-400 font-mono text-xs uppercase tracking-[0.3em] animate-pulse">
-        Loading…
+        {t('common.loading')}
       </div>
     </div>
   );
