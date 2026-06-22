@@ -16,6 +16,38 @@
 </head>
 <body>
   <div id="root"></div>
+  <script>
+    // Self-heal for returning users. The previous version of this site was an
+    // offline PWA; a stale service worker / cache can serve a broken shell and
+    // leave the page blank. If the React app has not mounted a few seconds
+    // after load, unregister old service workers, clear caches once, and reload
+    // so the fresh build takes over. Guarded by sessionStorage to avoid loops.
+    window.addEventListener('load', function () {
+      setTimeout(function () {
+        var root = document.getElementById('root');
+        if (root && root.childElementCount > 0) return; // app mounted fine
+        if (sessionStorage.getItem('mjm-sw-reset')) return; // already tried once
+        sessionStorage.setItem('mjm-sw-reset', '1');
+        var done = function () { location.reload(); };
+        var p = Promise.resolve();
+        if ('serviceWorker' in navigator) {
+          p = p.then(function () {
+            return navigator.serviceWorker.getRegistrations().then(function (rs) {
+              return Promise.all(rs.map(function (r) { return r.unregister(); }));
+            });
+          });
+        }
+        if (window.caches && caches.keys) {
+          p = p.then(function () {
+            return caches.keys().then(function (ks) {
+              return Promise.all(ks.map(function (k) { return caches.delete(k); }));
+            });
+          });
+        }
+        p.then(done, done);
+      }, 5000);
+    });
+  </script>
   <script type="module" src="/src/main.jsx"></script>
 </body>
 </html>
