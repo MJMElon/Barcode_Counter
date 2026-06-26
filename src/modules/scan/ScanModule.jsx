@@ -210,7 +210,7 @@ export default function ScanModule() {
 
   return (
     <div className="min-h-screen bg-[#0a0f14] text-[#e6edf3]">
-      <TopNav title="MJM // SCAN" back="/dashboard" user={staffName} />
+      <TopNav title="MJM // SCAN" back={active ? undefined : '/dashboard'} user={staffName} theme="dark" />
       {active ? (
         <Scanner
           consent={active}
@@ -358,6 +358,7 @@ function Scanner({ consent, lastInfo, issuing, onScan, onBack, onIssueDO }) {
   const [scanning, setScanning] = useState(false);
   const [statusKey, setStatusKey] = useState('ready');
   const qrRef = useRef(null);
+  const trackRef = useRef(null);
 
   const remain = Math.max(0, consent.qty - consent.unique);
   const st = statusOf(consent);
@@ -397,6 +398,9 @@ function Scanner({ consent, lastInfo, issuing, onScan, onBack, onIssueDO }) {
       experimentalFeatures: { useBarCodeDetectorIfSupported: true },
     };
 
+    // Ask for a high-resolution stream (sharper = easier to read small/distant
+    // barcodes). `ideal` never over-constrains, so it still works on laptops.
+    const adv = { width: { ideal: 1920 }, height: { ideal: 1080 } };
     // Build a list of camera options to try, most-preferred first. This works on
     // phones (uses the back camera) AND on laptops/desktops (falls back to the
     // built-in webcam) instead of over-constraining to a non-existent back cam.
@@ -405,15 +409,15 @@ function Scanner({ consent, lastInfo, issuing, onScan, onBack, onIssueDO }) {
       const cams = await Html5Qrcode.getCameras();
       if (cams && cams.length) {
         const back = cams.find((c) => /back|rear|environment/i.test(c.label));
-        if (back) attempts.push({ deviceId: { exact: back.id } });
-        attempts.push({ deviceId: { exact: cams[cams.length - 1].id } }); // often the back cam on phones
-        attempts.push({ deviceId: { exact: cams[0].id } }); // first available (webcam on desktop)
+        if (back) attempts.push({ deviceId: { exact: back.id }, ...adv });
+        attempts.push({ deviceId: { exact: cams[cams.length - 1].id }, ...adv }); // often the back cam on phones
+        attempts.push({ deviceId: { exact: cams[0].id }, ...adv }); // first available (webcam on desktop)
       }
     } catch (e) {
       /* getCameras may fail before permission is granted */
     }
     // Generic fallbacks that prompt for permission / pick by facing mode.
-    attempts.push({ facingMode: 'environment' });
+    attempts.push({ facingMode: { ideal: 'environment' }, ...adv });
     attempts.push({ facingMode: 'user' });
     attempts.push(true); // any camera
 
@@ -432,12 +436,35 @@ function Scanner({ consent, lastInfo, issuing, onScan, onBack, onIssueDO }) {
 
     try {
       const track = document.querySelector('#reader video')?.srcObject?.getVideoTracks?.()[0];
+      trackRef.current = track || null;
       if (track?.applyConstraints) await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
     } catch (e) {
       /* optional */
     }
     setScanning(true);
     setStatusKey('scanning');
+  }
+
+  // Nudge the camera to refocus (tap the preview or the Refocus button). Focus
+  // control support varies by device; we try the modes the device reports.
+  async function refocus() {
+    const track = trackRef.current;
+    if (!track || !track.applyConstraints) return;
+    try {
+      const caps = track.getCapabilities ? track.getCapabilities() : {};
+      const modes = caps.focusMode || [];
+      if (modes.includes('single-shot')) {
+        await track.applyConstraints({ advanced: [{ focusMode: 'single-shot' }] });
+        setTimeout(() => {
+          track.applyConstraints({ advanced: [{ focusMode: modes.includes('continuous') ? 'continuous' : 'single-shot' }] }).catch(() => {});
+        }, 600);
+      } else if (modes.includes('continuous')) {
+        await track.applyConstraints({ advanced: [{ focusMode: 'manual' }] }).catch(() => {});
+        await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
+      }
+    } catch (e) {
+      /* device doesn't support focus control */
+    }
   }
 
   async function stopCamera() {
@@ -484,13 +511,26 @@ function Scanner({ consent, lastInfo, issuing, onScan, onBack, onIssueDO }) {
       </div>
 
       <div className="bg-[#0f1620] border border-[#1f2a38] rounded-2xl p-3 mb-3">
-        <div id="reader" className="rounded-xl overflow-hidden bg-black min-h-[160px]" />
-        <button
-          onClick={() => (scanning ? stopCamera() : startCamera().catch((e) => { setStatusKey('error'); alert(t('scan.cameraError', { msg: e?.message || e })); }))}
-          className="w-full mt-2.5 bg-emerald-500 text-[#0a0f14] font-mono font-bold text-xs uppercase tracking-wider rounded-lg py-3.5"
-        >
-          {scanning ? t('scan.stopCamera') : t('scan.startCamera')}
-        </button>
+        <div id="reader" onClick={scanning ? refocus : undefined} className="rounded-xl overflow-hidden bg-black min-h-[160px] cursor-pointer" />
+        {scanning && (
+          <div className="text-center text-[10px] font-mono text-slate-500 mt-1.5">{t('scan.focusHint')}</div>
+        )}
+        <div className="flex gap-2 mt-2.5">
+          <button
+            onClick={() => (scanning ? stopCamera() : startCamera().catch((e) => { setStatusKey('error'); alert(t('scan.cameraError', { msg: e?.message || e })); }))}
+            className="flex-1 bg-emerald-500 text-[#0a0f14] font-mono font-bold text-xs uppercase tracking-wider rounded-lg py-3.5"
+          >
+            {scanning ? t('scan.stopCamera') : t('scan.startCamera')}
+          </button>
+          {scanning && (
+            <button
+              onClick={refocus}
+              className="shrink-0 bg-[#111821] border border-[#1f2a38] text-emerald-400 font-mono font-bold text-xs uppercase tracking-wider rounded-lg px-4 py-3.5"
+            >
+              🎯 {t('scan.refocus')}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className={`bg-[#0f1620] border rounded-2xl px-5 py-4 text-center mb-3 ${st === 'over' ? 'border-red-500' : 'border-[#1f2a38]'}`}>
