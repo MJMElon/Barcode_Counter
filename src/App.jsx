@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext.jsx';
 import AuthScreen from './components/AuthScreen.jsx';
 import Dashboard from './components/Dashboard.jsx';
+import ErrorBoundary from './components/ErrorBoundary.jsx';
 import { useLang } from './context/LanguageContext.jsx';
 
 // Heavy modules (camera scanner, PDF generation, Supabase queries) are loaded
@@ -59,9 +60,11 @@ export default function App() {
         path="/scan"
         element={
           <Protected>
-            <Suspense fallback={<Loading />}>
-              <ScanModule />
-            </Suspense>
+            <ErrorBoundary>
+              <Suspense fallback={<Loading />}>
+                <ScanModule />
+              </Suspense>
+            </ErrorBoundary>
           </Protected>
         }
       />
@@ -69,9 +72,11 @@ export default function App() {
         path="/do"
         element={
           <Protected>
-            <Suspense fallback={<Loading />}>
-              <DoModule />
-            </Suspense>
+            <ErrorBoundary>
+              <Suspense fallback={<Loading />}>
+                <DoModule />
+              </Suspense>
+            </ErrorBoundary>
           </Protected>
         }
       />

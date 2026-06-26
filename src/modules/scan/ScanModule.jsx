@@ -431,7 +431,10 @@ function Scanner({ consent, lastInfo, onScan, onBack, onIssueDO }) {
 
       {/* Issue DO for the collected seedlings → jumps to the DO module for this AL */}
       <button
-        onClick={onIssueDO}
+        onClick={async () => {
+          await stopCamera();
+          onIssueDO();
+        }}
         className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold text-sm uppercase tracking-wider rounded-xl py-4 mb-2 flex items-center justify-center gap-2"
       >
         📋 {t('scan.issueDO')}
