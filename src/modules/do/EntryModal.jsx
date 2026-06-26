@@ -8,12 +8,16 @@ const emptyRow = () => ({ key: Math.random().toString(36).slice(2), nursery: '',
 
 // Add / scan a new Delivery Order for the given AL.
 // props: al, plots, breeds, photoBase64 (null for manual), onSaved(payload, sigDataUrl), onClose, toast
-export default function EntryModal({ al, plots, breeds, photoBase64, onSubmit, onSaved, onClose, toast }) {
+export default function EntryModal({ al, plots, breeds, photoBase64, initialQty, onSubmit, onSaved, onClose, toast }) {
   const { t } = useLang();
   const [doNumber, setDoNumber] = useState('…');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [customer, setCustomer] = useState(al?.customer_name || '');
-  const [rows, setRows] = useState([emptyRow()]);
+  const [rows, setRows] = useState(() => {
+    const r = emptyRow();
+    if (initialQty) r.qty = String(initialQty);
+    return [r];
+  });
   const [aiState, setAiState] = useState(photoBase64 ? 'loading' : 'manual'); // loading | done | failed | manual
   const [saving, setSaving] = useState(false);
   const sigRef = useRef(null);

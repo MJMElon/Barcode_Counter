@@ -12,9 +12,7 @@ import {
   loadActiveALs,
   loadConsentALSet,
   loadDropdownData,
-  uploadDOPhoto,
-  saveDORecord,
-  queueDO,
+  persistDO,
   flushDOQueue,
 } from './data.js';
 import ManageModal from './ManageModal.jsx';
@@ -99,29 +97,21 @@ export default function DoModule() {
 
   // Online insert, falling back to the offline queue on no-network / failure.
   async function submitDO({ payload, photoBase64, al }) {
-    if (navigator.onLine) {
-      try {
-        const finalPayload = { ...payload };
-        if (photoBase64) finalPayload.image_url = await uploadDOPhoto(photoBase64, al.al_number, payload.do_number);
-        await saveDORecord(finalPayload, al);
-        return { queued: false, payload: finalPayload };
-      } catch (e) {
-        /* fall through to offline queue */
-      }
+    const res = await persistDO({ payload, photoBase64, al });
+    if (res.queued) {
+      // Optimistically reflect the deducted balance in the cached list.
+      setAls((prev) => {
+        if (!prev) return prev;
+        const next = prev.map((r) =>
+          r.al_number === al.al_number
+            ? { ...r, balance_quantity: (r.balance_quantity ?? 0) - (payload.total_qty || 0) }
+            : r
+        );
+        cacheSet('do_als', next);
+        return next;
+      });
     }
-    queueDO({ payload, photoBase64 });
-    // Optimistically reflect the deducted balance in the cached list.
-    setAls((prev) => {
-      if (!prev) return prev;
-      const next = prev.map((r) =>
-        r.al_number === al.al_number
-          ? { ...r, balance_quantity: (r.balance_quantity ?? 0) - (payload.total_qty || 0) }
-          : r
-      );
-      cacheSet('do_als', next);
-      return next;
-    });
-    return { queued: true, payload };
+    return res;
   }
 
   const lower = query.trim().toLowerCase();

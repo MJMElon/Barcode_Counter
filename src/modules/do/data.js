@@ -88,13 +88,44 @@ export async function uploadDOPhoto(base64, alNumber, doNumber) {
   }
 }
 
-// Insert a DO record and deduct the AL balance. Returns the new balance.
+// Insert a DO record and deduct the AL balance. Returns the new balance (or null
+// when there is no linked AL row to deduct from). Same table the mobile DO
+// module writes to, so both apps share one database.
 export async function saveDORecord(payload, al) {
   const { error } = await supabase.from('shared_do_records').insert([payload]);
   if (error) throw error;
-  const newBalance = (al.balance_quantity ?? 0) - (payload.total_qty || 0);
-  await supabase.from('shared_al_orders').update({ balance_quantity: newBalance }).eq('id', al.id);
-  return newBalance;
+  if (al && al.id != null) {
+    const newBalance = (al.balance_quantity ?? 0) - (payload.total_qty || 0);
+    await supabase.from('shared_al_orders').update({ balance_quantity: newBalance }).eq('id', al.id);
+    return newBalance;
+  }
+  return null;
+}
+
+// Look up an approval-letter order by its AL number (for the scan module's
+// "Issue DO" flow). Returns the row or null.
+export async function loadALByNumber(alNumber) {
+  if (!alNumber) return null;
+  const { data } = await supabase.from('shared_al_orders').select('*').eq('al_number', alNumber).maybeSingle();
+  return data || null;
+}
+
+// Persist a DO: online insert (+ photo upload + balance deduct) or, on
+// no-network / failure, queue it for the next sync. Shared by the DO module and
+// the scan module's Issue DO popup. Returns { queued, payload }.
+export async function persistDO({ payload, photoBase64, al }) {
+  if (navigator.onLine) {
+    try {
+      const finalPayload = { ...payload };
+      if (photoBase64) finalPayload.image_url = await uploadDOPhoto(photoBase64, al.al_number, payload.do_number);
+      await saveDORecord(finalPayload, al);
+      return { queued: false, payload: finalPayload };
+    } catch (e) {
+      /* fall through to offline queue */
+    }
+  }
+  queueDO({ payload, photoBase64 });
+  return { queued: true, payload };
 }
 
 // Build the plot_n / breed_n / qty_n columns from item rows, mapping a typed

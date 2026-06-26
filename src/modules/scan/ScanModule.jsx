@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import TopNav from '../../components/TopNav.jsx';
 import { useLang } from '../../context/LanguageContext.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { cacheGet, cacheSet } from '../../lib/cache.js';
+import { printDO } from '../../lib/pdf.js';
+import EntryModal from '../do/EntryModal.jsx';
+import { loadALByNumber, loadDropdownData, persistDO } from '../do/data.js';
 import {
   cachedConsents,
   fetchConsents,
@@ -28,7 +31,6 @@ const STATUS_PILL = {
 export default function ScanModule() {
   const { t } = useLang();
   const { staffName } = useAuth();
-  const navigate = useNavigate();
 
   const [serverConsents, setServerConsents] = useState(() => cachedConsents());
   const [progress, setProgress] = useState(() => loadProgress());
@@ -36,6 +38,13 @@ export default function ScanModule() {
   const [syncing, setSyncing] = useState(false);
   const [toast, setToast] = useState(null);
   const [lastInfo, setLastInfo] = useState({ key: 'scan.waitingFirst' });
+
+  // Issue DO popup state (opens the DO entry form in-place, no navigation).
+  const [doEntry, setDoEntry] = useState(null); // { al, suggestQty }
+  const [doPlots, setDoPlots] = useState([]);
+  const [doBreeds, setDoBreeds] = useState([]);
+  const [issuing, setIssuing] = useState(false);
+  const [printPrompt, setPrintPrompt] = useState(null);
 
   const progressRef = useRef(progress);
   progressRef.current = progress;
@@ -145,9 +154,58 @@ export default function ScanModule() {
     [flash, t]
   );
 
-  function issueDO(alNumber) {
-    if (alNumber) navigate('/do?al=' + encodeURIComponent(alNumber));
-    else navigate('/do');
+  // Open the DO entry popup for the active consent's order. Looks up the real
+  // AL row (for balance + id) so the DO writes to the same shared_do_records the
+  // mobile DO module uses. Falls back to a minimal record if the AL isn't found.
+  async function openIssueDO(consent) {
+    if (!consent || issuing) return;
+    setIssuing(true);
+    let al = null;
+    try {
+      al = await loadALByNumber(consent.al_number);
+    } catch (e) {
+      /* offline / not found */
+    }
+    if (!al) {
+      al = {
+        id: null,
+        al_number: consent.al_number || '',
+        customer_name: consent.customer || '',
+        order_number: consent.order_number || '',
+        product_name: '',
+        quantity_ordered: consent.qty || null,
+        balance_quantity: 999999, // no linked AL to deduct from
+      };
+    }
+    let plots = cacheGet('do_plots')?.value || [];
+    let breeds = cacheGet('do_breeds')?.value || [];
+    if (navigator.onLine && (!plots.length || !breeds.length)) {
+      try {
+        const dd = await loadDropdownData();
+        plots = dd.plots;
+        breeds = dd.breeds;
+        cacheSet('do_plots', plots);
+        cacheSet('do_breeds', breeds);
+      } catch (e) {
+        /* keep cached */
+      }
+    }
+    setDoPlots(plots);
+    setDoBreeds(breeds);
+    setIssuing(false);
+    setDoEntry({ al, suggestQty: consent.unique || 0 });
+  }
+
+  function onDoSaved(payload, sigDataUrl, queued) {
+    const al = doEntry?.al || {};
+    setDoEntry(null);
+    flash(queued ? t('do.savedOffline') : t('do.doSavedToast', { do: payload.do_number }), 'done');
+    setPrintPrompt({ payload, sigDataUrl, al });
+  }
+
+  function doPrint(pp) {
+    printDO(pp.payload, pp.al || {}, staffName, pp.sigDataUrl);
+    flash(t('do.printedToast', { do: pp.payload.do_number }), 'done');
   }
 
   return (
@@ -157,12 +215,43 @@ export default function ScanModule() {
         <Scanner
           consent={active}
           lastInfo={lastInfo}
+          issuing={issuing}
           onScan={recordScan}
           onBack={() => setActiveId(null)}
-          onIssueDO={() => issueDO(active.al_number)}
+          onIssueDO={() => openIssueDO(active)}
         />
       ) : (
         <ConsentList consents={consents} loaded={serverConsents !== null} syncing={syncing} onSync={sync} onOpen={setActiveId} />
+      )}
+
+      {/* Issue DO popup — writes to the same shared_do_records as the mobile DO module */}
+      {doEntry && (
+        <EntryModal
+          al={doEntry.al}
+          plots={doPlots}
+          breeds={doBreeds}
+          photoBase64={null}
+          initialQty={doEntry.suggestQty}
+          toast={(m) => flash(m, 'warn')}
+          onSubmit={persistDO}
+          onSaved={onDoSaved}
+          onClose={() => setDoEntry(null)}
+        />
+      )}
+
+      {printPrompt && (
+        <div className="modal-overlay open" onClick={() => setPrintPrompt(null)}>
+          <div className="bg-white rounded-3xl p-7 w-full max-w-sm shadow-2xl text-center" onClick={(e) => e.stopPropagation()}>
+            <div className="text-4xl mb-3">🖨️</div>
+            <div className="font-black text-slate-800 text-lg uppercase tracking-wide mb-1">{t('do.doSavedTitle')}</div>
+            <div className="text-sm font-bold text-slate-500 mb-1">{printPrompt.payload.do_number}</div>
+            <div className="text-xs font-bold text-slate-400 mb-6">{t('do.printPrompt')}</div>
+            <div className="flex flex-col gap-3">
+              <button onClick={() => { doPrint(printPrompt); setPrintPrompt(null); }} className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[11px] uppercase tracking-widest rounded-xl border-none cursor-pointer">{t('do.yesPrint')}</button>
+              <button onClick={() => setPrintPrompt(null)} className="w-full py-2.5 text-[10px] font-black text-slate-500 hover:text-slate-800 uppercase tracking-widest bg-slate-50 border border-slate-200 rounded-xl cursor-pointer">{t('do.maybeLater')}</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {toast && (
@@ -264,7 +353,7 @@ function ConsentList({ consents, loaded, syncing, onSync, onOpen }) {
 }
 
 // ── Scanner view ─────────────────────────────────────────────
-function Scanner({ consent, lastInfo, onScan, onBack, onIssueDO }) {
+function Scanner({ consent, lastInfo, issuing, onScan, onBack, onIssueDO }) {
   const { t } = useLang();
   const [scanning, setScanning] = useState(false);
   const [statusKey, setStatusKey] = useState('ready');
@@ -431,13 +520,14 @@ function Scanner({ consent, lastInfo, onScan, onBack, onIssueDO }) {
 
       {/* Issue DO for the collected seedlings → jumps to the DO module for this AL */}
       <button
+        disabled={issuing}
         onClick={async () => {
           await stopCamera();
           onIssueDO();
         }}
-        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold text-sm uppercase tracking-wider rounded-xl py-4 mb-2 flex items-center justify-center gap-2"
+        className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white font-mono font-bold text-sm uppercase tracking-wider rounded-xl py-4 mb-2 flex items-center justify-center gap-2"
       >
-        📋 {t('scan.issueDO')}
+        📋 {issuing ? t('do.saving') : t('scan.issueDO')}
       </button>
     </div>
   );
