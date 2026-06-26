@@ -1,21 +1,32 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import TopNav from '../../components/TopNav.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useLang } from '../../context/LanguageContext.jsx';
+import { useAutoSync } from '../../hooks/useOnline.js';
+import { cacheGet, cacheSet } from '../../lib/cache.js';
 import { AI_SCAN_ENABLED } from '../../config.js';
 import { printDO } from '../../lib/pdf.js';
 import { compressImage } from '../../lib/gemini.js';
-import { loadActiveALs, loadConsentALSet, loadDropdownData } from './data.js';
+import {
+  loadActiveALs,
+  loadConsentALSet,
+  loadDropdownData,
+  uploadDOPhoto,
+  saveDORecord,
+  queueDO,
+  flushDOQueue,
+} from './data.js';
 import ManageModal from './ManageModal.jsx';
 import EntryModal from './EntryModal.jsx';
 
 export default function DoModule() {
   const { staffName } = useAuth();
   const { t } = useLang();
-  const [als, setAls] = useState(null);
-  const [consentSet, setConsentSet] = useState(new Set());
-  const [plots, setPlots] = useState([]);
-  const [breeds, setBreeds] = useState([]);
+  // Seed from cache so the order list shows instantly and works offline.
+  const [als, setAls] = useState(() => cacheGet('do_als')?.value || null);
+  const [consentSet, setConsentSet] = useState(() => new Set(cacheGet('do_consentAls')?.value || []));
+  const [plots, setPlots] = useState(() => cacheGet('do_plots')?.value || []);
+  const [breeds, setBreeds] = useState(() => cacheGet('do_breeds')?.value || []);
   const [query, setQuery] = useState('');
   const [error, setError] = useState(null);
   const [toast, setToast] = useState(null);
@@ -34,20 +45,70 @@ export default function DoModule() {
   };
 
   async function reload() {
+    if (!navigator.onLine) {
+      // Offline: fall back to cached data, no error.
+      const c = cacheGet('do_als');
+      if (c) setAls(c.value);
+      setError(null);
+      return;
+    }
     try {
       const [data, set] = await Promise.all([loadActiveALs(), loadConsentALSet()]);
       setAls(data);
       setConsentSet(set);
+      setError(null);
+      cacheSet('do_als', data);
+      cacheSet('do_consentAls', [...set]);
     } catch (e) {
-      setError(e.message);
-      setAls([]);
+      // Network blip — keep whatever (cached) data we already have.
+      if (!als) {
+        const c = cacheGet('do_als');
+        setAls(c?.value || []);
+      }
     }
   }
 
-  useEffect(() => {
-    reload();
-    loadDropdownData().then(({ plots, breeds }) => { setPlots(plots); setBreeds(breeds); }).catch(() => {});
-  }, []);
+  // Refresh data + flush any offline DOs roughly every minute (and on reconnect).
+  useAutoSync(async () => {
+    const res = await flushDOQueue();
+    if (res.synced > 0) flash(t('do.doSavedToast', { do: res.synced + '×' }));
+    await reload();
+    loadDropdownData()
+      .then(({ plots, breeds }) => {
+        setPlots(plots);
+        setBreeds(breeds);
+        cacheSet('do_plots', plots);
+        cacheSet('do_breeds', breeds);
+      })
+      .catch(() => {});
+  }, 60000);
+
+  // Online insert, falling back to the offline queue on no-network / failure.
+  async function submitDO({ payload, photoBase64, al }) {
+    if (navigator.onLine) {
+      try {
+        const finalPayload = { ...payload };
+        if (photoBase64) finalPayload.image_url = await uploadDOPhoto(photoBase64, al.al_number, payload.do_number);
+        await saveDORecord(finalPayload, al);
+        return { queued: false, payload: finalPayload };
+      } catch (e) {
+        /* fall through to offline queue */
+      }
+    }
+    queueDO({ payload, photoBase64 });
+    // Optimistically reflect the deducted balance in the cached list.
+    setAls((prev) => {
+      if (!prev) return prev;
+      const next = prev.map((r) =>
+        r.al_number === al.al_number
+          ? { ...r, balance_quantity: (r.balance_quantity ?? 0) - (payload.total_qty || 0) }
+          : r
+      );
+      cacheSet('do_als', next);
+      return next;
+    });
+    return { queued: true, payload };
+  }
 
   const lower = query.trim().toLowerCase();
   const groups = (() => {
@@ -95,9 +156,9 @@ export default function DoModule() {
     e.target.value = '';
   }
 
-  function onSaved(payload, sigDataUrl) {
+  function onSaved(payload, sigDataUrl, queued) {
     setEntry(null);
-    flash(t('do.doSavedToast', { do: payload.do_number }));
+    flash(queued ? t('do.savedOffline') : t('do.doSavedToast', { do: payload.do_number }));
     reload();
     setRefreshToken((x) => x + 1);
     const al = (als || []).find((r) => r.al_number === payload.al_number);
@@ -113,7 +174,7 @@ export default function DoModule() {
 
   return (
     <div className="min-h-screen bg-slate-100 fade-enter">
-      <TopNav title={t('do.headerTitle')} back="/dashboard" />
+      <TopNav title={t('do.headerTitle')} back="/dashboard" user={staffName} />
       <div className="max-w-[1100px] mx-auto px-4 sm:px-6 py-8 space-y-5">
         <div className="dash-card bg-white rounded-[20px] border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] p-5 sm:p-6">
           <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">{t('do.searchLabel')}</div>
@@ -205,6 +266,7 @@ export default function DoModule() {
           breeds={breeds}
           photoBase64={entry.photoBase64}
           toast={flash}
+          onSubmit={submitDO}
           onSaved={onSaved}
           onClose={() => setEntry(null)}
         />

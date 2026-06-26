@@ -2,13 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import SignaturePad from './SignaturePad.jsx';
 import { useLang } from '../../context/LanguageContext.jsx';
 import { callGemini, DO_SCAN_PROMPT } from '../../lib/gemini.js';
-import { generateDONumber, uploadDOPhoto, saveDORecord, buildItemColumns } from './data.js';
+import { generateDONumber, offlineDONumber, buildItemColumns } from './data.js';
 
 const emptyRow = () => ({ key: Math.random().toString(36).slice(2), nursery: '', breed: '', qty: '', ai: false });
 
 // Add / scan a new Delivery Order for the given AL.
 // props: al, plots, breeds, photoBase64 (null for manual), onSaved(payload, sigDataUrl), onClose, toast
-export default function EntryModal({ al, plots, breeds, photoBase64, onSaved, onClose, toast }) {
+export default function EntryModal({ al, plots, breeds, photoBase64, onSubmit, onSaved, onClose, toast }) {
   const { t } = useLang();
   const [doNumber, setDoNumber] = useState('…');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -24,9 +24,13 @@ export default function EntryModal({ al, plots, breeds, photoBase64, onSaved, on
   const customerMatch = customer.trim().toLowerCase() === (al?.customer_name || '').toLowerCase();
 
   useEffect(() => {
+    if (!navigator.onLine) {
+      setDoNumber(offlineDONumber());
+      return;
+    }
     generateDONumber()
       .then(setDoNumber)
-      .catch(() => setDoNumber('DO-' + new Date().getFullYear() + '-0001'));
+      .catch(() => setDoNumber(offlineDONumber()));
   }, []);
 
   useEffect(() => {
@@ -75,9 +79,6 @@ export default function EntryModal({ al, plots, breeds, photoBase64, onSaved, on
     const sigDataUrl = sigRef.current.toDataURL();
     setSaving(true);
 
-    let imageUrl = null;
-    if (photoBase64) imageUrl = await uploadDOPhoto(photoBase64, al.al_number, doNumber);
-
     const payload = {
       do_number: doNumber,
       al_number: al.al_number,
@@ -85,18 +86,19 @@ export default function EntryModal({ al, plots, breeds, photoBase64, onSaved, on
       total_qty: totalQty,
       remark: al.customer_name,
       status: 'Delivered',
-      image_url: imageUrl,
       ...buildItemColumns(items, plots),
     };
 
+    // Persistence (online insert vs offline queue) is handled by the parent.
+    let res;
     try {
-      await saveDORecord(payload, al);
+      res = await onSubmit({ payload, photoBase64, al });
     } catch (e) {
       setSaving(false);
       return alert(t('do.saveError', { msg: e.message }));
     }
     setSaving(false);
-    onSaved(payload, sigDataUrl);
+    onSaved(res.payload, sigDataUrl, res.queued);
   }
 
   return (

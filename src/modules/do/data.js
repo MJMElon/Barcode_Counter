@@ -111,6 +111,76 @@ export function buildItemColumns(items, plots) {
   return cols;
 }
 
+// ── Offline support ───────────────────────────────────────────
+// A unique DO number for DOs created while offline (avoids collisions with the
+// server sequence until they sync). Distinguishable by the "OFF" marker.
+export function offlineDONumber() {
+  return `DO-${new Date().getFullYear()}-OFF${Date.now().toString(36).toUpperCase()}`;
+}
+
+const DO_QUEUE_KEY = 'mjm.do.queue.v1';
+
+export function readDOQueue() {
+  try {
+    return JSON.parse(localStorage.getItem(DO_QUEUE_KEY) || '[]');
+  } catch (e) {
+    return [];
+  }
+}
+function writeDOQueue(arr) {
+  try {
+    localStorage.setItem(DO_QUEUE_KEY, JSON.stringify(arr));
+  } catch (e) {
+    /* ignore */
+  }
+}
+// Queue a DO (with its photo as base64) for later sync. Returns the new length.
+export function queueDO(entry) {
+  const q = readDOQueue();
+  q.push({ ...entry, queuedAt: Date.now() });
+  writeDOQueue(q);
+  return q.length;
+}
+
+// Push every queued DO to Supabase. Each item: upload photo → insert record →
+// deduct the AL balance using the CURRENT server value. Items that fail stay
+// queued for the next attempt. Returns { synced, remaining }.
+export async function flushDOQueue() {
+  let q = readDOQueue();
+  if (!q.length) return { synced: 0, remaining: 0 };
+  const remaining = [];
+  let synced = 0;
+  for (const item of q) {
+    try {
+      const payload = { ...item.payload };
+      if (item.photoBase64) {
+        payload.image_url = await uploadDOPhoto(item.photoBase64, payload.al_number, payload.do_number);
+      }
+      const { error } = await supabase.from('shared_do_records').insert([payload]);
+      if (error) {
+        remaining.push(item);
+        continue;
+      }
+      const { data: alRow } = await supabase
+        .from('shared_al_orders')
+        .select('id, balance_quantity')
+        .eq('al_number', payload.al_number)
+        .maybeSingle();
+      if (alRow) {
+        await supabase
+          .from('shared_al_orders')
+          .update({ balance_quantity: (alRow.balance_quantity || 0) - (payload.total_qty || 0) })
+          .eq('id', alRow.id);
+      }
+      synced++;
+    } catch (e) {
+      remaining.push(item);
+    }
+  }
+  writeDOQueue(remaining);
+  return { synced, remaining: remaining.length };
+}
+
 // Extract item rows (nursery/breed/qty) from a DO record's plot_n columns.
 export function itemsFromRecord(d, plotMap = {}) {
   const lines = [];

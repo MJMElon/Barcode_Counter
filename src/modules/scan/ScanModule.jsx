@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import TopNav from '../../components/TopNav.jsx';
 import { useLang } from '../../context/LanguageContext.jsx';
+import { useAuth } from '../../context/AuthContext.jsx';
 import {
   loadConsents,
   saveConsents,
@@ -31,6 +32,7 @@ const STATUS_PILL = {
 
 export default function ScanModule() {
   const { t } = useLang();
+  const { staffName } = useAuth();
   const [consents, setConsents] = useState(() => loadConsents());
   const [activeId, setActiveId] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
@@ -69,7 +71,7 @@ export default function ScanModule() {
 
   return (
     <div className="min-h-screen bg-[#0a0f14] text-[#e6edf3]">
-      <TopNav title="MJM // SCAN" back="/dashboard" />
+      <TopNav title="MJM // SCAN" back="/dashboard" user={staffName} />
       {active ? (
         <Scanner consent={active} setConsents={setConsents} flash={flash} onBack={() => setActiveId(null)} />
       ) : (

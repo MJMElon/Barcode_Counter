@@ -46,6 +46,18 @@ const en = {
   'dash.scanTitle': 'Scan Barcode Counter',
   'dash.scanDesc': 'Scan seals/barcodes and count them against a target quantity.',
 
+  // top nav / offline
+  'nav.online': 'Online',
+  'nav.offline': 'Offline',
+  'nav.fcPortal': 'MJM Nursery — FC Portal',
+
+  // collection board ("TV")
+  'board.title': "Today's Collections",
+  'board.empty': 'No collections booked today',
+  'board.footer': 'Collection Time Booking',
+  'board.updated': 'Updated {time}',
+  'board.offline': 'Offline · cached',
+
   // scan module
   'scan.brandTitle': 'Signed Consents',
   'scan.subtitle': 'Tap a customer to start collecting.',
@@ -178,6 +190,7 @@ const en = {
   'do.yesPrint': '🖨️ Yes — Print PDF',
   'do.maybeLater': 'Maybe Later',
   'do.doSavedToast': 'DO {do} saved!',
+  'do.savedOffline': 'Saved offline — will sync when online',
   'do.printedToast': '{do} printed!',
   'do.signHere': 'Touch or click here to sign',
   'do.clearSig': '✕ Clear',
@@ -224,6 +237,18 @@ const ms = {
   'dash.doDesc': 'Keluar, tandatangan & cetak Delivery Order berdasarkan surat kelulusan.',
   'dash.scanTitle': 'Pengira Imbas Barkod',
   'dash.scanDesc': 'Imbas seal/barkod dan kira mengikut kuantiti sasaran.',
+
+  // top nav / offline
+  'nav.online': 'Dalam talian',
+  'nav.offline': 'Luar talian',
+  'nav.fcPortal': 'MJM Nursery — FC Portal',
+
+  // collection board ("TV")
+  'board.title': 'Kutipan Hari Ini',
+  'board.empty': 'Tiada kutipan ditempah hari ini',
+  'board.footer': 'Tempahan Masa Kutipan',
+  'board.updated': 'Dikemas kini {time}',
+  'board.offline': 'Luar talian · cache',
 
   // scan module
   'scan.brandTitle': 'Persetujuan Bertandatangan',
@@ -357,6 +382,7 @@ const ms = {
   'do.yesPrint': '🖨️ Ya — Cetak PDF',
   'do.maybeLater': 'Mungkin Nanti',
   'do.doSavedToast': 'DO {do} disimpan!',
+  'do.savedOffline': 'Disimpan luar talian — akan segerak bila dalam talian',
   'do.printedToast': '{do} dicetak!',
   'do.signHere': 'Sentuh atau klik di sini untuk menandatangani',
   'do.clearSig': '✕ Padam',
