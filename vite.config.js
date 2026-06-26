@@ -42,5 +42,16 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
+    // Stable (non-hashed) filenames. GitHub Pages caches index.html for ~10 min;
+    // with hashed asset names, a stale cached index.html can point at a filename
+    // a newer deploy already deleted → the app script 404s and the page goes
+    // blank. Fixed names always exist across deploys, so this can't happen.
+    rollupOptions: {
+      output: {
+        entryFileNames: 'assets/[name].js',
+        chunkFileNames: 'assets/[name].js',
+        assetFileNames: 'assets/[name][extname]',
+      },
+    },
   },
 });
