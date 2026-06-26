@@ -400,26 +400,17 @@ function Scanner({ consent, lastInfo, issuing, onScan, onBack, onIssueDO }) {
 
     // Ask for a high-resolution stream (sharper = easier to read small/distant
     // barcodes). `ideal` never over-constrains, so it still works on laptops.
+    // We use facingMode directly (NOT getCameras/enumerateDevices) because
+    // enumerating before permission is unreliable on iOS and triggers an extra
+    // permission prompt. This is a single getUserMedia request → one prompt,
+    // remembered by the browser afterwards.
     const adv = { width: { ideal: 1920 }, height: { ideal: 1080 } };
-    // Build a list of camera options to try, most-preferred first. This works on
-    // phones (uses the back camera) AND on laptops/desktops (falls back to the
-    // built-in webcam) instead of over-constraining to a non-existent back cam.
-    const attempts = [];
-    try {
-      const cams = await Html5Qrcode.getCameras();
-      if (cams && cams.length) {
-        const back = cams.find((c) => /back|rear|environment/i.test(c.label));
-        if (back) attempts.push({ deviceId: { exact: back.id }, ...adv });
-        attempts.push({ deviceId: { exact: cams[cams.length - 1].id }, ...adv }); // often the back cam on phones
-        attempts.push({ deviceId: { exact: cams[0].id }, ...adv }); // first available (webcam on desktop)
-      }
-    } catch (e) {
-      /* getCameras may fail before permission is granted */
-    }
-    // Generic fallbacks that prompt for permission / pick by facing mode.
-    attempts.push({ facingMode: { ideal: 'environment' }, ...adv });
-    attempts.push({ facingMode: 'user' });
-    attempts.push(true); // any camera
+    const attempts = [
+      { facingMode: { ideal: 'environment' }, ...adv }, // back camera on phones; default webcam on desktop
+      { facingMode: 'environment' },
+      { facingMode: 'user' },
+      true, // any available camera
+    ];
 
     let started = false;
     let lastErr = null;
@@ -482,9 +473,14 @@ function Scanner({ consent, lastInfo, issuing, onScan, onBack, onIssueDO }) {
   }
 
   useEffect(() => {
+    // Auto-open the camera as soon as the scanner opens (this still runs right
+    // after the tap that opened the consent). If a browser requires an explicit
+    // gesture, the "Start Camera" button remains as a fallback.
+    startCamera().catch(() => setStatusKey('ready'));
     return () => {
       if (qrRef.current?.isScanning) qrRef.current.stop().catch(() => {});
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function handleBack() {

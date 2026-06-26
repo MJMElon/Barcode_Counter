@@ -7,7 +7,7 @@ import { useLang, LangToggle } from '../context/LanguageContext.jsx';
 // - `back`: optional route for a Back link (otherwise the brand block shows)
 // - `user`: optional staff name shown top-right, to the left of the language button
 // - `theme`: 'light' (default) or 'dark' to match a dark page background
-export default function TopNav({ title, back, user, theme = 'light' }) {
+export default function TopNav({ title, subtitle, back, user, theme = 'light' }) {
   const { signOut } = useAuth();
   const { t } = useLang();
   const navigate = useNavigate();
@@ -33,19 +33,22 @@ export default function TopNav({ title, back, user, theme = 'light' }) {
   return (
     <div className={`${bar} border-b px-3 sm:px-6 py-3 flex justify-between items-center gap-2 sticky top-0 z-30 shadow-sm`}>
       <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-        {back ? (
+        {back && (
           <Link
             to={back}
             className={`flex items-center gap-1 ${backCls} rounded-lg px-2.5 py-2 transition-colors font-black text-xs uppercase tracking-wider whitespace-nowrap no-underline shrink-0`}
           >
             {t('common.back')}
           </Link>
-        ) : (
-          <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center text-white font-black text-xs shrink-0">
-            AI
-          </div>
         )}
-        <span className={`font-black ${titleCls} uppercase tracking-wider text-[11px] sm:text-sm truncate`}>{title}</span>
+        {subtitle ? (
+          <div className="leading-tight min-w-0">
+            <div className={`font-black ${titleCls} text-sm sm:text-lg truncate`}>{title}</div>
+            <div className="font-black text-emerald-600 text-[10px] uppercase tracking-[0.25em] leading-none mt-0.5">{subtitle}</div>
+          </div>
+        ) : (
+          <span className={`font-black ${titleCls} uppercase tracking-wider text-[11px] sm:text-sm truncate`}>{title}</span>
+        )}
       </div>
 
       <div className="flex items-center gap-2 sm:gap-3 shrink-0">
