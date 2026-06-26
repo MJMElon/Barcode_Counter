@@ -31,6 +31,21 @@
         var r = e.reason;
         errs.push('promise: ' + ((r && (r.stack || r.message)) || r));
       });
+
+      // Proactively remove any service worker + caches left by the old PWA so
+      // they can never serve a stale shell again. No reload — just clean up.
+      try {
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistrations().then(function (rs) {
+            rs.forEach(function (r) { r.unregister(); });
+          }).catch(function () {});
+        }
+        if (window.caches && caches.keys) {
+          caches.keys().then(function (ks) {
+            ks.forEach(function (k) { caches.delete(k); });
+          }).catch(function () {});
+        }
+      } catch (e) {}
       function hardReset(forceAgain) {
         var p = Promise.resolve();
         if ('serviceWorker' in navigator) {
