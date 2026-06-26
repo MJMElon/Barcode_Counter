@@ -374,7 +374,6 @@ function Scanner({ consent, lastInfo, issuing, onScan, onBack, onIssueDO }) {
     ensureAudio();
     const qr = new Html5Qrcode('reader', { verbose: false });
     qrRef.current = qr;
-    const hiRes = { width: { ideal: 1920 }, height: { ideal: 1080 } };
     const config = {
       fps: 15,
       qrbox: (vw, vh) => ({
@@ -397,21 +396,40 @@ function Scanner({ consent, lastInfo, issuing, onScan, onBack, onIssueDO }) {
       ],
       experimentalFeatures: { useBarCodeDetectorIfSupported: true },
     };
-    let cameraConfig = { ...hiRes, facingMode: 'environment' };
+
+    // Build a list of camera options to try, most-preferred first. This works on
+    // phones (uses the back camera) AND on laptops/desktops (falls back to the
+    // built-in webcam) instead of over-constraining to a non-existent back cam.
+    const attempts = [];
     try {
       const cams = await Html5Qrcode.getCameras();
       if (cams && cams.length) {
         const back = cams.find((c) => /back|rear|environment/i.test(c.label));
-        cameraConfig = { ...hiRes, deviceId: { exact: (back || cams[cams.length - 1]).id } };
+        if (back) attempts.push({ deviceId: { exact: back.id } });
+        attempts.push({ deviceId: { exact: cams[cams.length - 1].id } }); // often the back cam on phones
+        attempts.push({ deviceId: { exact: cams[0].id } }); // first available (webcam on desktop)
       }
     } catch (e) {
-      /* fall back */
+      /* getCameras may fail before permission is granted */
     }
-    try {
-      await qr.start(cameraConfig, config, onScan, () => {});
-    } catch (e) {
-      await qr.start({ facingMode: 'environment' }, config, onScan, () => {});
+    // Generic fallbacks that prompt for permission / pick by facing mode.
+    attempts.push({ facingMode: 'environment' });
+    attempts.push({ facingMode: 'user' });
+    attempts.push(true); // any camera
+
+    let started = false;
+    let lastErr = null;
+    for (const cam of attempts) {
+      try {
+        await qr.start(cam, config, onScan, () => {});
+        started = true;
+        break;
+      } catch (e) {
+        lastErr = e;
+      }
     }
+    if (!started) throw lastErr || new Error('No camera available');
+
     try {
       const track = document.querySelector('#reader video')?.srcObject?.getVideoTracks?.()[0];
       if (track?.applyConstraints) await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});

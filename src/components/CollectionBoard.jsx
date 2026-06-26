@@ -50,48 +50,48 @@ export default function CollectionBoard({ locationFilter = null }) {
 
   const statusStyle = (s) =>
     s === 'completed'
-      ? 'text-emerald-300 border-emerald-400/40'
+      ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
       : s === 'pending'
-      ? 'text-amber-300 border-amber-400/40'
-      : 'text-sky-300 border-sky-400/40';
+      ? 'text-amber-700 bg-amber-50 border-amber-200'
+      : 'text-sky-700 bg-sky-50 border-sky-200';
 
   return (
-    <div className="rounded-2xl border border-emerald-400/20 bg-[#05140c] text-emerald-50 overflow-hidden mb-4 shadow-lg">
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-emerald-400/15 bg-[#071a10]">
+    <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden mb-4 shadow-[0_4px_16px_rgba(0,0,0,.06)]">
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-200 bg-emerald-50">
         <div className="flex items-center gap-2 min-w-0">
-          <span className={`w-2 h-2 rounded-full ${online ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'} shrink-0`} />
-          <span className="font-black uppercase tracking-widest text-[11px] sm:text-xs truncate">
+          <span className={`w-2 h-2 rounded-full ${online ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'} shrink-0`} />
+          <span className="font-black uppercase tracking-widest text-[11px] sm:text-xs text-emerald-800 truncate">
             🌱 {t('board.title')}
           </span>
         </div>
-        <span className="text-[10px] font-bold text-emerald-300/70 shrink-0">
+        <span className="text-[10px] font-black text-emerald-700 shrink-0">
           {list.length} · {totalQty} pcs
         </span>
       </div>
 
-      <div className="max-h-[34vh] overflow-y-auto divide-y divide-emerald-400/10">
+      <div className="max-h-[34vh] overflow-y-auto divide-y divide-slate-100">
         {rows === null ? (
-          <div className="px-4 py-5 text-center text-[11px] font-bold text-emerald-300/50 uppercase tracking-widest">
+          <div className="px-4 py-5 text-center text-[11px] font-bold text-slate-400 uppercase tracking-widest">
             {t('common.loading')}
           </div>
         ) : list.length === 0 ? (
-          <div className="px-4 py-5 text-center text-[11px] font-bold text-emerald-300/50 uppercase tracking-widest">
+          <div className="px-4 py-5 text-center text-[11px] font-bold text-slate-400 uppercase tracking-widest">
             {t('board.empty')}
           </div>
         ) : (
           list.map((b) => (
             <div key={b.id} className="flex items-center gap-3 px-3.5 py-2.5">
-              <div className="font-mono font-black text-sm sm:text-base text-emerald-300 w-12 shrink-0 tabular-nums">
+              <div className="font-mono font-black text-sm sm:text-base text-emerald-700 w-12 shrink-0 tabular-nums">
                 {(b.start_time || '—').slice(0, 5)}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="font-bold text-sm truncate">{b.customer_name || b.al_number || '—'}</div>
-                <div className="text-[11px] text-emerald-300/60 truncate">
+                <div className="font-bold text-sm text-slate-800 truncate">{b.customer_name || b.al_number || '—'}</div>
+                <div className="text-[11px] text-slate-400 truncate">
                   {(b.nursery_name || '—') + (b.plot_name ? ' · ' + b.plot_name : '')}
                 </div>
               </div>
               <div className="text-right shrink-0">
-                <div className="font-black text-sm text-emerald-200">{b.collection_qty || 0}</div>
+                <div className="font-black text-sm text-slate-800">{b.collection_qty || 0}</div>
                 <span className={`inline-block text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-full border ${statusStyle(b.status)}`}>
                   {b.status || 'booked'}
                 </span>
@@ -101,7 +101,7 @@ export default function CollectionBoard({ locationFilter = null }) {
         )}
       </div>
 
-      <div className="px-4 py-1.5 border-t border-emerald-400/15 text-[9px] font-bold text-emerald-300/40 flex justify-between">
+      <div className="px-4 py-1.5 border-t border-slate-100 text-[9px] font-bold text-slate-400 flex justify-between">
         <span>{t('board.footer')}</span>
         <span>{online ? (updatedAt ? t('board.updated', { time: new Date(updatedAt).toLocaleTimeString() }) : '') : t('board.offline')}</span>
       </div>

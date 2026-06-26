@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import SignaturePad from './SignaturePad.jsx';
 import { useLang } from '../../context/LanguageContext.jsx';
 import { callGemini, DO_SCAN_PROMPT } from '../../lib/gemini.js';
@@ -21,6 +21,18 @@ export default function EntryModal({ al, plots, breeds, photoBase64, initialQty,
   const [aiState, setAiState] = useState(photoBase64 ? 'loading' : 'manual'); // loading | done | failed | manual
   const [saving, setSaving] = useState(false);
   const sigRef = useRef(null);
+
+  // Dropdown options preset from the AI system (shared_plots / shared_breeds).
+  const nurseryOptions = useMemo(
+    () => [...new Set((plots || []).map((p) => p.nursery_name).filter(Boolean))].sort(),
+    [plots]
+  );
+  const breedOptions = useMemo(
+    () => [...new Set((breeds || []).map((b) => b.name).filter(Boolean))].sort(),
+    [breeds]
+  );
+  // Keep a current (e.g. AI-scanned) value selectable even if not in the preset list.
+  const withCurrent = (list, val) => (val && !list.includes(val) ? [val, ...list] : list);
 
   const totalQty = rows.reduce((s, r) => s + (parseInt(r.qty) || 0), 0);
   const balance = al?.balance_quantity ?? 0;
@@ -196,11 +208,21 @@ export default function EntryModal({ al, plots, breeds, photoBase64, initialQty,
                         <tr key={r.key}>
                           <td className="p-2 text-center text-[10px] font-black text-slate-400">{i + 1}</td>
                           <td className="p-1.5">
-                            <input list="nursery-list" value={r.nursery} onChange={(e) => updateRow(r.key, 'nursery', e.target.value)} placeholder={t('do.nurseryPlaceholder')} className="search-input text-xs w-full" style={{ padding: '7px 10px' }} />
+                            <select value={r.nursery} onChange={(e) => updateRow(r.key, 'nursery', e.target.value)} className="search-input text-xs w-full" style={{ padding: '7px 10px' }}>
+                              <option value="">{t('do.nurseryPlaceholder')}</option>
+                              {withCurrent(nurseryOptions, r.nursery).map((n) => (
+                                <option key={n} value={n}>{n}</option>
+                              ))}
+                            </select>
                             {r.ai && <span className="text-[9px] text-emerald-600 font-black">✨AI</span>}
                           </td>
                           <td className="p-1.5">
-                            <input list="breed-list" value={r.breed} onChange={(e) => updateRow(r.key, 'breed', e.target.value)} placeholder={t('do.breedPlaceholder')} className="search-input text-xs w-full" style={{ padding: '7px 10px' }} />
+                            <select value={r.breed} onChange={(e) => updateRow(r.key, 'breed', e.target.value)} className="search-input text-xs w-full" style={{ padding: '7px 10px' }}>
+                              <option value="">{t('do.breedPlaceholder')}</option>
+                              {withCurrent(breedOptions, r.breed).map((b) => (
+                                <option key={b} value={b}>{b}</option>
+                              ))}
+                            </select>
                           </td>
                           <td className="p-1.5 w-20">
                             <input type="number" min="0" value={r.qty} onChange={(e) => updateRow(r.key, 'qty', e.target.value)} placeholder="0" className="search-input text-xs w-full" style={{ padding: '7px 10px' }} />
@@ -235,16 +257,6 @@ export default function EntryModal({ al, plots, breeds, photoBase64, initialQty,
           )}
         </div>
 
-        <datalist id="nursery-list">
-          {[...new Set(plots.map((p) => p.nursery_name).filter(Boolean))].map((n) => (
-            <option key={n} value={n} />
-          ))}
-        </datalist>
-        <datalist id="breed-list">
-          {breeds.filter((b) => b.name).map((b) => (
-            <option key={b.name} value={b.name} />
-          ))}
-        </datalist>
       </div>
     </div>
   );
