@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import TopNav from '../../components/TopNav.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useLang } from '../../context/LanguageContext.jsx';
@@ -37,6 +38,19 @@ export default function DoModule() {
   const [entry, setEntry] = useState(null);
   const [printPrompt, setPrintPrompt] = useState(null);
   const cameraRef = useRef(null);
+
+  // When arriving from the scanner's "Issue DO" (/do?al=...), focus that order:
+  // pre-fill the search and open its Manage DOs panel once the list is loaded.
+  const [searchParams] = useSearchParams();
+  const alParam = searchParams.get('al');
+  const handledParamRef = useRef(false);
+  useEffect(() => {
+    if (!alParam || handledParamRef.current || !als) return;
+    handledParamRef.current = true;
+    setQuery(alParam);
+    const found = als.find((r) => r.al_number === alParam);
+    if (found) setManageAL(found);
+  }, [alParam, als]);
 
   const flash = (text) => {
     setToast(text);

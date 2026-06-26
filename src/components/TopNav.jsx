@@ -1,7 +1,6 @@
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useLang, LangToggle } from '../context/LanguageContext.jsx';
-import { useOnline } from '../hooks/useOnline.js';
 
 // Shared top navigation bar.
 // - `title`: heading text
@@ -10,7 +9,6 @@ import { useOnline } from '../hooks/useOnline.js';
 export default function TopNav({ title, back, user }) {
   const { signOut } = useAuth();
   const { t } = useLang();
-  const online = useOnline();
   const navigate = useNavigate();
 
   async function handleLogout() {
@@ -46,10 +44,6 @@ export default function TopNav({ title, back, user }) {
           </span>
         )}
         <LangToggle />
-        <span
-          title={online ? t('nav.online') : t('nav.offline')}
-          className={`w-2.5 h-2.5 rounded-full shrink-0 ${online ? 'bg-emerald-500' : 'bg-amber-500'}`}
-        />
         <button
           onClick={handleLogout}
           className="text-[10px] font-bold text-slate-500 hover:text-red-500 uppercase tracking-widest bg-slate-50 px-3 py-2 rounded-full border border-slate-200 cursor-pointer transition-colors shrink-0"
