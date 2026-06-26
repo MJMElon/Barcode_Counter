@@ -17,18 +17,21 @@
 <body>
   <div id="root"></div>
   <script>
-    // Self-heal for returning users. The previous version of this site was an
-    // offline PWA; a stale service worker / cache can serve a broken shell and
-    // leave the page blank. If the React app has not mounted a few seconds
-    // after load, unregister old service workers, clear caches once, and reload
-    // so the fresh build takes over. Guarded by sessionStorage to avoid loops.
-    window.addEventListener('load', function () {
-      setTimeout(function () {
-        var root = document.getElementById('root');
-        if (root && root.childElementCount > 0) return; // app mounted fine
-        if (sessionStorage.getItem('mjm-sw-reset')) return; // already tried once
-        sessionStorage.setItem('mjm-sw-reset', '1');
-        var done = function () { location.reload(); };
+    // Resilience + diagnostics for returning users. The previous version of this
+    // site was an offline PWA, so a stale service worker / cache can serve a
+    // broken shell. On first blank load we clear old SWs + caches and reload
+    // once. If it is STILL blank after that, we show the captured error on
+    // screen instead of a blank page so the problem is visible.
+    (function () {
+      var errs = [];
+      window.addEventListener('error', function (e) {
+        errs.push((e.message || 'error') + (e.filename ? ' @ ' + e.filename + ':' + e.lineno : ''));
+      });
+      window.addEventListener('unhandledrejection', function (e) {
+        var r = e.reason;
+        errs.push('promise: ' + ((r && (r.stack || r.message)) || r));
+      });
+      function hardReset(forceAgain) {
         var p = Promise.resolve();
         if ('serviceWorker' in navigator) {
           p = p.then(function () {
@@ -44,9 +47,37 @@
             });
           });
         }
-        p.then(done, done);
-      }, 5000);
-    });
+        var go = function () { if (forceAgain) sessionStorage.removeItem('mjm-sw-reset'); location.reload(); };
+        p.then(go, go);
+      }
+      function showOverlay() {
+        var root = document.getElementById('root');
+        if (!root) return;
+        root.innerHTML =
+          '<div style="font-family:system-ui,sans-serif;padding:22px;max-width:680px;margin:0 auto;color:#0b1220">' +
+          '<h2 style="color:#c12842;margin:0 0 8px">App could not load</h2>' +
+          '<p style="color:#475569;font-size:14px">Please screenshot this and send it. Or tap the button to clear the cache and retry.</p>' +
+          '<pre style="white-space:pre-wrap;background:#f1f5f9;border:1px solid #cdd5de;border-radius:8px;padding:12px;font-size:12px;overflow:auto">' +
+          (errs.length ? errs.join('\n\n') : 'No JavaScript error was captured — the app script may not have downloaded (network or cache).') +
+          '\n\nURL: ' + location.href + '\nBrowser: ' + navigator.userAgent + '</pre>' +
+          '<button id="mjm-reset" style="padding:12px 18px;border:none;border-radius:10px;background:#10b981;color:#fff;font-weight:700;cursor:pointer">Clear cache &amp; reload</button>' +
+          '</div>';
+        var b = document.getElementById('mjm-reset');
+        if (b) b.onclick = function () { hardReset(true); };
+      }
+      window.addEventListener('load', function () {
+        setTimeout(function () {
+          var root = document.getElementById('root');
+          if (root && root.childElementCount > 0) return; // app mounted fine
+          if (!sessionStorage.getItem('mjm-sw-reset')) {
+            sessionStorage.setItem('mjm-sw-reset', '1');
+            hardReset(false);
+            return;
+          }
+          showOverlay();
+        }, 5000);
+      });
+    })();
   </script>
   <script type="module" src="/src/main.jsx"></script>
 </body>
