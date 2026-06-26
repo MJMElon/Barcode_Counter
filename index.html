@@ -47,7 +47,12 @@
             });
           });
         }
-        var go = function () { if (forceAgain) sessionStorage.removeItem('mjm-sw-reset'); location.reload(); };
+        var go = function () {
+          if (forceAgain) sessionStorage.removeItem('mjm-sw-reset');
+          // Bypass any HTTP-cached index.html by loading a cache-busted URL.
+          var base = location.pathname.replace(/[?].*$/, '');
+          location.replace(base + '?cb=' + Date.now() + (location.hash || ''));
+        };
         p.then(go, go);
       }
       function showOverlay() {

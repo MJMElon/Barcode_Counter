@@ -10,6 +10,13 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      // SELF-DESTROYING: the previous precaching service worker kept serving a
+      // stale app shell and left returning devices on a blank page. This emits a
+      // sw.js that unregisters any existing service worker and clears its caches,
+      // so stuck devices recover automatically and the app always loads fresh
+      // from the network. (Offline app-shell caching is disabled for now; the
+      // app still works offline once loaded via localStorage/session.)
+      selfDestroying: true,
       registerType: 'autoUpdate',
       includeAssets: ['icon.svg'],
       manifest: {
