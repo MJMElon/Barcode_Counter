@@ -47,6 +47,33 @@ export async function fetchConsents() {
   return data || [];
 }
 
+// AL numbers that have a collection booking for TODAY → { al_number: 'HH:MM' }
+// (earliest slot). Used to push today's collections to the top of the list.
+const TODAY_AL_CACHE = 'scan_today_als';
+
+export function cachedTodayALs() {
+  return cacheGet(TODAY_AL_CACHE)?.value || {};
+}
+
+export async function fetchTodayBookingALs() {
+  const d = new Date();
+  const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const { data, error } = await supabase
+    .from('shared_collection_bookings')
+    .select('al_number, start_time')
+    .eq('booking_date', today)
+    .neq('status', 'cancelled');
+  if (error) throw error;
+  const map = {};
+  (data || []).forEach((b) => {
+    if (!b.al_number) return;
+    const t = (b.start_time || '99:99').slice(0, 5);
+    if (!(b.al_number in map) || t < map[b.al_number]) map[b.al_number] = t;
+  });
+  cacheSet(TODAY_AL_CACHE, map);
+  return map;
+}
+
 export function statusOf(c) {
   if (c.unique > c.qty) return 'over';
   if (c.unique >= c.qty && c.qty > 0) return 'done';

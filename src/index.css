@@ -73,6 +73,19 @@ body {
   box-shadow: 0 32px 80px rgba(0, 0, 0, 0.35);
   animation: popIn 0.25s ease;
 }
+
+/* On phones use the full width and start at the top so tall forms (items +
+   photo + signature) are fully reachable without the top being clipped. */
+@media (max-width: 640px) {
+  .modal-overlay {
+    padding: 8px;
+    align-items: flex-start;
+  }
+  .modal-box {
+    border-radius: 18px;
+    max-height: 97vh;
+  }
+}
 @keyframes popIn {
   from { opacity: 0; transform: scale(0.95) translateY(12px); }
   to { opacity: 1; transform: scale(1) translateY(0); }

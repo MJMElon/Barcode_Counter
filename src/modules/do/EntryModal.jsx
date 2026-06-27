@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import SignaturePad from './SignaturePad.jsx';
 import { useLang } from '../../context/LanguageContext.jsx';
-import { callGemini, DO_SCAN_PROMPT } from '../../lib/gemini.js';
+import { callGemini, compressImage, DO_SCAN_PROMPT } from '../../lib/gemini.js';
 import { generateDONumber, offlineDONumber, buildItemColumns } from './data.js';
 
 const emptyRow = () => ({ key: Math.random().toString(36).slice(2), nursery: '', breed: '', qty: '', ai: false });
@@ -20,7 +20,21 @@ export default function EntryModal({ al, plots, breeds, photoBase64, initialQty,
   });
   const [aiState, setAiState] = useState(photoBase64 ? 'loading' : 'manual'); // loading | done | failed | manual
   const [saving, setSaving] = useState(false);
+  const [capturedPhoto, setCapturedPhoto] = useState(null); // car-plate + seedlings photo
   const sigRef = useRef(null);
+  const photoInputRef = useRef(null);
+
+  async function onPhotoPicked(e) {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const compressed = await compressImage(ev.target.result);
+      setCapturedPhoto(compressed);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  }
 
   // Dropdown options preset from the AI system (shared_plots / shared_breeds).
   const nurseryOptions = useMemo(
@@ -108,7 +122,7 @@ export default function EntryModal({ al, plots, breeds, photoBase64, initialQty,
     // Persistence (online insert vs offline queue) is handled by the parent.
     let res;
     try {
-      res = await onSubmit({ payload, photoBase64, al });
+      res = await onSubmit({ payload, photoBase64: capturedPhoto || photoBase64, al });
     } catch (e) {
       setSaving(false);
       return alert(t('do.saveError', { msg: e.message }));
@@ -239,6 +253,31 @@ export default function EntryModal({ al, plots, breeds, photoBase64, initialQty,
                   {t('do.totalQtyLabel')} <span className="font-black text-slate-700">{totalQty}</span>
                   &nbsp;·&nbsp; {t('do.balanceLabel')} <span className={`font-black ${remain < 0 ? 'text-red-600' : 'text-blue-700'}`}>{remain}</span>
                 </div>
+              </div>
+
+              {/* Photo: customer car plate with loaded seedlings */}
+              <div className="border-t border-slate-100 pt-5">
+                <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{t('do.photoTitle')}</div>
+                <input ref={photoInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onPhotoPicked} />
+                {capturedPhoto ? (
+                  <div className="relative rounded-2xl overflow-hidden border-2 border-emerald-200 bg-slate-50">
+                    <img src={capturedPhoto} alt="DO photo" className="w-full object-contain" style={{ maxHeight: 220 }} />
+                    <button
+                      onClick={() => photoInputRef.current?.click()}
+                      className="absolute bottom-2 right-2 text-[10px] font-black uppercase tracking-widest text-white bg-black/60 px-3 py-2 rounded-xl border-none cursor-pointer"
+                    >
+                      📷 {t('do.retakePhoto')}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => photoInputRef.current?.click()}
+                    className="w-full py-4 rounded-2xl border-2 border-dashed border-emerald-300 bg-emerald-50 text-emerald-700 font-black text-xs uppercase tracking-widest cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    📷 {t('do.takePhoto')}
+                  </button>
+                )}
+                <p className="text-[10px] font-bold text-slate-300 mt-1.5">{t('do.photoHint')}</p>
               </div>
 
               <div className="border-t border-slate-100 pt-5">

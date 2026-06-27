@@ -10,6 +10,8 @@ import { loadALByNumber, loadDropdownData, persistDO } from '../do/data.js';
 import {
   cachedConsents,
   fetchConsents,
+  cachedTodayALs,
+  fetchTodayBookingALs,
   loadProgress,
   saveProgress,
   defaultProgress,
@@ -33,6 +35,7 @@ export default function ScanModule() {
   const { staffName } = useAuth();
 
   const [serverConsents, setServerConsents] = useState(() => cachedConsents());
+  const [todayALs, setTodayALs] = useState(() => cachedTodayALs());
   const [progress, setProgress] = useState(() => loadProgress());
   const [activeId, setActiveId] = useState(null);
   const [syncing, setSyncing] = useState(false);
@@ -67,8 +70,9 @@ export default function ScanModule() {
   const sync = useCallback(async () => {
     setSyncing(true);
     try {
-      const data = await fetchConsents();
+      const [data, today] = await Promise.all([fetchConsents(), fetchTodayBookingALs().catch(() => null)]);
       setServerConsents(data);
+      if (today) setTodayALs(today);
       flash(t('scan.synced', { n: data.length }), 'done');
     } catch (e) {
       flash(t('scan.syncFailed', { msg: e.message }), 'danger');
@@ -221,7 +225,7 @@ export default function ScanModule() {
           onIssueDO={() => openIssueDO(active)}
         />
       ) : (
-        <ConsentList consents={consents} loaded={serverConsents !== null} syncing={syncing} onSync={sync} onOpen={setActiveId} />
+        <ConsentList consents={consents} todayALs={todayALs} loaded={serverConsents !== null} syncing={syncing} onSync={sync} onOpen={setActiveId} />
       )}
 
       {/* Issue DO popup — writes to the same shared_do_records as the mobile DO module */}
@@ -274,10 +278,20 @@ export default function ScanModule() {
 }
 
 // ── Consent list view (synced from signed consents) ──────────
-function ConsentList({ consents, loaded, syncing, onSync, onOpen }) {
+function ConsentList({ consents, todayALs = {}, loaded, syncing, onSync, onOpen }) {
   const { t } = useLang();
   const order = { over: 0, progress: 1, pending: 2, done: 3 };
+  const bookedToday = (c) => c.al_number && c.al_number in todayALs;
+  // Priority: today's collections first (by booking time), then the rest.
   const sorted = consents.slice().sort((a, b) => {
+    const ta = bookedToday(a) ? 0 : 1;
+    const tb = bookedToday(b) ? 0 : 1;
+    if (ta !== tb) return ta - tb;
+    if (ta === 0) {
+      const sa = todayALs[a.al_number] || '99:99';
+      const sb = todayALs[b.al_number] || '99:99';
+      if (sa !== sb) return sa < sb ? -1 : 1;
+    }
     const d = order[statusOf(a)] - order[statusOf(b)];
     return d !== 0 ? d : b.createdAt - a.createdAt;
   });
@@ -314,7 +328,14 @@ function ConsentList({ consents, loaded, syncing, onSync, onOpen }) {
                 }`}
               >
                 <div className="flex justify-between items-start gap-2">
-                  <div className="font-semibold text-base break-words">{c.customer}</div>
+                  <div className="min-w-0">
+                    {bookedToday(c) && (
+                      <span className="inline-block bg-amber-400 text-[#0a0f14] text-[9px] font-black rounded px-1.5 py-0.5 uppercase tracking-wider mb-1">
+                        📅 {t('scan.today')} {todayALs[c.al_number]}
+                      </span>
+                    )}
+                    <div className="font-semibold text-base break-words">{c.customer}</div>
+                  </div>
                   <span className="bg-emerald-500 text-[#0a0f14] text-[11px] font-bold rounded-md px-3 py-1 uppercase shrink-0">{t('scan.start')}</span>
                 </div>
                 <div className="font-mono text-[11px] text-slate-400 mt-1.5">
@@ -359,6 +380,8 @@ function Scanner({ consent, lastInfo, issuing, onScan, onBack, onIssueDO }) {
   const [statusKey, setStatusKey] = useState('ready');
   const qrRef = useRef(null);
   const trackRef = useRef(null);
+  const camStateRef = useRef('idle'); // idle | starting | scanning | stopping
+  const cancelRef = useRef(false);
 
   const remain = Math.max(0, consent.qty - consent.unique);
   const st = statusOf(consent);
@@ -372,9 +395,12 @@ function Scanner({ consent, lastInfo, issuing, onScan, onBack, onIssueDO }) {
     : t('scan.' + statusKey);
 
   async function startCamera() {
+    // Guard against concurrent starts (auto-open + button tap) which cause
+    // html5-qrcode's "already under transition" error.
+    if (camStateRef.current !== 'idle') return;
+    camStateRef.current = 'starting';
+    cancelRef.current = false;
     ensureAudio();
-    const qr = new Html5Qrcode('reader', { verbose: false });
-    qrRef.current = qr;
     const config = {
       fps: 15,
       qrbox: (vw, vh) => ({
@@ -414,16 +440,41 @@ function Scanner({ consent, lastInfo, issuing, onScan, onBack, onIssueDO }) {
 
     let started = false;
     let lastErr = null;
+    // IMPORTANT: use a FRESH Html5Qrcode instance per attempt. A failed start
+    // leaves the instance mid-transition, so reusing it throws "already under
+    // transition" on the next attempt.
     for (const cam of attempts) {
+      const qr = new Html5Qrcode('reader', { verbose: false });
       try {
         await qr.start(cam, config, onScan, () => {});
+        qrRef.current = qr;
         started = true;
         break;
       } catch (e) {
         lastErr = e;
+        try {
+          await qr.clear();
+        } catch (_) {
+          /* ignore */
+        }
       }
     }
-    if (!started) throw lastErr || new Error('No camera available');
+    if (!started) {
+      camStateRef.current = 'idle';
+      throw lastErr || new Error('No camera available');
+    }
+    // If the scanner was closed while the camera was starting, stop now.
+    if (cancelRef.current) {
+      try {
+        await qrRef.current.stop();
+        await qrRef.current.clear();
+      } catch (_) {
+        /* ignore */
+      }
+      qrRef.current = null;
+      camStateRef.current = 'idle';
+      return;
+    }
 
     try {
       const track = document.querySelector('#reader video')?.srcObject?.getVideoTracks?.()[0];
@@ -432,6 +483,7 @@ function Scanner({ consent, lastInfo, issuing, onScan, onBack, onIssueDO }) {
     } catch (e) {
       /* optional */
     }
+    camStateRef.current = 'scanning';
     setScanning(true);
     setStatusKey('scanning');
   }
@@ -459,6 +511,11 @@ function Scanner({ consent, lastInfo, issuing, onScan, onBack, onIssueDO }) {
   }
 
   async function stopCamera() {
+    cancelRef.current = true;
+    // If still starting, startCamera() will self-stop when it finishes.
+    if (camStateRef.current === 'starting') return;
+    if (camStateRef.current !== 'scanning') return;
+    camStateRef.current = 'stopping';
     try {
       if (qrRef.current?.isScanning) {
         await qrRef.current.stop();
@@ -468,6 +525,7 @@ function Scanner({ consent, lastInfo, issuing, onScan, onBack, onIssueDO }) {
       /* ignore */
     }
     qrRef.current = null;
+    camStateRef.current = 'idle';
     setScanning(false);
     setStatusKey('ready');
   }
@@ -478,6 +536,7 @@ function Scanner({ consent, lastInfo, issuing, onScan, onBack, onIssueDO }) {
     // gesture, the "Start Camera" button remains as a fallback.
     startCamera().catch(() => setStatusKey('ready'));
     return () => {
+      cancelRef.current = true;
       if (qrRef.current?.isScanning) qrRef.current.stop().catch(() => {});
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

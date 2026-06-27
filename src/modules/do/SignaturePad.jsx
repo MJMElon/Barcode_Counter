@@ -14,6 +14,7 @@ const SignaturePad = forwardRef(function SignaturePad({ height = 160 }, ref) {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
+    if (!ctx) return; // canvas unsupported (e.g. headless) — nothing to draw on
     // Size to the rendered width once laid out.
     canvas.width = canvas.offsetWidth || canvas.parentElement.offsetWidth || 400;
     canvas.height = height;
