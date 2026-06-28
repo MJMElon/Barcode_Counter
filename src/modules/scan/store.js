@@ -11,7 +11,7 @@ const CONSENTS_CACHE = 'scan_consents';
 export const PROGRESS_KEY = 'mjm.scan.progress.v1';
 
 export function defaultProgress() {
-  return { seen: [], scans: [], unique: 0, over: 0, completedFired: false, overFired: false, completedAt: null };
+  return { seen: [], scans: [], unique: 0, over: 0, completedFired: false, overFired: false, completedAt: null, doIssued: false };
 }
 
 export function loadProgress() {
@@ -104,6 +104,7 @@ export function mergeConsents(serverList, progress) {
       over: p.over || 0,
       completedFired: !!p.completedFired,
       overFired: !!p.overFired,
+      doIssued: !!p.doIssued,
     };
   });
 }

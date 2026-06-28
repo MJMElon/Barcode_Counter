@@ -197,12 +197,23 @@ export default function ScanModule() {
     setDoPlots(plots);
     setDoBreeds(breeds);
     setIssuing(false);
-    setDoEntry({ al, suggestQty: consent.unique || 0 });
+    setDoEntry({ al, suggestQty: consent.unique || 0, consentId: consent.id });
   }
 
   function onDoSaved(payload, sigDataUrl, queued) {
     const al = doEntry?.al || {};
+    const consentId = doEntry?.consentId;
     setDoEntry(null);
+    // Mark this consent's DO as issued → it drops off the scan list.
+    if (consentId) {
+      setProgress((prev) => {
+        const cur = prev[consentId] || defaultProgress();
+        const map = { ...prev, [consentId]: { ...cur, doIssued: true } };
+        saveProgress(map);
+        return map;
+      });
+    }
+    setActiveId(null); // back to the list (issued consent now removed)
     flash(queued ? t('do.savedOffline') : t('do.doSavedToast', { do: payload.do_number }), 'done');
     setPrintPrompt({ payload, sigDataUrl, al });
   }
@@ -282,8 +293,10 @@ function ConsentList({ consents, todayALs = {}, loaded, syncing, onSync, onOpen 
   const { t } = useLang();
   const order = { over: 0, progress: 1, pending: 2, done: 3 };
   const bookedToday = (c) => c.al_number && c.al_number in todayALs;
+  // Once a DO is issued for a consent, it drops off the list.
+  const pending = consents.filter((c) => !c.doIssued);
   // Priority: today's collections first (by booking time), then the rest.
-  const sorted = consents.slice().sort((a, b) => {
+  const sorted = pending.slice().sort((a, b) => {
     const ta = bookedToday(a) ? 0 : 1;
     const tb = bookedToday(b) ? 0 : 1;
     if (ta !== tb) return ta - tb;
@@ -341,16 +354,10 @@ function ConsentList({ consents, todayALs = {}, loaded, syncing, onSync, onOpen 
                 <div className="font-mono text-[11px] text-slate-400 mt-1.5">
                   <span
                     className={`inline-block px-2 py-0.5 rounded-full border mr-1.5 text-[10px] tracking-widest ${
-                      st === 'done'
-                        ? 'text-emerald-400 border-emerald-600'
-                        : st === 'over'
-                        ? 'text-red-400 border-red-500'
-                        : st === 'progress'
-                        ? 'text-amber-300 border-amber-400'
-                        : 'border-[#1f2a38]'
+                      c.unique > 0 ? 'text-amber-300 border-amber-400' : 'text-slate-400 border-[#1f2a38]'
                     }`}
                   >
-                    {t(STATUS_PILL[st])}
+                    {c.unique > 0 ? t('scan.pendingIssueDO') : t('scan.pendingToScan')}
                   </span>
                   {t('scan.qty')} <b className="text-slate-200">{c.qty}</b> · {t('scan.scanned')} <b className="text-slate-200">{c.unique}</b>
                   {c.over ? (

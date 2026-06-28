@@ -202,30 +202,64 @@ export default function DoModule() {
               <div className="text-[11px] font-black text-slate-300 uppercase tracking-widest">{t('do.noALs')}</div>
             </div>
           ) : (
-            <div className="rounded-2xl border border-slate-200 overflow-hidden overflow-x-auto">
-              <table className="data-table">
-                <thead>
-                  <tr><th>{t('do.colAL')}</th><th>{t('do.colOrder')}</th><th>{t('do.colCustomer')}</th><th>{t('do.colQtyOrdered')}</th><th>{t('do.colBalance')}</th><th>{t('do.colAction')}</th></tr>
-                </thead>
-                <tbody>
-                  {groups.map((g) => {
-                    const tm = themeMap[g.theme];
-                    return (
-                      <FragmentRows
-                        key={g.key}
-                        label={`${g.label} (${g.rows.length})`}
-                        headClass={tm.head}
-                        balClass={tm.bal}
-                        rows={g.rows}
-                        manageLabel={t('do.manageDOs')}
-                        onManage={(al) => setManageAL(al)}
-                        onCamera={(al) => openChoice(al)}
-                      />
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <>
+              {/* Desktop: table */}
+              <div className="hidden sm:block rounded-2xl border border-slate-200 overflow-hidden overflow-x-auto">
+                <table className="data-table">
+                  <thead>
+                    <tr><th>{t('do.colAL')}</th><th>{t('do.colOrder')}</th><th>{t('do.colCustomer')}</th><th>{t('do.colQtyOrdered')}</th><th>{t('do.colBalance')}</th><th>{t('do.colAction')}</th></tr>
+                  </thead>
+                  <tbody>
+                    {groups.map((g) => {
+                      const tm = themeMap[g.theme];
+                      return (
+                        <FragmentRows
+                          key={g.key}
+                          label={`${g.label} (${g.rows.length})`}
+                          headClass={tm.head}
+                          balClass={tm.bal}
+                          rows={g.rows}
+                          manageLabel={t('do.manageDOs')}
+                          onManage={(al) => setManageAL(al)}
+                          onCamera={(al) => openChoice(al)}
+                        />
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile: cards (the table columns don't fit a phone) */}
+              <div className="sm:hidden space-y-4">
+                {groups.map((g) => {
+                  const tm = themeMap[g.theme];
+                  return (
+                    <div key={g.key}>
+                      <div className={`text-[9px] font-black uppercase tracking-widest px-3 py-2 rounded-xl border mb-2 ${tm.head}`}>
+                        {g.label} ({g.rows.length})
+                      </div>
+                      <div className="space-y-2">
+                        {g.rows.map((r) => (
+                          <div key={r.id} className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+                            <div className="font-black text-slate-800">{r.al_number || '—'}</div>
+                            <div className="text-sm font-bold text-slate-600 mt-0.5 break-words">{r.customer_name || '—'}</div>
+                            <div className="text-[11px] font-bold text-slate-400 mt-2 leading-relaxed">
+                              📋 {t('do.colOrder')}: <span className="text-slate-600">{r.order_number || '—'}</span><br />
+                              {t('do.colQtyOrdered')}: <span className="text-slate-600">{r.quantity_ordered ?? '—'}</span> &nbsp;·&nbsp;
+                              {t('do.colBalance')}: <span className={`font-black ${tm.bal}`}>{r.balance_quantity ?? '—'}</span>
+                            </div>
+                            <div className="flex gap-2 mt-3">
+                              <button onClick={() => setManageAL(r)} className="btn-open flex-1 text-center">{t('do.manageDOs')}</button>
+                              <button onClick={() => openChoice(r)} title="Add DO" className="shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-xl bg-blue-600 hover:bg-blue-700 text-white border-none cursor-pointer">📷</button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           )}
         </div>
       </div>
