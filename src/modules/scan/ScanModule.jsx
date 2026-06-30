@@ -81,9 +81,10 @@ export default function ScanModule() {
     }
   }, [flash, t]);
 
-  // Auto-sync once on first open if we have nothing cached yet.
+  // Auto-sync on every open when online so newly signed consents appear
+  // without requiring a manual Sync tap.
   useEffect(() => {
-    if (serverConsents === null && navigator.onLine) sync();
+    if (navigator.onLine) sync();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -291,6 +292,7 @@ export default function ScanModule() {
 // ── Consent list view (synced from signed consents) ──────────
 function ConsentList({ consents, todayALs = {}, loaded, syncing, onSync, onOpen }) {
   const { t } = useLang();
+  const [query, setQuery] = useState('');
   const order = { over: 0, progress: 1, pending: 2, done: 3 };
   const bookedToday = (c) => c.al_number && c.al_number in todayALs;
   // Once a DO is issued for a consent, it drops off the list.
@@ -309,6 +311,15 @@ function ConsentList({ consents, todayALs = {}, loaded, syncing, onSync, onOpen 
     return d !== 0 ? d : b.createdAt - a.createdAt;
   });
 
+  const lower = query.trim().toLowerCase();
+  const filtered = lower
+    ? sorted.filter(
+        (c) =>
+          c.customer.toLowerCase().includes(lower) ||
+          (c.al_number && c.al_number.toLowerCase().includes(lower))
+      )
+    : sorted;
+
   return (
     <div className="max-w-[560px] mx-auto px-4 py-5">
       <div className="flex items-start justify-between gap-3 mb-1">
@@ -321,15 +332,23 @@ function ConsentList({ consents, todayALs = {}, loaded, syncing, onSync, onOpen 
           {syncing ? t('scan.syncing') : '⟳ ' + t('scan.sync')}
         </button>
       </div>
-      <p className="text-slate-400 text-sm mb-4">{t('scan.subtitle')}</p>
+      <p className="text-slate-400 text-sm mb-3">{t('scan.subtitle')}</p>
+
+      <input
+        type="text"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder={t('scan.searchPlaceholder')}
+        className="w-full bg-[#0f1620] border border-[#1f2a38] text-slate-200 placeholder-slate-500 font-mono text-sm rounded-xl px-4 py-2.5 mb-4 outline-none focus:border-emerald-500 transition-colors"
+      />
 
       <div className="flex flex-col gap-2.5">
-        {sorted.length === 0 ? (
+        {filtered.length === 0 ? (
           <div className="text-center py-10 text-slate-500 font-mono text-xs bg-[#0f1620] border border-dashed border-[#1f2a38] rounded-2xl px-4">
-            {loaded ? t('scan.noneSynced') : t('common.loading')}
+            {loaded ? (lower ? t('scan.noSearchResults') : t('scan.noneSynced')) : t('common.loading')}
           </div>
         ) : (
-          sorted.map((c) => {
+          filtered.map((c) => {
             const st = statusOf(c);
             const pct = c.qty > 0 ? Math.min(100, (c.unique / c.qty) * 100) : 0;
             return (
@@ -366,7 +385,7 @@ function ConsentList({ consents, todayALs = {}, loaded, syncing, onSync, onOpen 
                       · {t('scan.over')} <b className="text-red-400">{c.over}</b>
                     </>
                   ) : null}
-                  {c.al_number ? ` · ${c.al_number}` : ''}
+                  {c.al_number && !/^MANUAL-/i.test(c.al_number) ? ` · ${c.al_number}` : ''}
                 </div>
                 <div className="h-1 bg-[#0a0f14] rounded-full overflow-hidden mt-2">
                   <div className={`h-full ${st === 'over' ? 'bg-red-500' : st === 'done' ? 'bg-amber-400' : 'bg-emerald-500'}`} style={{ width: pct + '%' }} />
@@ -564,7 +583,7 @@ function Scanner({ consent, lastInfo, issuing, onScan, onBack, onIssueDO }) {
           <h2 className="text-lg font-bold leading-tight break-words">{consent.customer}</h2>
           <div className="font-mono text-[11px] text-slate-400">
             {t('scan.qty')} {consent.qty}
-            {consent.al_number ? ` · ${consent.al_number}` : ''}
+            {consent.al_number && !/^MANUAL-/i.test(consent.al_number) ? ` · ${consent.al_number}` : ''}
           </div>
         </div>
         <div className={`ml-auto font-mono text-[11px] tracking-wider ${st === 'over' ? 'text-red-400' : st === 'done' ? 'text-amber-300' : scanning ? 'text-emerald-400' : 'text-slate-400'}`}>

@@ -82,12 +82,12 @@ export function statusOf(c) {
 }
 
 // Combine the synced consent records with local scan progress into the view
-// models the UI renders (same shape the scanner expects). Only consents linked
-// to a real AL are shown — a scan entry must have BOTH a signed consent and an
-// AL, so manual (MANUAL-...) or AL-less records are excluded.
+// models the UI renders (same shape the scanner expects). All consents with a
+// customer name are shown — including walk-in (MANUAL-*) consents that have no
+// linked AL order.
 export function mergeConsents(serverList, progress) {
   return (serverList || [])
-    .filter((s) => s.al_number && !/^MANUAL-/i.test(s.al_number))
+    .filter((s) => s.customer_name)
     .map((s) => {
       const p = progress[s.id] || defaultProgress();
     return {

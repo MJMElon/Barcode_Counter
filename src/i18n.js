@@ -61,6 +61,8 @@ const en = {
   // scan module
   'scan.brandTitle': 'Signed Consents',
   'scan.subtitle': 'Tap a customer to start scanning their seals.',
+  'scan.searchPlaceholder': 'Search customer name…',
+  'scan.noSearchResults': 'No consents match your search.',
   'scan.sync': 'Sync',
   'scan.syncing': 'Syncing…',
   'scan.synced': '{n} signed consents synced',
@@ -264,6 +266,8 @@ const ms = {
   // scan module
   'scan.brandTitle': 'Persetujuan Bertandatangan',
   'scan.subtitle': 'Ketuk pelanggan untuk mula imbas seal.',
+  'scan.searchPlaceholder': 'Cari nama pelanggan…',
+  'scan.noSearchResults': 'Tiada persetujuan sepadan dengan carian anda.',
   'scan.sync': 'Segerak',
   'scan.syncing': 'Menyegerak…',
   'scan.synced': '{n} persetujuan disegerak',
