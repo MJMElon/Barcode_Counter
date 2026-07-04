@@ -6,7 +6,7 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { cacheGet, cacheSet } from '../../lib/cache.js';
 import { printDO } from '../../lib/pdf.js';
 import EntryModal from '../do/EntryModal.jsx';
-import { loadALByNumber, loadDropdownData, persistDO } from '../do/data.js';
+import { loadALByNumber, loadDropdownData, persistDO, flushDOQueue } from '../do/data.js';
 import {
   cachedConsents,
   fetchConsents,
@@ -70,6 +70,9 @@ export default function ScanModule() {
   const sync = useCallback(async () => {
     setSyncing(true);
     try {
+      // Flush any DOs queued offline or from a silent save error so they
+      // reach shared_do_records and appear in the AI system's DO module.
+      await flushDOQueue().catch(() => {});
       const [data, today] = await Promise.all([fetchConsents(), fetchTodayBookingALs().catch(() => null)]);
       setServerConsents(data);
       if (today) setTodayALs(today);
@@ -224,6 +227,20 @@ export default function ScanModule() {
     flash(t('do.printedToast', { do: pp.payload.do_number }), 'done');
   }
 
+  function shareWhatsApp(pp) {
+    const p = pp.payload;
+    const al = pp.al || {};
+    const customer = al.customer_name || p.remark || '—';
+    const lines = [
+      '*MJM Nursery — Delivery Order*',
+      `DO: ${p.do_number}`,
+      `Customer: ${customer}`,
+      `Date: ${p.delivery_date || '—'}`,
+      `Total Qty: ${p.total_qty || 0}`,
+    ];
+    window.open(`https://wa.me/?text=${encodeURIComponent(lines.join('\n'))}`, '_blank');
+  }
+
   return (
     <div className="min-h-screen bg-[#0a0f14] text-[#e6edf3]">
       <TopNav title="MJM // SCAN" back={active ? undefined : '/dashboard'} user={staffName} theme="dark" />
@@ -258,13 +275,30 @@ export default function ScanModule() {
       {printPrompt && (
         <div className="modal-overlay open" onClick={() => setPrintPrompt(null)}>
           <div className="bg-white rounded-3xl p-7 w-full max-w-sm shadow-2xl text-center" onClick={(e) => e.stopPropagation()}>
-            <div className="text-4xl mb-3">🖨️</div>
+            <div className="text-4xl mb-3">✅</div>
             <div className="font-black text-slate-800 text-lg uppercase tracking-wide mb-1">{t('do.doSavedTitle')}</div>
             <div className="text-sm font-bold text-slate-500 mb-1">{printPrompt.payload.do_number}</div>
-            <div className="text-xs font-bold text-slate-400 mb-6">{t('do.printPrompt')}</div>
+            <div className="text-xs font-bold text-slate-400 mb-5">{t('do.printPrompt')}</div>
             <div className="flex flex-col gap-3">
-              <button onClick={() => { doPrint(printPrompt); setPrintPrompt(null); }} className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[11px] uppercase tracking-widest rounded-xl border-none cursor-pointer">{t('do.yesPrint')}</button>
-              <button onClick={() => setPrintPrompt(null)} className="w-full py-2.5 text-[10px] font-black text-slate-500 hover:text-slate-800 uppercase tracking-widest bg-slate-50 border border-slate-200 rounded-xl cursor-pointer">{t('do.maybeLater')}</button>
+              <button
+                onClick={() => { shareWhatsApp(printPrompt); setPrintPrompt(null); }}
+                className="w-full py-3 text-white font-black text-[11px] uppercase tracking-widest rounded-xl border-none cursor-pointer"
+                style={{ background: '#25D366' }}
+              >
+                {t('scan.shareWhatsApp')}
+              </button>
+              <button
+                onClick={() => { doPrint(printPrompt); setPrintPrompt(null); }}
+                className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[11px] uppercase tracking-widest rounded-xl border-none cursor-pointer"
+              >
+                {t('do.yesPrint')}
+              </button>
+              <button
+                onClick={() => setPrintPrompt(null)}
+                className="w-full py-2.5 text-[10px] font-black text-slate-500 hover:text-slate-800 uppercase tracking-widest bg-slate-50 border border-slate-200 rounded-xl cursor-pointer"
+              >
+                {t('do.maybeLater')}
+              </button>
             </div>
           </div>
         </div>
@@ -421,8 +455,6 @@ function Scanner({ consent, lastInfo, issuing, onScan, onBack, onIssueDO }) {
     : t('scan.' + statusKey);
 
   async function startCamera() {
-    // Guard against concurrent starts (auto-open + button tap) which cause
-    // html5-qrcode's "already under transition" error.
     if (camStateRef.current !== 'idle') return;
     camStateRef.current = 'starting';
     cancelRef.current = false;
@@ -450,25 +482,16 @@ function Scanner({ consent, lastInfo, issuing, onScan, onBack, onIssueDO }) {
       experimentalFeatures: { useBarCodeDetectorIfSupported: true },
     };
 
-    // Ask for a high-resolution stream (sharper = easier to read small/distant
-    // barcodes). `ideal` never over-constrains, so it still works on laptops.
-    // We use facingMode directly (NOT getCameras/enumerateDevices) because
-    // enumerating before permission is unreliable on iOS and triggers an extra
-    // permission prompt. This is a single getUserMedia request → one prompt,
-    // remembered by the browser afterwards.
     const adv = { width: { ideal: 1920 }, height: { ideal: 1080 } };
     const attempts = [
-      { facingMode: { ideal: 'environment' }, ...adv }, // back camera on phones; default webcam on desktop
+      { facingMode: { ideal: 'environment' }, ...adv },
       { facingMode: 'environment' },
       { facingMode: 'user' },
-      true, // any available camera
+      true,
     ];
 
     let started = false;
     let lastErr = null;
-    // IMPORTANT: use a FRESH Html5Qrcode instance per attempt. A failed start
-    // leaves the instance mid-transition, so reusing it throws "already under
-    // transition" on the next attempt.
     for (const cam of attempts) {
       const qr = new Html5Qrcode('reader', { verbose: false });
       try {
@@ -489,7 +512,6 @@ function Scanner({ consent, lastInfo, issuing, onScan, onBack, onIssueDO }) {
       camStateRef.current = 'idle';
       throw lastErr || new Error('No camera available');
     }
-    // If the scanner was closed while the camera was starting, stop now.
     if (cancelRef.current) {
       try {
         await qrRef.current.stop();
@@ -514,8 +536,6 @@ function Scanner({ consent, lastInfo, issuing, onScan, onBack, onIssueDO }) {
     setStatusKey('scanning');
   }
 
-  // Nudge the camera to refocus (tap the preview or the Refocus button). Focus
-  // control support varies by device; we try the modes the device reports.
   async function refocus() {
     const track = trackRef.current;
     if (!track || !track.applyConstraints) return;
@@ -538,7 +558,6 @@ function Scanner({ consent, lastInfo, issuing, onScan, onBack, onIssueDO }) {
 
   async function stopCamera() {
     cancelRef.current = true;
-    // If still starting, startCamera() will self-stop when it finishes.
     if (camStateRef.current === 'starting') return;
     if (camStateRef.current !== 'scanning') return;
     camStateRef.current = 'stopping';
@@ -557,9 +576,6 @@ function Scanner({ consent, lastInfo, issuing, onScan, onBack, onIssueDO }) {
   }
 
   useEffect(() => {
-    // Auto-open the camera as soon as the scanner opens (this still runs right
-    // after the tap that opened the consent). If a browser requires an explicit
-    // gesture, the "Start Camera" button remains as a fallback.
     startCamera().catch(() => setStatusKey('ready'));
     return () => {
       cancelRef.current = true;
@@ -657,7 +673,7 @@ function Scanner({ consent, lastInfo, issuing, onScan, onBack, onIssueDO }) {
         </div>
       </div>
 
-      {/* Issue DO for the collected seedlings → jumps to the DO module for this AL */}
+      {/* Issue DO for the collected seedlings */}
       <button
         disabled={issuing}
         onClick={async () => {
