@@ -2,9 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import SignaturePad from './SignaturePad.jsx';
 import { useLang } from '../../context/LanguageContext.jsx';
 import { callGemini, compressImage, DO_SCAN_PROMPT } from '../../lib/gemini.js';
-import { generateDONumber, offlineDONumber, buildItemColumns } from './data.js';
+import { generateDONumber, offlineDONumber } from './data.js';
 
-const emptyRow = () => ({ key: Math.random().toString(36).slice(2), plot: '', breed: '', qty: '', ai: false });
+const emptyRow = () => ({ key: Math.random().toString(36).slice(2), nursery: '', plot: '', breed: '', qty: '', ai: false });
 
 // Add / scan a new Delivery Order for the given AL.
 // props: al, plots, breeds, photoBase64 (null for manual), onSaved(payload, sigDataUrl), onClose, toast
@@ -18,9 +18,9 @@ export default function EntryModal({ al, plots, breeds, photoBase64, initialQty,
     if (initialQty) r.qty = String(initialQty);
     return [r];
   });
-  const [aiState, setAiState] = useState(photoBase64 ? 'loading' : 'manual'); // loading | done | failed | manual
+  const [aiState, setAiState] = useState(photoBase64 ? 'loading' : 'manual');
   const [saving, setSaving] = useState(false);
-  const [capturedPhoto, setCapturedPhoto] = useState(null); // car-plate + seedlings photo
+  const [capturedPhoto, setCapturedPhoto] = useState(null);
   const sigRef = useRef(null);
   const photoInputRef = useRef(null);
 
@@ -36,7 +36,10 @@ export default function EntryModal({ al, plots, breeds, photoBase64, initialQty,
     e.target.value = '';
   }
 
-  // Plot options from shared_plots (plot_name values — what gets stored in plot_N columns).
+  const nurseryOptions = useMemo(
+    () => [...new Set((plots || []).map((p) => p.nursery_name).filter(Boolean))].sort(),
+    [plots]
+  );
   const plotOptions = useMemo(
     () => [...new Set((plots || []).map((p) => p.plot_name).filter(Boolean))].sort(),
     [plots]
@@ -45,7 +48,13 @@ export default function EntryModal({ al, plots, breeds, photoBase64, initialQty,
     () => [...new Set((breeds || []).map((b) => b.name).filter(Boolean))].sort(),
     [breeds]
   );
-  // Keep a current (e.g. AI-scanned) value selectable even if not in the preset list.
+
+  function plotOptionsForRow(nursery) {
+    if (!nursery) return plotOptions;
+    const filtered = (plots || []).filter((p) => p.nursery_name === nursery).map((p) => p.plot_name).filter(Boolean);
+    return [...new Set(filtered)].sort();
+  }
+
   const withCurrent = (list, val) => (val && !list.includes(val) ? [val, ...list] : list);
 
   const totalQty = rows.reduce((s, r) => s + (parseInt(r.qty) || 0), 0);
@@ -72,7 +81,7 @@ export default function EntryModal({ al, plots, breeds, photoBase64, initialQty,
         if (cancelled) return;
         const items = (result.items || []).slice(0, 5);
         if (items.length) {
-          setRows(items.map((it) => ({ key: Math.random().toString(36).slice(2), plot: it.nursery || '', breed: it.breed || '', qty: it.quantity || '', ai: true })));
+          setRows(items.map((it) => ({ key: Math.random().toString(36).slice(2), nursery: it.nursery || '', plot: '', breed: it.breed || '', qty: it.quantity || '', ai: true })));
         }
         if (result.date) setDate(result.date);
         if (result.customer_name) setCustomer(result.customer_name);
@@ -81,13 +90,16 @@ export default function EntryModal({ al, plots, breeds, photoBase64, initialQty,
         if (!cancelled) setAiState('failed');
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [photoBase64]);
 
   function updateRow(key, field, value) {
-    setRows((rs) => rs.map((r) => (r.key === key ? { ...r, [field]: value } : r)));
+    setRows((rs) => rs.map((r) => {
+      if (r.key !== key) return r;
+      const updated = { ...r, [field]: value };
+      if (field === 'nursery') updated.plot = '';
+      return updated;
+    }));
   }
   function addRow() {
     setRows((rs) => (rs.length >= 5 ? (toast(t('do.maxRows')), rs) : [...rs, emptyRow()]));
@@ -98,8 +110,8 @@ export default function EntryModal({ al, plots, breeds, photoBase64, initialQty,
 
   async function save() {
     const items = rows
-      .map((r) => ({ nursery: r.plot.trim(), breed: r.breed.trim(), qty: parseInt(r.qty) || 0 }))
-      .filter((it) => it.nursery || it.breed || it.qty > 0);
+      .map((r) => ({ nursery: r.nursery.trim(), plot: r.plot.trim(), breed: r.breed.trim(), qty: parseInt(r.qty) || 0 }))
+      .filter((it) => it.nursery || it.plot || it.breed || it.qty > 0);
     if (!date) return alert(t('do.selectDate'));
     if (!items.length) return alert(t('do.addItem'));
     if (totalQty <= 0) return alert(t('do.qtyGtZero'));
@@ -116,10 +128,15 @@ export default function EntryModal({ al, plots, breeds, photoBase64, initialQty,
       total_qty: totalQty,
       remark: al.customer_name,
       status: 'Delivered',
-      ...buildItemColumns(items, plots),
     };
+    // Store plot name in plot_N: prefer explicit plot selection, fall back to nursery name.
+    items.slice(0, 5).forEach((it, i) => {
+      const n = i + 1;
+      payload[`plot_${n}`] = it.plot || it.nursery || null;
+      payload[`breed_${n}`] = it.breed || null;
+      payload[`qty_${n}`] = it.qty || null;
+    });
 
-    // Persistence (online insert vs offline queue) is handled by the parent.
     let res;
     try {
       res = await onSubmit({ payload, photoBase64: capturedPhoto || photoBase64, al });
@@ -142,7 +159,7 @@ export default function EntryModal({ al, plots, breeds, photoBase64, initialQty,
             <div className="text-lg font-black text-white">{t('do.newDeliveryOrder')}</div>
             <div className="text-[11px] font-bold text-slate-400 mt-1">
               <span className="text-white font-black">{al?.al_number || '—'}</span>
-              <span className="text-amber-400 mx-2">✦</span>
+              <span className="text-amber-400 mx-2">✶</span>
               <span className="text-slate-300">{al?.customer_name || '—'}</span>
             </div>
           </div>
@@ -176,7 +193,7 @@ export default function EntryModal({ al, plots, breeds, photoBase64, initialQty,
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">{t('do.doNumber')} <span className="text-blue-500">AUTO</span></label>
                   <input value={doNumber} readOnly className="search-input text-sm font-black bg-blue-50 border-blue-200 w-full" style={{ padding: '9px 12px' }} />
@@ -208,61 +225,76 @@ export default function EntryModal({ al, plots, breeds, photoBase64, initialQty,
                   )}
                 </div>
                 <div className="space-y-2">
-                  {rows.map((r, i) => (
-                    <div key={r.key} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                          {t('do.itemLabel')} {i + 1}
-                          {r.ai && <span className="ml-2 text-emerald-600 normal-case">✨ AI</span>}
-                        </span>
-                        {rows.length > 1 && (
-                          <button
-                            onClick={() => removeRow(r.key)}
-                            className="w-6 h-6 rounded-lg bg-red-50 hover:bg-red-100 text-red-400 hover:text-red-600 font-black text-base leading-none flex items-center justify-center border-none cursor-pointer"
-                          >
-                            ×
-                          </button>
-                        )}
-                      </div>
-                      <div className="space-y-2">
-                        {/* Plot — full width */}
-                        <select
-                          value={r.plot}
-                          onChange={(e) => updateRow(r.key, 'plot', e.target.value)}
-                          className="search-input text-sm w-full"
-                          style={{ padding: '8px 12px' }}
-                        >
-                          <option value="">{t('do.plotPlaceholder')}</option>
-                          {withCurrent(plotOptions, r.plot).map((p) => (
-                            <option key={p} value={p}>{p}</option>
-                          ))}
-                        </select>
-                        {/* Breed + Qty — side by side */}
-                        <div className="grid grid-cols-2 gap-2">
+                  {rows.map((r, i) => {
+                    const rowPlotOpts = plotOptionsForRow(r.nursery);
+                    return (
+                      <div key={r.key} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                            {t('do.itemLabel')} {i + 1}
+                            {r.ai && <span className="ml-2 text-emerald-600 normal-case">✨ AI</span>}
+                          </span>
+                          {rows.length > 1 && (
+                            <button
+                              onClick={() => removeRow(r.key)}
+                              className="w-6 h-6 rounded-lg bg-red-50 hover:bg-red-100 text-red-400 hover:text-red-600 font-black text-base leading-none flex items-center justify-center border-none cursor-pointer"
+                            >
+                              ×
+                            </button>
+                          )}
+                        </div>
+                        <div className="space-y-2">
+                          {/* Nursery — full width */}
                           <select
-                            value={r.breed}
-                            onChange={(e) => updateRow(r.key, 'breed', e.target.value)}
-                            className="search-input text-sm"
+                            value={r.nursery}
+                            onChange={(e) => updateRow(r.key, 'nursery', e.target.value)}
+                            className="search-input text-sm w-full"
                             style={{ padding: '8px 12px' }}
                           >
-                            <option value="">{t('do.breedPlaceholder')}</option>
-                            {withCurrent(breedOptions, r.breed).map((b) => (
-                              <option key={b} value={b}>{b}</option>
+                            <option value="">{t('do.nurserySelectPlaceholder')}</option>
+                            {withCurrent(nurseryOptions, r.nursery).map((n) => (
+                              <option key={n} value={n}>{n}</option>
                             ))}
                           </select>
-                          <input
-                            type="number"
-                            min="0"
-                            value={r.qty}
-                            onChange={(e) => updateRow(r.key, 'qty', e.target.value)}
-                            placeholder="0"
-                            className="search-input text-sm"
+                          {/* Plot — full width, filtered by selected nursery */}
+                          <select
+                            value={r.plot}
+                            onChange={(e) => updateRow(r.key, 'plot', e.target.value)}
+                            className="search-input text-sm w-full"
                             style={{ padding: '8px 12px' }}
-                          />
+                          >
+                            <option value="">{t('do.plotPlaceholder')}</option>
+                            {withCurrent(rowPlotOpts, r.plot).map((p) => (
+                              <option key={p} value={p}>{p}</option>
+                            ))}
+                          </select>
+                          {/* Breed + Qty — side by side */}
+                          <div className="grid grid-cols-2 gap-2">
+                            <select
+                              value={r.breed}
+                              onChange={(e) => updateRow(r.key, 'breed', e.target.value)}
+                              className="search-input text-sm"
+                              style={{ padding: '8px 12px' }}
+                            >
+                              <option value="">{t('do.breedPlaceholder')}</option>
+                              {withCurrent(breedOptions, r.breed).map((b) => (
+                                <option key={b} value={b}>{b}</option>
+                              ))}
+                            </select>
+                            <input
+                              type="number"
+                              min="0"
+                              value={r.qty}
+                              onChange={(e) => updateRow(r.key, 'qty', e.target.value)}
+                              placeholder="0"
+                              className="search-input text-sm"
+                              style={{ padding: '8px 12px' }}
+                            />
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
                 <div className="text-[10px] font-bold text-slate-400 mt-2 text-right">
                   {t('do.totalQtyLabel')} <span className="font-black text-slate-700">{totalQty}</span>
