@@ -57,6 +57,7 @@ export async function generateDONumber() {
     .from('shared_do_records')
     .select('do_number')
     .ilike('do_number', `${prefix}%`)
+    .not('do_number', 'ilike', `${prefix}OFF%`) // skip offline placeholders
     .order('do_number', { ascending: false })
     .limit(1);
   let next = 1;
@@ -142,7 +143,7 @@ export function buildItemColumns(items, plots) {
   return cols;
 }
 
-// ── Offline support ───────────────────────────────────────────
+// ── Offline support ──────────────────────────────────────────────────
 // A unique DO number for DOs created while offline (avoids collisions with the
 // server sequence until they sync). Distinguishable by the "OFF" marker.
 export function offlineDONumber() {
@@ -173,9 +174,10 @@ export function queueDO(entry) {
   return q.length;
 }
 
-// Push every queued DO to Supabase. Each item: upload photo → insert record →
-// deduct the AL balance using the CURRENT server value. Items that fail stay
-// queued for the next attempt. Returns { synced, remaining }.
+// Push every queued DO to Supabase. Offline-placeholder DO numbers (containing
+// "OFF") are replaced with a real sequential number before insert so the
+// running sequence stays clean. Items that fail stay queued for the next
+// attempt. Returns { synced, remaining }.
 export async function flushDOQueue() {
   let q = readDOQueue();
   if (!q.length) return { synced: 0, remaining: 0 };
@@ -184,6 +186,11 @@ export async function flushDOQueue() {
   for (const item of q) {
     try {
       const payload = { ...item.payload };
+      // Replace offline placeholder numbers with a proper sequential number now
+      // that we are online. The loop is sequential so each DO gets a unique number.
+      if (payload.do_number && /OFF/i.test(payload.do_number)) {
+        payload.do_number = await generateDONumber();
+      }
       if (item.photoBase64) {
         payload.image_url = await uploadDOPhoto(item.photoBase64, payload.al_number, payload.do_number);
       }
