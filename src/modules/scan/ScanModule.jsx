@@ -373,8 +373,8 @@ function ConsentList({ consents, todayALs = {}, loaded, syncing, onSync, onOpen 
   const [query, setQuery] = useState('');
   const order = { over: 0, progress: 1, pending: 2, done: 3 };
   const bookedToday = (c) => c.al_number && c.al_number in todayALs;
-  // Keep consents that have never had a DO issued, or still have unsealed qty remaining.
-  const pending = consents.filter((c) => !c.doIssued || c.unique < c.qty);
+  // Keep consents where no DO has been issued yet, or where total issued qty is still less than consent qty.
+  const pending = consents.filter((c) => !c.doIssued || (c.issuedQty || 0) < c.qty);
   // Priority: today's collections first (by booking time), then the rest.
   const sorted = pending.slice().sort((a, b) => {
     const ta = bookedToday(a) ? 0 : 1;
@@ -451,12 +451,15 @@ function ConsentList({ consents, todayALs = {}, loaded, syncing, onSync, onOpen 
                 <div className="font-mono text-[11px] text-slate-400 mt-1.5">
                   <span
                     className={`inline-block px-2 py-0.5 rounded-full border mr-1.5 text-[10px] tracking-widest ${
-                      c.unique > 0 ? 'text-amber-300 border-amber-400' : 'text-slate-400 border-[#1f2a38]'
+                      c.unique > (c.issuedQty || 0) ? 'text-amber-300 border-amber-400' : 'text-slate-400 border-[#1f2a38]'
                     }`}
                   >
-                    {c.unique > 0 ? t('scan.pendingIssueDO') : t('scan.pendingToScan')}
+                    {c.unique > (c.issuedQty || 0) ? t('scan.pendingIssueDO') : t('scan.pendingToScan')}
                   </span>
-                  {t('scan.qty')} <b className="text-slate-200">{c.qty}</b> · {t('scan.scanned')} <b className="text-slate-200">{c.unique}</b>
+                  {(c.issuedQty || 0) > 0 && (c.issuedQty || 0) < c.qty
+                    ? <>{t('scan.remaining')} <b className="text-amber-300">{c.qty - (c.issuedQty || 0)}</b> · {t('scan.qty')} {c.qty}</>
+                    : <>{t('scan.qty')} <b className="text-slate-200">{c.qty}</b> · {t('scan.scanned')} <b className="text-slate-200">{c.unique}</b></>
+                  }
                   {c.over ? (
                     <>
                       {' '}
@@ -487,9 +490,13 @@ function Scanner({ consent, lastInfo, issuing, activeDOs, onScan, onBack, onIssu
   const camStateRef = useRef('idle'); // idle | starting | scanning | stopping
   const cancelRef = useRef(false);
 
-  const remain = Math.max(0, consent.qty - consent.unique);
+  // Session-relative progress: only counts scans since the last issued DO.
+  const issuedQty = consent.issuedQty || 0;
+  const sessionQty = Math.max(1, consent.qty - issuedQty);
+  const sessionUnique = Math.max(0, consent.unique - issuedQty);
+  const remain = Math.max(0, sessionQty - sessionUnique);
   const st = statusOf(consent);
-  const pct = consent.qty > 0 ? Math.min(100, (consent.unique / consent.qty) * 100) : 0;
+  const pct = sessionQty > 0 ? Math.min(100, (sessionUnique / sessionQty) * 100) : 0;
   const statusText = scanning
     ? st === 'over'
       ? t('scan.statusOver')
@@ -642,7 +649,9 @@ function Scanner({ consent, lastInfo, issuing, activeDOs, onScan, onBack, onIssu
         <div className="min-w-0">
           <h2 className="text-lg font-bold leading-tight break-words">{consent.customer}</h2>
           <div className="font-mono text-[11px] text-slate-400">
-            {t('scan.qty')} {consent.qty}
+            {issuedQty > 0
+              ? `${t('scan.remaining')} ${consent.qty - issuedQty} / ${consent.qty}`
+              : `${t('scan.qty')} ${consent.qty}`}
             {consent.al_number && !/^MANUAL-/i.test(consent.al_number) ? ` · ${consent.al_number}` : ''}
           </div>
         </div>
@@ -677,21 +686,21 @@ function Scanner({ consent, lastInfo, issuing, activeDOs, onScan, onBack, onIssu
       <div className={`bg-[#0f1620] border rounded-2xl px-5 py-4 text-center mb-3 ${st === 'over' ? 'border-red-500' : 'border-[#1f2a38]'}`}>
         <div className="font-mono text-[10px] tracking-[0.3em] text-slate-400 uppercase mb-1.5">{t('scan.sealsScanned')}</div>
         <div className={`font-mono text-[56px] font-extrabold leading-none ${st === 'over' ? 'text-red-500' : st === 'done' ? 'text-amber-400' : 'text-emerald-400'}`}>
-          {consent.unique}
-          <span className="text-[22px] text-slate-500 ml-1">/{consent.qty}</span>
+          {sessionUnique}
+          <span className="text-[22px] text-slate-500 ml-1">/{sessionQty}</span>
         </div>
         <div className="h-1.5 bg-[#0a0f14] rounded-full overflow-hidden mt-2.5 border border-[#1f2a38]">
           <div className={`h-full ${st === 'over' ? 'bg-red-500' : st === 'done' ? 'bg-amber-400' : 'bg-emerald-500'}`} style={{ width: pct + '%' }} />
         </div>
         {st === 'over' && (
           <div className="mt-3 bg-red-500/10 border border-red-500 text-red-400 rounded-lg p-3 font-mono text-xs">
-            {t('scan.overBanner', { u: consent.unique, q: consent.qty, e: consent.unique - consent.qty })}
+            {t('scan.overBanner', { u: sessionUnique, q: sessionQty, e: sessionUnique - sessionQty })}
           </div>
         )}
         <div className="grid mt-2.5">
           <div className="bg-[#0a0f14] border border-[#1f2a38] rounded-lg px-3 py-2 flex justify-between items-center">
             <span className="font-mono text-[10px] tracking-widest text-slate-400 uppercase">{t('scan.remaining')}</span>
-            <span className={`font-mono text-lg font-bold ${consent.unique > consent.qty ? 'text-red-400' : 'text-slate-100'}`}>{remain}</span>
+            <span className={`font-mono text-lg font-bold ${sessionUnique > sessionQty ? 'text-red-400' : 'text-slate-100'}`}>{remain}</span>
           </div>
         </div>
         <div className={`mt-2 font-mono text-xs break-all ${st === 'over' ? 'text-red-400' : 'text-slate-400'}`}>{t(lastInfo.key, lastInfo.vars)}</div>
