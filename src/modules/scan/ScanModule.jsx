@@ -6,7 +6,7 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { cacheGet, cacheSet } from '../../lib/cache.js';
 import { printDO } from '../../lib/pdf.js';
 import EntryModal from '../do/EntryModal.jsx';
-import { loadALByNumber, loadDropdownData, persistDO, flushDOQueue } from '../do/data.js';
+import { loadALByNumber, loadDropdownData, persistDO, flushDOQueue, loadDOsForAL } from '../do/data.js';
 import {
   cachedConsents,
   fetchConsents,
@@ -43,11 +43,12 @@ export default function ScanModule() {
   const [lastInfo, setLastInfo] = useState({ key: 'scan.waitingFirst' });
 
   // Issue DO popup state (opens the DO entry form in-place, no navigation).
-  const [doEntry, setDoEntry] = useState(null); // { al, suggestQty }
+  const [doEntry, setDoEntry] = useState(null); // { al, suggestQty, consentId }
   const [doPlots, setDoPlots] = useState([]);
   const [doBreeds, setDoBreeds] = useState([]);
   const [issuing, setIssuing] = useState(false);
   const [printPrompt, setPrintPrompt] = useState(null);
+  const [activeDOs, setActiveDOs] = useState([]);
 
   const progressRef = useRef(progress);
   progressRef.current = progress;
@@ -70,8 +71,8 @@ export default function ScanModule() {
   const sync = useCallback(async () => {
     setSyncing(true);
     try {
-      // Flush any DOs queued offline or from a silent save error so they
-      // reach shared_do_records and appear in the AI system's DO module.
+      // Flush any DOs queued offline so they reach shared_do_records and appear
+      // in the AI system's DO module.
       await flushDOQueue().catch(() => {});
       const [data, today] = await Promise.all([fetchConsents(), fetchTodayBookingALs().catch(() => null)]);
       setServerConsents(data);
@@ -90,6 +91,17 @@ export default function ScanModule() {
     if (navigator.onLine) sync();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Load issued DOs for the active consent's AL when the scanner view is open.
+  useEffect(() => {
+    const alNumber = active?.al_number;
+    if (!alNumber || /^MANUAL-/i.test(alNumber)) {
+      setActiveDOs([]);
+      return;
+    }
+    if (!navigator.onLine) return;
+    loadDOsForAL(alNumber).then(setActiveDOs).catch(() => {});
+  }, [active?.al_number]);
 
   // Reset dedupe + seen set when switching consent.
   useEffect(() => {
@@ -182,7 +194,7 @@ export default function ScanModule() {
         order_number: consent.order_number || '',
         product_name: '',
         quantity_ordered: consent.qty || null,
-        balance_quantity: 999999, // no linked AL to deduct from
+        balance_quantity: 999999,
       };
     }
     let plots = cacheGet('do_plots')?.value || [];
@@ -201,25 +213,35 @@ export default function ScanModule() {
     setDoPlots(plots);
     setDoBreeds(breeds);
     setIssuing(false);
-    setDoEntry({ al, suggestQty: consent.unique || 0, consentId: consent.id });
+    // Suggest remaining qty: total scanned minus already-issued qty.
+    const issuedQty = progress[consent.id]?.issuedQty || 0;
+    const suggestQty = Math.max(0, consent.unique - issuedQty);
+    setDoEntry({ al, suggestQty, consentId: consent.id });
   }
 
   function onDoSaved(payload, sigDataUrl, queued) {
     const al = doEntry?.al || {};
     const consentId = doEntry?.consentId;
     setDoEntry(null);
-    // Mark this consent's DO as issued → it drops off the scan list.
+    // Mark DO as issued and track cumulative issued qty so second+ DOs suggest the correct remaining.
     if (consentId) {
       setProgress((prev) => {
         const cur = prev[consentId] || defaultProgress();
-        const map = { ...prev, [consentId]: { ...cur, doIssued: true } };
+        const map = {
+          ...prev,
+          [consentId]: {
+            ...cur,
+            doIssued: true,
+            issuedQty: (cur.issuedQty || 0) + (payload.total_qty || 0),
+          },
+        };
         saveProgress(map);
         return map;
       });
     }
-    setActiveId(null); // back to the list (issued consent now removed)
+    setActiveId(null);
     flash(queued ? t('do.savedOffline') : t('do.doSavedToast', { do: payload.do_number }), 'done');
-    setPrintPrompt({ payload, sigDataUrl, al });
+    setPrintPrompt({ payload, sigDataUrl, al, plots: doPlots });
   }
 
   function doPrint(pp) {
@@ -230,14 +252,35 @@ export default function ScanModule() {
   function shareWhatsApp(pp) {
     const p = pp.payload;
     const al = pp.al || {};
+    const plots = pp.plots || [];
     const customer = al.customer_name || p.remark || '—';
+    const orderNumber = al.order_number || '—';
+
     const lines = [
       '*MJM Nursery — Delivery Order*',
-      `DO: ${p.do_number}`,
+      `Order No: ${orderNumber}`,
+      `DO No: ${p.do_number}`,
       `Customer: ${customer}`,
       `Date: ${p.delivery_date || '—'}`,
-      `Total Qty: ${p.total_qty || 0}`,
+      '',
+      '*Items:*',
     ];
+
+    for (let i = 1; i <= 5; i++) {
+      const plotName = p[`plot_${i}`];
+      const breed = p[`breed_${i}`];
+      const qty = p[`qty_${i}`];
+      if (!plotName && !breed && !qty) continue;
+      const nurseryName = plots.find((pl) => pl.plot_name === plotName)?.nursery_name || '';
+      const parts = [];
+      if (nurseryName) parts.push(`Nursery: ${nurseryName}`);
+      if (plotName) parts.push(`Plot: ${plotName}`);
+      if (breed) parts.push(`Breed: ${breed}`);
+      if (qty) parts.push(`Qty: ${qty}`);
+      lines.push(parts.join(', '));
+    }
+
+    lines.push('', `*Total Qty: ${p.total_qty || 0}*`);
     window.open(`https://wa.me/?text=${encodeURIComponent(lines.join('\n'))}`, '_blank');
   }
 
@@ -249,6 +292,7 @@ export default function ScanModule() {
           consent={active}
           lastInfo={lastInfo}
           issuing={issuing}
+          activeDOs={activeDOs}
           onScan={recordScan}
           onBack={() => setActiveId(null)}
           onIssueDO={() => openIssueDO(active)}
@@ -323,14 +367,14 @@ export default function ScanModule() {
   );
 }
 
-// ── Consent list view (synced from signed consents) ──────────
+// ── Consent list view (synced from signed consents) ────────────────
 function ConsentList({ consents, todayALs = {}, loaded, syncing, onSync, onOpen }) {
   const { t } = useLang();
   const [query, setQuery] = useState('');
   const order = { over: 0, progress: 1, pending: 2, done: 3 };
   const bookedToday = (c) => c.al_number && c.al_number in todayALs;
-  // Once a DO is issued for a consent, it drops off the list.
-  const pending = consents.filter((c) => !c.doIssued);
+  // Keep consents that have never had a DO issued, or still have unsealed qty remaining.
+  const pending = consents.filter((c) => !c.doIssued || c.unique < c.qty);
   // Priority: today's collections first (by booking time), then the rest.
   const sorted = pending.slice().sort((a, b) => {
     const ta = bookedToday(a) ? 0 : 1;
@@ -433,8 +477,8 @@ function ConsentList({ consents, todayALs = {}, loaded, syncing, onSync, onOpen 
   );
 }
 
-// ── Scanner view ─────────────────────────────────────────────
-function Scanner({ consent, lastInfo, issuing, onScan, onBack, onIssueDO }) {
+// ── Scanner view ──────────────────────────────────────
+function Scanner({ consent, lastInfo, issuing, activeDOs, onScan, onBack, onIssueDO }) {
   const { t } = useLang();
   const [scanning, setScanning] = useState(false);
   const [statusKey, setStatusKey] = useState('ready');
@@ -680,10 +724,28 @@ function Scanner({ consent, lastInfo, issuing, onScan, onBack, onIssueDO }) {
           await stopCamera();
           onIssueDO();
         }}
-        className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white font-mono font-bold text-sm uppercase tracking-wider rounded-xl py-4 mb-2 flex items-center justify-center gap-2"
+        className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white font-mono font-bold text-sm uppercase tracking-wider rounded-xl py-4 mb-3 flex items-center justify-center gap-2"
       >
         📋 {issuing ? t('do.saving') : t('scan.issueDO')}
       </button>
+
+      {/* Issued DO history for this AL */}
+      {activeDOs.length > 0 && (
+        <div className="bg-[#0f1620] border border-[#1f2a38] rounded-2xl p-4 mb-3">
+          <div className="font-mono text-[11px] tracking-[0.3em] text-slate-400 uppercase mb-2">
+            {t('scan.issuedDOs')}
+          </div>
+          <div className="space-y-1.5">
+            {activeDOs.map((d) => (
+              <div key={d.id} className="flex justify-between items-center gap-2 py-1.5 border-b border-[#1f2a38] last:border-0">
+                <span className="font-mono text-xs text-slate-200 flex-1 min-w-0 truncate">{d.do_number}</span>
+                <span className="font-mono text-[10px] text-slate-400 shrink-0">{d.delivery_date || '—'}</span>
+                <span className="font-mono text-[10px] text-emerald-400 shrink-0">{t('scan.qty')} {d.total_qty}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

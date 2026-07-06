@@ -115,6 +115,7 @@ const en = {
   'scan.error': 'ERROR',
   'scan.cameraError': 'Camera error: {msg}',
   'scan.shareWhatsApp': '📲 Share via WhatsApp',
+  'scan.issuedDOs': 'Issued DOs',
 
   // DO module
   'do.headerTitle': 'Issue Collection DO — Sign & Print',
@@ -173,10 +174,11 @@ const en = {
   'do.customerNameLabel': 'Customer Name',
   'do.match': '✓ Match',
   'do.mismatch': '⚠ Mismatch',
-  'do.itemsLabel': 'Items (Plot · Breed · Qty)',
+  'do.itemsLabel': 'Items (Nursery · Plot · Breed · Qty)',
   'do.itemLabel': 'Item',
   'do.maxRowsNote': 'max 5 rows',
   'do.addRow': '+ Add Row',
+  'do.nurserySelectPlaceholder': 'Select Nursery',
   'do.plotPlaceholder': 'Select Plot',
   'do.nurseryPlaceholder': 'Nursery / Farm',
   'do.breedPlaceholder': 'Breed / Plant',
@@ -324,6 +326,7 @@ const ms = {
   'scan.error': 'RALAT',
   'scan.cameraError': 'Ralat kamera: {msg}',
   'scan.shareWhatsApp': '📲 Kongsi via WhatsApp',
+  'scan.issuedDOs': 'DO Dikeluarkan',
 
   // DO module
   'do.headerTitle': 'Isu Kutipan DO — Tandatangan & Cetak',
@@ -382,10 +385,11 @@ const ms = {
   'do.customerNameLabel': 'Nama Pelanggan',
   'do.match': '✓ Padan',
   'do.mismatch': '⚠ Tidak Padan',
-  'do.itemsLabel': 'Item (Plot · Baka · Kuantiti)',
+  'do.itemsLabel': 'Item (Nurseri · Plot · Baka · Kuantiti)',
   'do.itemLabel': 'Item',
   'do.maxRowsNote': 'maks 5 baris',
   'do.addRow': '+ Tambah Baris',
+  'do.nurserySelectPlaceholder': 'Pilih Nurseri',
   'do.plotPlaceholder': 'Pilih Plot',
   'do.nurseryPlaceholder': 'Nurseri / Ladang',
   'do.breedPlaceholder': 'Baka / Tumbuhan',
