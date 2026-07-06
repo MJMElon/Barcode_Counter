@@ -105,6 +105,7 @@ export function mergeConsents(serverList, progress) {
       completedFired: !!p.completedFired,
       overFired: !!p.overFired,
       doIssued: !!p.doIssued,
+      issuedQty: p.issuedQty || 0,
     };
   });
 }
