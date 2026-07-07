@@ -6,7 +6,7 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { cacheGet, cacheSet } from '../../lib/cache.js';
 import { printDO } from '../../lib/pdf.js';
 import EntryModal from '../do/EntryModal.jsx';
-import { loadALByNumber, loadDropdownData, persistDO, flushDOQueue, loadDOsForAL } from '../do/data.js';
+import { loadALByNumber, loadDropdownData, persistDO, flushDOQueue, loadDOsForAL, loadConsentsForAL } from '../do/data.js';
 import {
   cachedConsents,
   fetchConsents,
@@ -497,6 +497,8 @@ function Scanner({ consent, lastInfo, issuing, activeDOs, onScan, onBack, onIssu
   const [scanning, setScanning] = useState(false);
   const [statusKey, setStatusKey] = useState('ready');
   const [viewDO, setViewDO] = useState(null);
+  const [viewConsents, setViewConsents] = useState(null); // null=not loaded, []=empty
+  const [loadingConsents, setLoadingConsents] = useState(false);
   const qrRef = useRef(null);
   const trackRef = useRef(null);
   const camStateRef = useRef('idle');
@@ -518,6 +520,31 @@ function Scanner({ consent, lastInfo, issuing, activeDOs, onScan, onBack, onIssu
       ? t('scan.statusDone')
       : t('scan.scanning')
     : t('scan.' + statusKey);
+
+  // Open the DO detail modal and load the matching consent record.
+  async function handleViewDO(d) {
+    setViewDO(d);
+    setViewConsents(null);
+    const alNum = d.al_number || consent.al_number;
+    if (!alNum || /^MANUAL-/i.test(alNum) || !navigator.onLine) {
+      setViewConsents([]);
+      return;
+    }
+    setLoadingConsents(true);
+    try {
+      const cs = await loadConsentsForAL(alNum);
+      setViewConsents(cs);
+    } catch (e) {
+      setViewConsents([]);
+    } finally {
+      setLoadingConsents(false);
+    }
+  }
+
+  function closeViewDO() {
+    setViewDO(null);
+    setViewConsents(null);
+  }
 
   async function startCamera() {
     if (camStateRef.current !== 'idle') return;
@@ -745,7 +772,7 @@ function Scanner({ consent, lastInfo, issuing, activeDOs, onScan, onBack, onIssu
             {activeDOs.map((d) => (
               <div
                 key={d.id}
-                onClick={() => setViewDO(d)}
+                onClick={() => handleViewDO(d)}
                 className="flex justify-between items-center gap-2 py-1.5 border-b border-[#1f2a38] last:border-0 cursor-pointer hover:bg-[#1a2332] rounded-lg px-1 -mx-1 transition-colors"
               >
                 <span className="font-mono text-xs text-slate-200 flex-1 min-w-0 truncate">{d.do_number}</span>
@@ -761,46 +788,127 @@ function Scanner({ consent, lastInfo, issuing, activeDOs, onScan, onBack, onIssu
       {viewDO && (
         <div
           className="fixed inset-0 bg-black/80 z-50 flex items-end sm:items-center justify-center p-4"
-          onClick={() => setViewDO(null)}
+          onClick={closeViewDO}
         >
           <div
-            className="bg-[#0f1620] border border-[#1f2a38] rounded-3xl p-5 w-full max-w-md"
+            className="bg-[#0f1620] border border-[#1f2a38] rounded-3xl w-full max-w-md max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex justify-between items-start mb-4">
+            {/* Header */}
+            <div className="sticky top-0 bg-[#0f1620] border-b border-[#1f2a38] rounded-t-3xl px-5 pt-5 pb-4 flex justify-between items-start">
               <div>
                 <div className="font-mono text-[9px] tracking-[0.3em] text-slate-400 uppercase mb-1">Issued DO</div>
                 <div className="font-mono text-base font-extrabold text-white">{viewDO.do_number}</div>
+                <div className="font-mono text-[10px] text-slate-400 mt-0.5">
+                  {viewDO.delivery_date || '—'}
+                  <span className="text-emerald-400 font-bold ml-3">Total: {viewDO.total_qty}</span>
+                </div>
               </div>
               <button
-                onClick={() => setViewDO(null)}
-                className="w-8 h-8 rounded-xl bg-[#1f2a38] text-slate-300 hover:text-white font-bold flex items-center justify-center"
+                onClick={closeViewDO}
+                className="w-8 h-8 rounded-xl bg-[#1f2a38] text-slate-300 hover:text-white font-bold flex items-center justify-center shrink-0"
               >
                 ✕
               </button>
             </div>
-            <div className="flex justify-between font-mono text-xs text-slate-400 mb-4 pb-3 border-b border-[#1f2a38]">
-              <span>{viewDO.delivery_date || '—'}</span>
-              <span className="text-emerald-400 font-bold">Total: {viewDO.total_qty}</span>
-            </div>
-            <div className="space-y-2">
-              {[1, 2, 3, 4, 5]
-                .filter((n) => viewDO[`plot_${n}`] || viewDO[`breed_${n}`] || viewDO[`qty_${n}`])
-                .map((n) => (
-                  <div key={n} className="bg-[#0a0f14] border border-[#1f2a38] rounded-xl px-3 py-2.5">
-                    <div className="flex justify-between items-center">
-                      <div className="font-mono text-xs">
-                        {viewDO[`plot_${n}`] && <span className="text-slate-200">{viewDO[`plot_${n}`]}</span>}
-                        {viewDO[`breed_${n}`] && <span className="text-slate-400 ml-2">· {viewDO[`breed_${n}`]}</span>}
+
+            <div className="p-5 space-y-4">
+              {/* DO items */}
+              <div className="space-y-2">
+                {[1, 2, 3, 4, 5]
+                  .filter((n) => viewDO[`plot_${n}`] || viewDO[`breed_${n}`] || viewDO[`qty_${n}`])
+                  .map((n) => (
+                    <div key={n} className="bg-[#0a0f14] border border-[#1f2a38] rounded-xl px-3 py-2.5">
+                      <div className="flex justify-between items-center">
+                        <div className="font-mono text-xs">
+                          {viewDO[`plot_${n}`] && <span className="text-slate-200">{viewDO[`plot_${n}`]}</span>}
+                          {viewDO[`breed_${n}`] && <span className="text-slate-400 ml-2">· {viewDO[`breed_${n}`]}</span>}
+                        </div>
+                        <span className="font-mono text-sm font-bold text-emerald-400 ml-3">×{viewDO[`qty_${n}`]}</span>
                       </div>
-                      <span className="font-mono text-sm font-bold text-emerald-400 ml-3">×{viewDO[`qty_${n}`]}</span>
                     </div>
-                  </div>
-                ))}
+                  ))}
+              </div>
+              {viewDO.remark && (
+                <div className="font-mono text-[10px] text-slate-400">{viewDO.remark}</div>
+              )}
+
+              {/* Signed DO photo */}
+              {viewDO.image_url && (
+                <div>
+                  <div className="font-mono text-[9px] tracking-[0.3em] text-slate-400 uppercase mb-2">📄 Signed DO</div>
+                  <a
+                    href={viewDO.image_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block rounded-2xl overflow-hidden border border-[#1f2a38] hover:border-emerald-500 transition-colors"
+                  >
+                    <img
+                      src={viewDO.image_url}
+                      alt="Signed DO"
+                      className="w-full object-contain"
+                      style={{ maxHeight: '200px' }}
+                    />
+                    <div className="text-center font-mono text-[9px] text-slate-500 py-1.5">Tap to open full size ↗</div>
+                  </a>
+                </div>
+              )}
+
+              {/* Signed consent */}
+              <div>
+                <div className="font-mono text-[9px] tracking-[0.3em] text-slate-400 uppercase mb-2">✍️ Signed Consent</div>
+                {loadingConsents || viewConsents === null ? (
+                  <div className="font-mono text-[10px] text-slate-500 text-center py-3">Loading…</div>
+                ) : viewConsents.length === 0 ? (
+                  <div className="font-mono text-[10px] text-slate-500 text-center py-3">No consent record found</div>
+                ) : (
+                  viewConsents.map((c, i) => (
+                    <div key={c.id || i} className="bg-[#0a0f14] border border-[#1f2a38] rounded-2xl p-3 mb-2">
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="font-mono text-[9px] text-slate-400">
+                          {c.created_at
+                            ? new Date(c.created_at).toLocaleString('en-MY', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                            : '—'}
+                        </div>
+                        <span className="font-mono text-[10px] font-bold text-emerald-400">{(c.consent_qty || 0)} seedlings</span>
+                      </div>
+                      {/* Sticker photo */}
+                      {c.photo_url && (
+                        <div className="mb-2">
+                          <div className="font-mono text-[8px] text-slate-500 uppercase tracking-widest mb-1">📷 Sticker Photo</div>
+                          <a
+                            href={c.photo_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block rounded-xl overflow-hidden border border-[#1f2a38] hover:border-blue-500 transition-colors"
+                          >
+                            <img
+                              src={c.photo_url}
+                              alt="Sticker photo"
+                              className="w-full object-contain"
+                              style={{ maxHeight: '140px' }}
+                            />
+                          </a>
+                        </div>
+                      )}
+                      {/* Signature */}
+                      {c.signature_data && (
+                        <div>
+                          <div className="font-mono text-[8px] text-slate-500 uppercase tracking-widest mb-1">✍️ Customer Signature</div>
+                          <div className="bg-white rounded-xl p-2">
+                            <img
+                              src={c.signature_data}
+                              alt="Customer Signature"
+                              style={{ height: '52px', maxWidth: '100%', objectFit: 'contain' }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
-            {viewDO.remark && (
-              <div className="mt-3 font-mono text-[10px] text-slate-400">{viewDO.remark}</div>
-            )}
           </div>
         </div>
       )}
