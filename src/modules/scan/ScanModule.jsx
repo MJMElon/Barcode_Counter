@@ -509,7 +509,12 @@ function Scanner({ consent, lastInfo, issuing, activeDOs, onScan, onBack, onIssu
   const serverIssuedQty = activeDOs.reduce((sum, d) => sum + (d.total_qty || 0), 0);
   const issuedQty = Math.max(consent.issuedQty || 0, serverIssuedQty);
   const sessionQty = Math.max(1, consent.qty - issuedQty);
-  const sessionUnique = Math.max(0, consent.unique - issuedQty);
+  // When issuedQty > consent.unique the DO was issued before any scanning (e.g. via
+  // the AI system). In that case every scan in this module counts toward the current
+  // balance, so use consent.unique directly rather than subtracting issuedQty.
+  const sessionUnique = issuedQty > consent.unique
+    ? consent.unique
+    : Math.max(0, consent.unique - issuedQty);
   const remain = Math.max(0, sessionQty - sessionUnique);
   const st = statusOf(consent);
   const pct = sessionQty > 0 ? Math.min(100, (sessionUnique / sessionQty) * 100) : 0;
