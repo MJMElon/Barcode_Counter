@@ -243,20 +243,25 @@ export default function EntryModal({ al, plots, breeds, photoBase64, initialQty,
                             </button>
                           )}
                         </div>
-                        <div className="space-y-2">
-                          {/* Nursery — full width */}
-                          <select
-                            value={r.nursery}
-                            onChange={(e) => updateRow(r.key, 'nursery', e.target.value)}
-                            className="search-input text-sm w-full"
-                            style={{ padding: '8px 12px' }}
-                          >
-                            <option value="">{t('do.nurserySelectPlaceholder')}</option>
+                        <div className="space-y-2.5">
+                          {/* Nursery — button toggle group */}
+                          <div className="flex flex-wrap gap-1.5">
                             {withCurrent(nurseryOptions, r.nursery).map((n) => (
-                              <option key={n} value={n}>{n}</option>
+                              <button
+                                key={n}
+                                type="button"
+                                onClick={() => updateRow(r.key, 'nursery', r.nursery === n ? '' : n)}
+                                className={`px-3 py-1.5 rounded-lg text-[11px] font-black border cursor-pointer transition-colors ${
+                                  r.nursery === n
+                                    ? 'bg-emerald-600 text-white border-emerald-600'
+                                    : 'bg-white text-slate-600 border-slate-300 hover:border-emerald-400'
+                                }`}
+                              >
+                                {n}
+                              </button>
                             ))}
-                          </select>
-                          {/* Plot — full width, filtered by selected nursery */}
+                          </div>
+                          {/* Plot — dropdown, filtered by selected nursery */}
                           <select
                             value={r.plot}
                             onChange={(e) => updateRow(r.key, 'plot', e.target.value)}
@@ -268,29 +273,33 @@ export default function EntryModal({ al, plots, breeds, photoBase64, initialQty,
                               <option key={p} value={p}>{p}</option>
                             ))}
                           </select>
-                          {/* Breed + Qty — side by side */}
-                          <div className="grid grid-cols-2 gap-2">
-                            <select
-                              value={r.breed}
-                              onChange={(e) => updateRow(r.key, 'breed', e.target.value)}
-                              className="search-input text-sm"
-                              style={{ padding: '8px 12px' }}
-                            >
-                              <option value="">{t('do.breedPlaceholder')}</option>
-                              {withCurrent(breedOptions, r.breed).map((b) => (
-                                <option key={b} value={b}>{b}</option>
-                              ))}
-                            </select>
-                            <input
-                              type="number"
-                              min="0"
-                              value={r.qty}
-                              onChange={(e) => updateRow(r.key, 'qty', e.target.value)}
-                              placeholder="0"
-                              className="search-input text-sm"
-                              style={{ padding: '8px 12px' }}
-                            />
+                          {/* Breed — button toggle group */}
+                          <div className="flex flex-wrap gap-1.5">
+                            {withCurrent(breedOptions, r.breed).map((b) => (
+                              <button
+                                key={b}
+                                type="button"
+                                onClick={() => updateRow(r.key, 'breed', r.breed === b ? '' : b)}
+                                className={`px-3 py-1.5 rounded-lg text-[11px] font-black border cursor-pointer transition-colors ${
+                                  r.breed === b
+                                    ? 'bg-blue-600 text-white border-blue-600'
+                                    : 'bg-white text-slate-600 border-slate-300 hover:border-blue-400'
+                                }`}
+                              >
+                                {b}
+                              </button>
+                            ))}
                           </div>
+                          {/* Qty */}
+                          <input
+                            type="number"
+                            min="0"
+                            value={r.qty}
+                            onChange={(e) => updateRow(r.key, 'qty', e.target.value)}
+                            placeholder="0"
+                            className="search-input text-sm w-28"
+                            style={{ padding: '8px 12px' }}
+                          />
                         </div>
                       </div>
                     );

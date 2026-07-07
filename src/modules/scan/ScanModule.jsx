@@ -213,9 +213,11 @@ export default function ScanModule() {
     setDoPlots(plots);
     setDoBreeds(breeds);
     setIssuing(false);
-    // Suggest remaining qty: total scanned minus already-issued qty.
+    // Pre-fill with new scans since last DO; fall back to remaining balance when no new scans yet.
     const issuedQty = progress[consent.id]?.issuedQty || 0;
-    const suggestQty = Math.max(0, consent.unique - issuedQty);
+    const newScans = Math.max(0, consent.unique - issuedQty);
+    const remainingBalance = Math.max(0, consent.qty - issuedQty);
+    const suggestQty = newScans > 0 ? newScans : remainingBalance;
     setDoEntry({ al, suggestQty, consentId: consent.id });
   }
 
@@ -485,6 +487,7 @@ function Scanner({ consent, lastInfo, issuing, activeDOs, onScan, onBack, onIssu
   const { t } = useLang();
   const [scanning, setScanning] = useState(false);
   const [statusKey, setStatusKey] = useState('ready');
+  const [viewDO, setViewDO] = useState(null);
   const qrRef = useRef(null);
   const trackRef = useRef(null);
   const camStateRef = useRef('idle'); // idle | starting | scanning | stopping
@@ -746,12 +749,65 @@ function Scanner({ consent, lastInfo, issuing, activeDOs, onScan, onBack, onIssu
           </div>
           <div className="space-y-1.5">
             {activeDOs.map((d) => (
-              <div key={d.id} className="flex justify-between items-center gap-2 py-1.5 border-b border-[#1f2a38] last:border-0">
+              <div
+                key={d.id}
+                onClick={() => setViewDO(d)}
+                className="flex justify-between items-center gap-2 py-1.5 border-b border-[#1f2a38] last:border-0 cursor-pointer hover:bg-[#1a2332] rounded-lg px-1 -mx-1 transition-colors"
+              >
                 <span className="font-mono text-xs text-slate-200 flex-1 min-w-0 truncate">{d.do_number}</span>
                 <span className="font-mono text-[10px] text-slate-400 shrink-0">{d.delivery_date || '—'}</span>
                 <span className="font-mono text-[10px] text-emerald-400 shrink-0">{t('scan.qty')} {d.total_qty}</span>
+                <span className="font-mono text-[9px] text-slate-500 shrink-0">›</span>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Issued DO detail popup */}
+      {viewDO && (
+        <div
+          className="fixed inset-0 bg-black/80 z-50 flex items-end sm:items-center justify-center p-4"
+          onClick={() => setViewDO(null)}
+        >
+          <div
+            className="bg-[#0f1620] border border-[#1f2a38] rounded-3xl p-5 w-full max-w-md"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <div className="font-mono text-[9px] tracking-[0.3em] text-slate-400 uppercase mb-1">Issued DO</div>
+                <div className="font-mono text-base font-extrabold text-white">{viewDO.do_number}</div>
+              </div>
+              <button
+                onClick={() => setViewDO(null)}
+                className="w-8 h-8 rounded-xl bg-[#1f2a38] text-slate-300 hover:text-white font-bold flex items-center justify-center"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex justify-between font-mono text-xs text-slate-400 mb-4 pb-3 border-b border-[#1f2a38]">
+              <span>{viewDO.delivery_date || '—'}</span>
+              <span className="text-emerald-400 font-bold">Total: {viewDO.total_qty}</span>
+            </div>
+            <div className="space-y-2">
+              {[1, 2, 3, 4, 5]
+                .filter((n) => viewDO[`plot_${n}`] || viewDO[`breed_${n}`] || viewDO[`qty_${n}`])
+                .map((n) => (
+                  <div key={n} className="bg-[#0a0f14] border border-[#1f2a38] rounded-xl px-3 py-2.5">
+                    <div className="flex justify-between items-center">
+                      <div className="font-mono text-xs">
+                        {viewDO[`plot_${n}`] && <span className="text-slate-200">{viewDO[`plot_${n}`]}</span>}
+                        {viewDO[`breed_${n}`] && <span className="text-slate-400 ml-2">· {viewDO[`breed_${n}`]}</span>}
+                      </div>
+                      <span className="font-mono text-sm font-bold text-emerald-400 ml-3">×{viewDO[`qty_${n}`]}</span>
+                    </div>
+                  </div>
+                ))}
+            </div>
+            {viewDO.remark && (
+              <div className="mt-3 font-mono text-[10px] text-slate-400">{viewDO.remark}</div>
+            )}
           </div>
         </div>
       )}
