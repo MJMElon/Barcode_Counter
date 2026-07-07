@@ -71,8 +71,6 @@ export default function ScanModule() {
   const sync = useCallback(async () => {
     setSyncing(true);
     try {
-      // Flush any DOs queued offline so they reach shared_do_records and appear
-      // in the AI system's DO module.
       await flushDOQueue().catch(() => {});
       const [data, today] = await Promise.all([fetchConsents(), fetchTodayBookingALs().catch(() => null)]);
       setServerConsents(data);
@@ -85,25 +83,40 @@ export default function ScanModule() {
     }
   }, [flash, t]);
 
-  // Auto-sync on every open when online so newly signed consents appear
-  // without requiring a manual Sync tap.
   useEffect(() => {
     if (navigator.onLine) sync();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Load issued DOs for the active consent's AL when the scanner view is open.
+  // Load issued DOs from the server for the active consent's AL.
+  // Also sync the server-derived total issued qty into localStorage so that the
+  // consent list shows the correct balance even if the DO was issued through the
+  // AI system rather than through this scan module.
   useEffect(() => {
     const alNumber = active?.al_number;
+    const consentId = active?.id;
     if (!alNumber || /^MANUAL-/i.test(alNumber)) {
       setActiveDOs([]);
       return;
     }
     if (!navigator.onLine) return;
-    loadDOsForAL(alNumber).then(setActiveDOs).catch(() => {});
+    loadDOsForAL(alNumber).then((dos) => {
+      setActiveDOs(dos);
+      if (!consentId || !dos.length) return;
+      const serverIssuedQty = dos.reduce((sum, d) => sum + (d.total_qty || 0), 0);
+      setProgress((prev) => {
+        const cur = prev[consentId] || defaultProgress();
+        if ((cur.issuedQty || 0) >= serverIssuedQty) return prev;
+        const map = {
+          ...prev,
+          [consentId]: { ...cur, issuedQty: serverIssuedQty, doIssued: serverIssuedQty > 0 },
+        };
+        saveProgress(map);
+        return map;
+      });
+    }).catch(() => {});
   }, [active?.al_number]);
 
-  // Reset dedupe + seen set when switching consent.
   useEffect(() => {
     seenRef.current = new Set(progressRef.current[activeId]?.seen || []);
     lastCodeRef.current = '';
@@ -174,9 +187,6 @@ export default function ScanModule() {
     [flash, t]
   );
 
-  // Open the DO entry popup for the active consent's order. Looks up the real
-  // AL row (for balance + id) so the DO writes to the same shared_do_records the
-  // mobile DO module uses. Falls back to a minimal record if the AL isn't found.
   async function openIssueDO(consent) {
     if (!consent || issuing) return;
     setIssuing(true);
@@ -213,8 +223,9 @@ export default function ScanModule() {
     setDoPlots(plots);
     setDoBreeds(breeds);
     setIssuing(false);
-    // Pre-fill with new scans since last DO; fall back to remaining balance when no new scans yet.
-    const issuedQty = progress[consent.id]?.issuedQty || 0;
+    // Use the higher of localStorage-tracked qty and server-derived qty from activeDOs.
+    const serverIssuedQty = activeDOs.reduce((sum, d) => sum + (d.total_qty || 0), 0);
+    const issuedQty = Math.max(progress[consent.id]?.issuedQty || 0, serverIssuedQty);
     const newScans = Math.max(0, consent.unique - issuedQty);
     const remainingBalance = Math.max(0, consent.qty - issuedQty);
     const suggestQty = newScans > 0 ? newScans : remainingBalance;
@@ -225,7 +236,6 @@ export default function ScanModule() {
     const al = doEntry?.al || {};
     const consentId = doEntry?.consentId;
     setDoEntry(null);
-    // Mark DO as issued and track cumulative issued qty so second+ DOs suggest the correct remaining.
     if (consentId) {
       setProgress((prev) => {
         const cur = prev[consentId] || defaultProgress();
@@ -303,7 +313,6 @@ export default function ScanModule() {
         <ConsentList consents={consents} todayALs={todayALs} loaded={serverConsents !== null} syncing={syncing} onSync={sync} onOpen={setActiveId} />
       )}
 
-      {/* Issue DO popup — writes to the same shared_do_records as the mobile DO module */}
       {doEntry && (
         <EntryModal
           al={doEntry.al}
@@ -369,15 +378,13 @@ export default function ScanModule() {
   );
 }
 
-// ── Consent list view (synced from signed consents) ────────────────
+// ── Consent list view ──────────────────────────────────────────
 function ConsentList({ consents, todayALs = {}, loaded, syncing, onSync, onOpen }) {
   const { t } = useLang();
   const [query, setQuery] = useState('');
   const order = { over: 0, progress: 1, pending: 2, done: 3 };
   const bookedToday = (c) => c.al_number && c.al_number in todayALs;
-  // Keep consents where no DO has been issued yet, or where total issued qty is still less than consent qty.
   const pending = consents.filter((c) => !c.doIssued || (c.issuedQty || 0) < c.qty);
-  // Priority: today's collections first (by booking time), then the rest.
   const sorted = pending.slice().sort((a, b) => {
     const ta = bookedToday(a) ? 0 : 1;
     const tb = bookedToday(b) ? 0 : 1;
@@ -431,6 +438,8 @@ function ConsentList({ consents, todayALs = {}, loaded, syncing, onSync, onOpen 
           filtered.map((c) => {
             const st = statusOf(c);
             const pct = c.qty > 0 ? Math.min(100, (c.unique / c.qty) * 100) : 0;
+            const collected = c.issuedQty || 0;
+            const balance = c.qty - collected;
             return (
               <button
                 key={c.id}
@@ -453,13 +462,13 @@ function ConsentList({ consents, todayALs = {}, loaded, syncing, onSync, onOpen 
                 <div className="font-mono text-[11px] text-slate-400 mt-1.5">
                   <span
                     className={`inline-block px-2 py-0.5 rounded-full border mr-1.5 text-[10px] tracking-widest ${
-                      c.unique > (c.issuedQty || 0) ? 'text-amber-300 border-amber-400' : 'text-slate-400 border-[#1f2a38]'
+                      c.unique > collected ? 'text-amber-300 border-amber-400' : 'text-slate-400 border-[#1f2a38]'
                     }`}
                   >
-                    {c.unique > (c.issuedQty || 0) ? t('scan.pendingIssueDO') : t('scan.pendingToScan')}
+                    {c.unique > collected ? t('scan.pendingIssueDO') : t('scan.pendingToScan')}
                   </span>
-                  {(c.issuedQty || 0) > 0 && (c.issuedQty || 0) < c.qty
-                    ? <>{t('scan.remaining')} <b className="text-amber-300">{c.qty - (c.issuedQty || 0)}</b> · {t('scan.qty')} {c.qty}</>
+                  {collected > 0 && balance > 0
+                    ? <>{t('scan.qty')} {c.qty} · Collected <b className="text-emerald-300">{collected}</b> · Balance <b className="text-amber-300">{balance}</b></>
                     : <>{t('scan.qty')} <b className="text-slate-200">{c.qty}</b> · {t('scan.scanned')} <b className="text-slate-200">{c.unique}</b></>
                   }
                   {c.over ? (
@@ -490,11 +499,13 @@ function Scanner({ consent, lastInfo, issuing, activeDOs, onScan, onBack, onIssu
   const [viewDO, setViewDO] = useState(null);
   const qrRef = useRef(null);
   const trackRef = useRef(null);
-  const camStateRef = useRef('idle'); // idle | starting | scanning | stopping
+  const camStateRef = useRef('idle');
   const cancelRef = useRef(false);
 
-  // Session-relative progress: only counts scans since the last issued DO.
-  const issuedQty = consent.issuedQty || 0;
+  // Use the higher of localStorage-tracked qty and server-derived qty from activeDOs.
+  // This ensures the correct balance even when DOs were issued through the AI system.
+  const serverIssuedQty = activeDOs.reduce((sum, d) => sum + (d.total_qty || 0), 0);
+  const issuedQty = Math.max(consent.issuedQty || 0, serverIssuedQty);
   const sessionQty = Math.max(1, consent.qty - issuedQty);
   const sessionUnique = Math.max(0, consent.unique - issuedQty);
   const remain = Math.max(0, sessionQty - sessionUnique);
@@ -555,11 +566,7 @@ function Scanner({ consent, lastInfo, issuing, activeDOs, onScan, onBack, onIssu
         break;
       } catch (e) {
         lastErr = e;
-        try {
-          await qr.clear();
-        } catch (_) {
-          /* ignore */
-        }
+        try { await qr.clear(); } catch (_) { /* ignore */ }
       }
     }
     if (!started) {
@@ -567,12 +574,7 @@ function Scanner({ consent, lastInfo, issuing, activeDOs, onScan, onBack, onIssu
       throw lastErr || new Error('No camera available');
     }
     if (cancelRef.current) {
-      try {
-        await qrRef.current.stop();
-        await qrRef.current.clear();
-      } catch (_) {
-        /* ignore */
-      }
+      try { await qrRef.current.stop(); await qrRef.current.clear(); } catch (_) { /* ignore */ }
       qrRef.current = null;
       camStateRef.current = 'idle';
       return;
@@ -582,9 +584,7 @@ function Scanner({ consent, lastInfo, issuing, activeDOs, onScan, onBack, onIssu
       const track = document.querySelector('#reader video')?.srcObject?.getVideoTracks?.()[0];
       trackRef.current = track || null;
       if (track?.applyConstraints) await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
-    } catch (e) {
-      /* optional */
-    }
+    } catch (e) { /* optional */ }
     camStateRef.current = 'scanning';
     setScanning(true);
     setStatusKey('scanning');
@@ -605,9 +605,7 @@ function Scanner({ consent, lastInfo, issuing, activeDOs, onScan, onBack, onIssu
         await track.applyConstraints({ advanced: [{ focusMode: 'manual' }] }).catch(() => {});
         await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
       }
-    } catch (e) {
-      /* device doesn't support focus control */
-    }
+    } catch (e) { /* device doesn't support focus control */ }
   }
 
   async function stopCamera() {
@@ -620,9 +618,7 @@ function Scanner({ consent, lastInfo, issuing, activeDOs, onScan, onBack, onIssu
         await qrRef.current.stop();
         await qrRef.current.clear();
       }
-    } catch (e) {
-      /* ignore */
-    }
+    } catch (e) { /* ignore */ }
     qrRef.current = null;
     camStateRef.current = 'idle';
     setScanning(false);
@@ -653,7 +649,7 @@ function Scanner({ consent, lastInfo, issuing, activeDOs, onScan, onBack, onIssu
           <h2 className="text-lg font-bold leading-tight break-words">{consent.customer}</h2>
           <div className="font-mono text-[11px] text-slate-400">
             {issuedQty > 0
-              ? `${t('scan.remaining')} ${consent.qty - issuedQty} / ${consent.qty}`
+              ? `${t('scan.qty')} ${consent.qty} · Collected ${issuedQty} · Balance ${consent.qty - issuedQty}`
               : `${t('scan.qty')} ${consent.qty}`}
             {consent.al_number && !/^MANUAL-/i.test(consent.al_number) ? ` · ${consent.al_number}` : ''}
           </div>
@@ -729,7 +725,6 @@ function Scanner({ consent, lastInfo, issuing, activeDOs, onScan, onBack, onIssu
         </div>
       </div>
 
-      {/* Issue DO for the collected seedlings */}
       <button
         disabled={issuing}
         onClick={async () => {
@@ -741,7 +736,6 @@ function Scanner({ consent, lastInfo, issuing, activeDOs, onScan, onBack, onIssu
         📋 {issuing ? t('do.saving') : t('scan.issueDO')}
       </button>
 
-      {/* Issued DO history for this AL */}
       {activeDOs.length > 0 && (
         <div className="bg-[#0f1620] border border-[#1f2a38] rounded-2xl p-4 mb-3">
           <div className="font-mono text-[11px] tracking-[0.3em] text-slate-400 uppercase mb-2">
@@ -764,7 +758,6 @@ function Scanner({ consent, lastInfo, issuing, activeDOs, onScan, onBack, onIssu
         </div>
       )}
 
-      {/* Issued DO detail popup */}
       {viewDO && (
         <div
           className="fixed inset-0 bg-black/80 z-50 flex items-end sm:items-center justify-center p-4"
