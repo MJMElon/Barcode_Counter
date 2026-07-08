@@ -1,4 +1,5 @@
 import { supabase } from '../../lib/supabase.js';
+import { doPdfBlob } from '../../lib/pdf.js';
 
 // ── Active Approval Letters (AL) ──────────────────────────────
 export async function loadActiveALs() {
@@ -111,21 +112,56 @@ export async function loadALByNumber(alNumber) {
   return data || null;
 }
 
-// Persist a DO: online insert (+ photo upload + balance deduct) or, on
-// no-network / failure, queue it for the next sync. Shared by the DO module and
-// the scan module's Issue DO popup. Returns { queued, payload }.
-export async function persistDO({ payload, photoBase64, al }) {
+// Attach the issued DO to its Sales Web customer order so the customer portal
+// shows it under the order's documents: build the DO PDF, upload it to the
+// shared `order-attachments` bucket, then call the attach_do_to_order RPC
+// (SECURITY DEFINER on the Sales Web side) which resolves the order from the
+// AL number and inserts the salesweb_order_attachments + timeline rows.
+// Best-effort: a failure here never blocks the DO itself. Returns true when
+// the attachment row landed.
+export async function attachDOToOrder({ payload, al, staff, sigDataUrl }) {
+  try {
+    const alNumber = payload.al_number || al?.al_number;
+    // Manual ALs have no Sales Web order to attach to.
+    if (!alNumber || !payload.do_number || /^MANUAL-/i.test(alNumber)) return false;
+    const { blob, fileName } = doPdfBlob(payload, al || {}, staff || '—', sigDataUrl || null);
+    const path = `do-pdfs/${alNumber}/${payload.do_number.replace(/[/\\]/g, '_')}.pdf`;
+    const { error: upErr } = await supabase.storage
+      .from('order-attachments')
+      .upload(path, blob, { contentType: 'application/pdf', upsert: true });
+    if (upErr) return false;
+    const { data: urlData } = supabase.storage.from('order-attachments').getPublicUrl(path);
+    if (!urlData?.publicUrl) return false;
+    const { data, error } = await supabase.rpc('attach_do_to_order', {
+      _al_number: alNumber,
+      _do_number: payload.do_number,
+      _file_name: fileName,
+      _file_url: urlData.publicUrl,
+      _file_size: blob.size,
+      _uploaded_by: staff || 'barcode-counter',
+    });
+    return !error && data === true;
+  } catch (e) {
+    return false;
+  }
+}
+
+// Persist a DO: online insert (+ photo upload + balance deduct + customer-order
+// attachment) or, on no-network / failure, queue it for the next sync. Shared
+// by the DO module and the scan module's Issue DO popup. Returns { queued, payload }.
+export async function persistDO({ payload, photoBase64, al, sigDataUrl, staff }) {
   if (navigator.onLine) {
     try {
       const finalPayload = { ...payload };
       if (photoBase64) finalPayload.image_url = await uploadDOPhoto(photoBase64, al.al_number, payload.do_number);
       await saveDORecord(finalPayload, al);
+      await attachDOToOrder({ payload: finalPayload, al, staff, sigDataUrl });
       return { queued: false, payload: finalPayload };
     } catch (e) {
       /* fall through to offline queue */
     }
   }
-  queueDO({ payload, photoBase64 });
+  queueDO({ payload, photoBase64, sigDataUrl, staff });
   return { queued: true, payload };
 }
 
@@ -201,7 +237,7 @@ export async function flushDOQueue() {
       }
       const { data: alRow } = await supabase
         .from('shared_al_orders')
-        .select('id, balance_quantity')
+        .select('*')
         .eq('al_number', payload.al_number)
         .maybeSingle();
       if (alRow) {
@@ -210,6 +246,7 @@ export async function flushDOQueue() {
           .update({ balance_quantity: (alRow.balance_quantity || 0) - (payload.total_qty || 0) })
           .eq('id', alRow.id);
       }
+      await attachDOToOrder({ payload, al: alRow || { al_number: payload.al_number }, staff: item.staff, sigDataUrl: item.sigDataUrl });
       synced++;
     } catch (e) {
       remaining.push(item);

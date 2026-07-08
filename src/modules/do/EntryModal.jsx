@@ -139,7 +139,7 @@ export default function EntryModal({ al, plots, breeds, photoBase64, initialQty,
 
     let res;
     try {
-      res = await onSubmit({ payload, photoBase64: capturedPhoto || photoBase64, al });
+      res = await onSubmit({ payload, photoBase64: capturedPhoto || photoBase64, al, sigDataUrl });
     } catch (e) {
       setSaving(false);
       return alert(t('do.saveError', { msg: e.message }));

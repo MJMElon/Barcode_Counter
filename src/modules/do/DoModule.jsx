@@ -96,8 +96,8 @@ export default function DoModule() {
   }, 60000);
 
   // Online insert, falling back to the offline queue on no-network / failure.
-  async function submitDO({ payload, photoBase64, al }) {
-    const res = await persistDO({ payload, photoBase64, al });
+  async function submitDO({ payload, photoBase64, al, sigDataUrl }) {
+    const res = await persistDO({ payload, photoBase64, al, sigDataUrl, staff: staffName });
     if (res.queued) {
       // Optimistically reflect the deducted balance in the cached list.
       setAls((prev) => {

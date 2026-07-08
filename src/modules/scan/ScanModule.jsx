@@ -321,7 +321,7 @@ export default function ScanModule() {
           photoBase64={null}
           initialQty={doEntry.suggestQty}
           toast={(m) => flash(m, 'warn')}
-          onSubmit={persistDO}
+          onSubmit={(args) => persistDO({ ...args, staff: staffName })}
           onSaved={onDoSaved}
           onClose={() => setDoEntry(null)}
         />

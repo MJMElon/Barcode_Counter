@@ -1,10 +1,11 @@
 import { jsPDF } from 'jspdf';
 
-// Generates and downloads a Delivery Order PDF. Ported from the original
+// Builds the Delivery Order PDF document. Ported from the original
 // do_signing.html printDO(). `al` is the matching shared_al_orders row (may be
 // partial), `staff` is the signed-in staff display name, `sigDataUrl` is an
-// optional PNG data-URL of the customer signature.
-export function printDO(doRec, al = {}, staff = '—', sigDataUrl = null) {
+// optional PNG data-URL of the customer signature. Returns the jsPDF doc so
+// callers can either save (print) it or upload it as a blob.
+export function buildDOPdf(doRec, al = {}, staff = '—', sigDataUrl = null) {
   const doc = new jsPDF();
   const now = new Date();
   const dateFmt = doRec.delivery_date ? new Date(doRec.delivery_date).toLocaleDateString('en-MY') : '—';
@@ -151,5 +152,22 @@ export function printDO(doRec, al = {}, staff = '—', sigDataUrl = null) {
     { align: 'center' }
   );
 
-  doc.save((doRec.do_number || 'DO').replace(/[/\\]/g, '_') + '_' + now.toISOString().slice(0, 10) + '.pdf');
+  return doc;
+}
+
+// Filename used both for the downloaded copy and the uploaded attachment.
+export function doPdfFileName(doRec) {
+  return (doRec.do_number || 'DO').replace(/[/\\]/g, '_') + '_' + new Date().toISOString().slice(0, 10) + '.pdf';
+}
+
+// Generates and downloads the DO PDF (print flow).
+export function printDO(doRec, al = {}, staff = '—', sigDataUrl = null) {
+  buildDOPdf(doRec, al, staff, sigDataUrl).save(doPdfFileName(doRec));
+}
+
+// Generates the DO PDF as a Blob for uploading to storage (order attachment
+// flow). Returns { blob, fileName }.
+export function doPdfBlob(doRec, al = {}, staff = '—', sigDataUrl = null) {
+  const doc = buildDOPdf(doRec, al, staff, sigDataUrl);
+  return { blob: doc.output('blob'), fileName: doPdfFileName(doRec) };
 }
