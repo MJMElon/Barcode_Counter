@@ -1,27 +1,18 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// No service worker / PWA precaching. The previous precaching worker repeatedly
-// served a stale app shell and caused blank pages / reload loops. We ship a
-// plain static site with STABLE asset filenames, plus a self-destruct sw.js
-// (in public/) that removes any leftover worker from earlier versions.
-//
-// Relative base ('./') so the app works whether served from the custom domain
+// Relative base ('./'') so the app works whether served from the custom domain
 // root (scan.mjmnursery.com) OR a project sub-path. Routing uses HashRouter.
+//
+// Content-hashed filenames mean every deploy gets unique asset URLs, so CDN
+// caches are never stale regardless of how aggressively they cache JS/CSS.
+// index.html itself is always fetched fresh (GitHub Pages sets short TTL on
+// HTML, and the in-app ?cb= mechanism handles any edge-case stale shells).
 export default defineConfig({
   base: './',
   plugins: [react()],
   build: {
     outDir: 'dist',
     sourcemap: false,
-    // Fixed (non-hashed) filenames so a slightly stale cached index.html always
-    // finds its script instead of 404-ing and going blank.
-    rollupOptions: {
-      output: {
-        entryFileNames: 'assets/[name].js',
-        chunkFileNames: 'assets/[name].js',
-        assetFileNames: 'assets/[name][extname]',
-      },
-    },
   },
 });
