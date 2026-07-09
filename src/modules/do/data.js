@@ -50,23 +50,26 @@ export async function loadConsentsForAL(alNumber) {
   return data || [];
 }
 
-// Auto-incrementing DO number: DO-YYYY-NNNN
-export async function generateDONumber() {
-  const year = new Date().getFullYear();
-  const prefix = `DO-${year}-`;
+// Per-order running DO number: DO-<orderNo>01, DO-<orderNo>02, … The order
+// number is the AL number for Sales Web orders, so the DO number itself
+// identifies the customer order and the PDF no longer needs a separate
+// Order No. field.
+export async function generateDONumber(al) {
+  const orderNo = String(al?.order_number || al?.al_number || '').trim();
+  if (!orderNo) return `DO-${Date.now().toString(36).toUpperCase()}`;
+  const prefix = `DO-${orderNo}`;
   const { data } = await supabase
     .from('shared_do_records')
     .select('do_number')
-    .ilike('do_number', `${prefix}%`)
-    .not('do_number', 'ilike', `${prefix}OFF%`) // skip offline placeholders
-    .order('do_number', { ascending: false })
-    .limit(1);
-  let next = 1;
-  if (data && data.length) {
-    const num = parseInt(data[0].do_number.slice(prefix.length).replace(/\D/g, '')) || 0;
-    next = num + 1;
-  }
-  return prefix + String(next).padStart(4, '0');
+    .ilike('do_number', `${prefix}%`);
+  let max = 0;
+  (data || []).forEach((r) => {
+    const rest = String(r.do_number || '').slice(prefix.length);
+    if (/OFF/i.test(rest)) return; // skip offline placeholders
+    const num = parseInt(rest.replace(/\D/g, ''), 10) || 0;
+    if (num > max) max = num;
+  });
+  return prefix + String(max + 1).padStart(2, '0');
 }
 
 // Upload a DO photo to the `documents` storage bucket; returns a public URL or
@@ -181,9 +184,11 @@ export function buildItemColumns(items, plots) {
 
 // ── Offline support ──────────────────────────────────────────────────
 // A unique DO number for DOs created while offline (avoids collisions with the
-// server sequence until they sync). Distinguishable by the "OFF" marker.
-export function offlineDONumber() {
-  return `DO-${new Date().getFullYear()}-OFF${Date.now().toString(36).toUpperCase()}`;
+// server sequence until they sync). Distinguishable by the "OFF" marker in the
+// suffix; replaced with the real per-order running number on sync.
+export function offlineDONumber(al) {
+  const orderNo = String(al?.order_number || al?.al_number || '').trim() || 'NA';
+  return `DO-${orderNo}OFF${Date.now().toString(36).toUpperCase()}`;
 }
 
 const DO_QUEUE_KEY = 'mjm.do.queue.v1';
@@ -222,10 +227,16 @@ export async function flushDOQueue() {
   for (const item of q) {
     try {
       const payload = { ...item.payload };
-      // Replace offline placeholder numbers with a proper sequential number now
-      // that we are online. The loop is sequential so each DO gets a unique number.
+      const { data: alRow } = await supabase
+        .from('shared_al_orders')
+        .select('*')
+        .eq('al_number', payload.al_number)
+        .maybeSingle();
+      // Replace offline placeholder numbers with the real per-order running
+      // number now that we are online. The loop is sequential so each DO gets
+      // a unique number.
       if (payload.do_number && /OFF/i.test(payload.do_number)) {
-        payload.do_number = await generateDONumber();
+        payload.do_number = await generateDONumber(alRow || { al_number: payload.al_number });
       }
       if (item.photoBase64) {
         payload.image_url = await uploadDOPhoto(item.photoBase64, payload.al_number, payload.do_number);
@@ -235,11 +246,6 @@ export async function flushDOQueue() {
         remaining.push(item);
         continue;
       }
-      const { data: alRow } = await supabase
-        .from('shared_al_orders')
-        .select('*')
-        .eq('al_number', payload.al_number)
-        .maybeSingle();
       if (alRow) {
         await supabase
           .from('shared_al_orders')

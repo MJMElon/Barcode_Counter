@@ -64,12 +64,12 @@ export default function EntryModal({ al, plots, breeds, photoBase64, initialQty,
 
   useEffect(() => {
     if (!navigator.onLine) {
-      setDoNumber(offlineDONumber());
+      setDoNumber(offlineDONumber(al));
       return;
     }
-    generateDONumber()
+    generateDONumber(al)
       .then(setDoNumber)
-      .catch(() => setDoNumber(offlineDONumber()));
+      .catch(() => setDoNumber(offlineDONumber(al)));
   }, []);
 
   useEffect(() => {

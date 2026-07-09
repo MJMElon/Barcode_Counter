@@ -69,25 +69,16 @@ export function buildDOPdf(doRec, al = {}, staff = '—', sigDataUrl = null, pho
   doc.setLineWidth(0.8);
   doc.line(20, 34.5, 190, 34.5);
 
-  // ── Deliver To / Order details ──
-  const labelStyle = () => {
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.setTextColor(...GREY);
-  };
-  labelStyle();
+  // ── Deliver To ── (the DO number embeds the order number, so no separate
+  // Order No. field is needed)
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(...GREY);
   doc.text('DELIVER TO', 20, 44);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
   doc.setTextColor(...INK);
-  doc.text(doc.splitTextToSize(String(customer), 80), 20, 50);
-
-  labelStyle();
-  doc.text('ORDER NO.', 190, 44, { align: 'right' });
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.setTextColor(...INK);
-  doc.text(String(al.order_number || doRec.al_number || '—'), 190, 50, { align: 'right' });
+  doc.text(doc.splitTextToSize(String(customer), 150), 20, 50);
 
   // ── Items table ──
   let y = 66;
