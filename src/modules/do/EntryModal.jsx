@@ -145,7 +145,7 @@ export default function EntryModal({ al, plots, breeds, photoBase64, initialQty,
       return alert(t('do.saveError', { msg: e.message }));
     }
     setSaving(false);
-    onSaved(res.payload, sigDataUrl, res.queued);
+    onSaved(res.payload, sigDataUrl, res.queued, capturedPhoto || photoBase64);
   }
 
   return (

@@ -119,12 +119,12 @@ export async function loadALByNumber(alNumber) {
 // AL number and inserts the salesweb_order_attachments + timeline rows.
 // Best-effort: a failure here never blocks the DO itself. Returns true when
 // the attachment row landed.
-export async function attachDOToOrder({ payload, al, staff, sigDataUrl }) {
+export async function attachDOToOrder({ payload, al, staff, sigDataUrl, photoBase64 }) {
   try {
     const alNumber = payload.al_number || al?.al_number;
     // Manual ALs have no Sales Web order to attach to.
     if (!alNumber || !payload.do_number || /^MANUAL-/i.test(alNumber)) return false;
-    const { blob, fileName } = doPdfBlob(payload, al || {}, staff || '—', sigDataUrl || null);
+    const { blob, fileName } = doPdfBlob(payload, al || {}, staff || '—', sigDataUrl || null, photoBase64 || null);
     const path = `do-pdfs/${alNumber}/${payload.do_number.replace(/[/\\]/g, '_')}.pdf`;
     const { error: upErr } = await supabase.storage
       .from('order-attachments')
@@ -155,7 +155,7 @@ export async function persistDO({ payload, photoBase64, al, sigDataUrl, staff })
       const finalPayload = { ...payload };
       if (photoBase64) finalPayload.image_url = await uploadDOPhoto(photoBase64, al.al_number, payload.do_number);
       await saveDORecord(finalPayload, al);
-      await attachDOToOrder({ payload: finalPayload, al, staff, sigDataUrl });
+      await attachDOToOrder({ payload: finalPayload, al, staff, sigDataUrl, photoBase64 });
       return { queued: false, payload: finalPayload };
     } catch (e) {
       /* fall through to offline queue */
@@ -246,7 +246,7 @@ export async function flushDOQueue() {
           .update({ balance_quantity: (alRow.balance_quantity || 0) - (payload.total_qty || 0) })
           .eq('id', alRow.id);
       }
-      await attachDOToOrder({ payload, al: alRow || { al_number: payload.al_number }, staff: item.staff, sigDataUrl: item.sigDataUrl });
+      await attachDOToOrder({ payload, al: alRow || { al_number: payload.al_number }, staff: item.staff, sigDataUrl: item.sigDataUrl, photoBase64: item.photoBase64 });
       synced++;
     } catch (e) {
       remaining.push(item);

@@ -13,13 +13,29 @@ const HEAD_BG = [244, 244, 245]; // #f4f4f5 table header
 
 const fmtQty = (n) => Number(n || 0).toLocaleString('en-MY');
 
+// Draw a data-URL image contained (aspect-fit, centred) inside a box.
+function fitImage(doc, dataUrl, x, y, boxW, boxH, pad = 1.5) {
+  try {
+    const props = doc.getImageProperties(dataUrl);
+    const availW = boxW - pad * 2;
+    const availH = boxH - pad * 2;
+    const scale = Math.min(availW / props.width, availH / props.height);
+    const w = props.width * scale;
+    const h = props.height * scale;
+    doc.addImage(dataUrl, props.fileType || 'JPEG', x + (boxW - w) / 2, y + (boxH - h) / 2, w, h);
+  } catch (e) {
+    /* ignore bad image */
+  }
+}
+
 // Builds the Delivery Order PDF document, styled after the Sales Web
 // proforma invoice letterhead. `al` is the matching shared_al_orders row
 // (may be partial), `staff` is the signed-in staff display name,
-// `sigDataUrl` is an optional PNG data-URL of the customer signature.
-// Returns the jsPDF doc so callers can either save (print) it or upload
-// it as a blob.
-export function buildDOPdf(doRec, al = {}, staff = '—', sigDataUrl = null) {
+// `sigDataUrl` is an optional PNG data-URL of the customer signature,
+// `photoDataUrl` is an optional data-URL photo of the customer's vehicle
+// with the loaded goods. Returns the jsPDF doc so callers can either save
+// (print) it or upload it as a blob.
+export function buildDOPdf(doRec, al = {}, staff = '—', sigDataUrl = null, photoDataUrl = null) {
   const doc = new jsPDF();
   const now = new Date();
   const dateFmt = doRec.delivery_date ? new Date(doRec.delivery_date).toLocaleDateString('en-MY') : '—';
@@ -67,26 +83,14 @@ export function buildDOPdf(doRec, al = {}, staff = '—', sigDataUrl = null) {
   doc.text(doc.splitTextToSize(String(customer), 80), 20, 50);
 
   labelStyle();
-  doc.text('ORDER DETAILS', 112, 44);
-  const detail = [
-    ['Order No.', al.order_number || doRec.al_number || '—'],
-    ['AL Number', doRec.al_number || '—'],
-    ['Product', al.product_name || '—'],
-    ['Delivery Date', dateFmt],
-  ];
-  doc.setFontSize(9);
-  detail.forEach(([l, v], i) => {
-    const y = 50 + i * 5.5;
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(...GREY);
-    doc.text(l, 112, y);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(...INK);
-    doc.text(doc.splitTextToSize(String(v), 48)[0], 190, y, { align: 'right' });
-  });
+  doc.text('ORDER NO.', 190, 44, { align: 'right' });
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(...INK);
+  doc.text(String(al.order_number || doRec.al_number || '—'), 190, 50, { align: 'right' });
 
   // ── Items table ──
-  let y = 80;
+  let y = 66;
   doc.setFillColor(...HEAD_BG);
   doc.rect(20, y, 170, 8.5, 'F');
   doc.setFont('helvetica', 'bold');
@@ -135,20 +139,8 @@ export function buildDOPdf(doRec, al = {}, staff = '—', sigDataUrl = null) {
   doc.text('TOTAL QUANTITY', 92, y + 4);
   doc.text(fmtQty(doRec.total_qty), 187, y + 4, { align: 'right' });
 
-  // Order balance context line
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
-  doc.setTextColor(...GREY);
-  doc.text(
-    'Qty ordered: ' + (al.quantity_ordered != null ? fmtQty(al.quantity_ordered) : '—') +
-      '   ·   Balance after this DO: ' + fmtQty(al.balance_quantity),
-    190,
-    y + 11,
-    { align: 'right' }
-  );
-
-  // ── Customer acknowledgement ──
-  y += 24;
+  // ── Customer acknowledgement: collection photo + signature ──
+  y += 18;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9.5);
   doc.setTextColor(...INK);
@@ -162,27 +154,29 @@ export function buildDOPdf(doRec, al = {}, staff = '—', sigDataUrl = null) {
   doc.text('I / We acknowledge receipt of the above items in good order and condition.', 20, y + 9);
 
   y += 15;
+  const BOX_H = 58;
   doc.setDrawColor(180, 180, 180);
   doc.setLineWidth(0.3);
-  doc.rect(20, y, 78, 30);
-  doc.rect(112, y, 78, 30);
+  doc.rect(20, y, 82, BOX_H);
+  doc.rect(108, y, 82, BOX_H);
 
-  if (sigDataUrl) {
-    try {
-      doc.addImage(sigDataUrl, 'PNG', 21, y + 1, 76, 28);
-    } catch (e) {
-      /* ignore bad signature image */
-    }
+  if (photoDataUrl) {
+    fitImage(doc, photoDataUrl, 20, y, 82, BOX_H);
+  } else {
+    doc.setFontSize(8);
+    doc.setTextColor(180, 180, 180);
+    doc.text('No photo captured', 61, y + BOX_H / 2, { align: 'center' });
   }
+  if (sigDataUrl) fitImage(doc, sigDataUrl, 108, y, 82, BOX_H);
 
+  doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(...GREY);
-  doc.text('Customer Signature', 20, y + 35);
-  doc.text('Issued By (' + CO_BRAND + ')', 112, y + 35);
+  doc.text('Collection Photo (vehicle & goods)', 20, y + BOX_H + 5);
+  doc.text('Customer Signature', 108, y + BOX_H + 5);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...INK);
-  doc.text(doc.splitTextToSize(String(customer), 78)[0], 20, y + 40);
-  doc.text(doc.splitTextToSize(String(staff || '—'), 78)[0], 112, y + 40);
+  doc.text(doc.splitTextToSize(String(customer), 80)[0], 108, y + BOX_H + 10);
 
   // ── Footer ──
   doc.setDrawColor(...LIGHT);
@@ -191,12 +185,13 @@ export function buildDOPdf(doRec, al = {}, staff = '—', sigDataUrl = null) {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor(...GREY);
-  doc.text('This Delivery Order is computer-generated by ' + CO_NAME + ' (' + CO_BRAND + ').', 20, 285);
+  doc.text('Computer-generated by ' + CO_NAME + ' (' + CO_BRAND + ').', 20, 285);
+  doc.text('Issued by ' + String(staff || '—'), 190, 285, { align: 'right' });
   doc.setTextColor(150, 150, 150);
   doc.text(
     (doRec.do_number || 'DO') + ' · Generated ' + now.toISOString().slice(0, 19).replace('T', ' '),
     190,
-    285,
+    289.5,
     { align: 'right' }
   );
 
@@ -209,13 +204,13 @@ export function doPdfFileName(doRec) {
 }
 
 // Generates and downloads the DO PDF (print flow).
-export function printDO(doRec, al = {}, staff = '—', sigDataUrl = null) {
-  buildDOPdf(doRec, al, staff, sigDataUrl).save(doPdfFileName(doRec));
+export function printDO(doRec, al = {}, staff = '—', sigDataUrl = null, photoDataUrl = null) {
+  buildDOPdf(doRec, al, staff, sigDataUrl, photoDataUrl).save(doPdfFileName(doRec));
 }
 
 // Generates the DO PDF as a Blob for uploading to storage (order attachment
 // flow). Returns { blob, fileName }.
-export function doPdfBlob(doRec, al = {}, staff = '—', sigDataUrl = null) {
-  const doc = buildDOPdf(doRec, al, staff, sigDataUrl);
+export function doPdfBlob(doRec, al = {}, staff = '—', sigDataUrl = null, photoDataUrl = null) {
+  const doc = buildDOPdf(doRec, al, staff, sigDataUrl, photoDataUrl);
   return { blob: doc.output('blob'), fileName: doPdfFileName(doRec) };
 }

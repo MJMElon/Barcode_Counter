@@ -232,7 +232,7 @@ export default function ScanModule() {
     setDoEntry({ al, suggestQty, consentId: consent.id });
   }
 
-  function onDoSaved(payload, sigDataUrl, queued) {
+  function onDoSaved(payload, sigDataUrl, queued, photoBase64) {
     const al = doEntry?.al || {};
     const consentId = doEntry?.consentId;
     setDoEntry(null);
@@ -253,11 +253,11 @@ export default function ScanModule() {
     }
     setActiveId(null);
     flash(queued ? t('do.savedOffline') : t('do.doSavedToast', { do: payload.do_number }), 'done');
-    setPrintPrompt({ payload, sigDataUrl, al, plots: doPlots });
+    setPrintPrompt({ payload, sigDataUrl, al, plots: doPlots, photoBase64 });
   }
 
   function doPrint(pp) {
-    printDO(pp.payload, pp.al || {}, staffName, pp.sigDataUrl);
+    printDO(pp.payload, pp.al || {}, staffName, pp.sigDataUrl, pp.photoBase64);
     flash(t('do.printedToast', { do: pp.payload.do_number }), 'done');
   }
 

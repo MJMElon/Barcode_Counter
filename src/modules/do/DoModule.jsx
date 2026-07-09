@@ -160,19 +160,19 @@ export default function DoModule() {
     e.target.value = '';
   }
 
-  function onSaved(payload, sigDataUrl, queued) {
+  function onSaved(payload, sigDataUrl, queued, photoBase64) {
     setEntry(null);
     flash(queued ? t('do.savedOffline') : t('do.doSavedToast', { do: payload.do_number }));
     reload();
     setRefreshToken((x) => x + 1);
     const al = (als || []).find((r) => r.al_number === payload.al_number);
     if (al) setManageAL(al);
-    setTimeout(() => setPrintPrompt({ payload, sigDataUrl }), 300);
+    setTimeout(() => setPrintPrompt({ payload, sigDataUrl, photoBase64 }), 300);
   }
 
-  function doPrint(doRec, sigDataUrl = null) {
+  function doPrint(doRec, sigDataUrl = null, photoBase64 = null) {
     const al = (als || []).find((r) => r.al_number === doRec.al_number) || manageAL || {};
-    printDO(doRec, al, staffName, sigDataUrl);
+    printDO(doRec, al, staffName, sigDataUrl, photoBase64);
     flash(t('do.printedToast', { do: doRec.do_number }));
   }
 
@@ -318,7 +318,7 @@ export default function DoModule() {
             <div className="text-sm font-bold text-slate-500 mb-1">{printPrompt.payload.do_number}</div>
             <div className="text-xs font-bold text-slate-400 mb-6">{t('do.printPrompt')}</div>
             <div className="flex flex-col gap-3">
-              <button onClick={() => { doPrint(printPrompt.payload, printPrompt.sigDataUrl); setPrintPrompt(null); }} className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[11px] uppercase tracking-widest rounded-xl border-none cursor-pointer">{t('do.yesPrint')}</button>
+              <button onClick={() => { doPrint(printPrompt.payload, printPrompt.sigDataUrl, printPrompt.photoBase64); setPrintPrompt(null); }} className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[11px] uppercase tracking-widest rounded-xl border-none cursor-pointer">{t('do.yesPrint')}</button>
               <button onClick={() => setPrintPrompt(null)} className="w-full py-2.5 text-[10px] font-black text-slate-500 hover:text-slate-800 uppercase tracking-widest bg-slate-50 border border-slate-200 rounded-xl cursor-pointer">{t('do.maybeLater')}</button>
             </div>
           </div>
