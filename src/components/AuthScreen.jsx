@@ -44,7 +44,11 @@ export default function AuthScreen() {
   async function handleForgot() {
     if (!email) return note('error', t('auth.enterEmailFirst'));
     setBusy(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(email);
+    // Pin the reset link to THIS app. Without an explicit redirectTo,
+    // Supabase falls back to the project-wide Site URL (a different MJM app).
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + '/',
+    });
     note(error ? 'error' : 'ok', error ? error.message : t('auth.resetSent'));
     setBusy(false);
   }
