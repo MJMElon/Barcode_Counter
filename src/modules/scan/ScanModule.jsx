@@ -17,6 +17,10 @@ import {
   defaultProgress,
   mergeConsents,
   statusOf,
+  insertScanRecord,
+  fetchScanRecords,
+  subscribeScanRecords,
+  unsubscribeScanRecords,
 } from './store.js';
 import { ensureAudio, beepSuccess, beepDuplicate, beepComplete, beepAlarm, vibrate } from './audio.js';
 
@@ -57,6 +61,7 @@ export default function ScanModule() {
   const lastTimeRef = useRef(0);
   const lastOverRef = useRef(0);
   const activeRef = useRef(null);
+  const realtimeChannelRef = useRef(null);
 
   const flash = useCallback((text, kind = '') => {
     setToast({ text, kind });
@@ -117,13 +122,70 @@ export default function ScanModule() {
     }).catch(() => {});
   }, [active?.al_number]);
 
+  // Unsubscribe from Realtime on full unmount.
   useEffect(() => {
-    seenRef.current = new Set(progressRef.current[activeId]?.seen || []);
+    return () => unsubscribeScanRecords(realtimeChannelRef.current);
+  }, []);
+
+  // On consent change: reset dedupe, seed from localStorage, then merge server records
+  // and subscribe to live scans from other devices.
+  useEffect(() => {
+    unsubscribeScanRecords(realtimeChannelRef.current);
+    realtimeChannelRef.current = null;
+
     lastCodeRef.current = '';
     lastTimeRef.current = 0;
     lastOverRef.current = 0;
     setLastInfo({ key: 'scan.waitingFirst' });
-  }, [activeId]);
+
+    // Seed from localStorage immediately — works offline and is instant.
+    seenRef.current = new Set(progressRef.current[activeId]?.seen || []);
+
+    if (!activeId || !navigator.onLine) return;
+
+    // Pull server records → merge in barcodes scanned by other devices.
+    fetchScanRecords(activeId).then((rows) => {
+      const newBarcodes = rows.map((r) => r.barcode).filter((b) => !seenRef.current.has(b));
+      if (!newBarcodes.length) return;
+      setProgress((prev) => {
+        const cur = prev[activeId] || defaultProgress();
+        const newUnique = cur.unique + newBarcodes.length;
+        const qty = activeRef.current?.qty || 0;
+        const next = {
+          ...cur,
+          seen: [...cur.seen, ...newBarcodes],
+          scans: [...newBarcodes.map((b) => ({ code: b, time: '–', over: false })), ...cur.scans],
+          unique: newUnique,
+          over: Math.max(0, newUnique - qty),
+        };
+        newBarcodes.forEach((b) => seenRef.current.add(b));
+        const map = { ...prev, [activeId]: next };
+        saveProgress(map);
+        return map;
+      });
+    }).catch(() => {/* stay with localStorage */});
+
+    // Subscribe to live INSERTs from other devices scanning the same consent.
+    realtimeChannelRef.current = subscribeScanRecords(activeId, (barcode) => {
+      if (seenRef.current.has(barcode)) return;
+      seenRef.current.add(barcode);
+      setProgress((prev) => {
+        const cur = prev[activeId] || defaultProgress();
+        const unique = cur.unique + 1;
+        const qty = activeRef.current?.qty || 0;
+        const next = {
+          ...cur,
+          seen: [...cur.seen, barcode],
+          scans: [{ code: barcode, time: new Date().toLocaleTimeString(), over: unique > qty }, ...cur.scans],
+          unique,
+          over: Math.max(0, unique - qty),
+        };
+        const map = { ...prev, [activeId]: next };
+        saveProgress(map);
+        return map;
+      });
+    });
+  }, [activeId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const recordScan = useCallback(
     (rawCode) => {
@@ -143,6 +205,9 @@ export default function ScanModule() {
         return;
       }
       seenRef.current.add(code);
+
+      // Write to server so other devices see this scan in real time.
+      if (navigator.onLine) insertScanRecord(a.id, a.al_number, code).catch(() => {});
 
       const cur = progressRef.current[a.id] || defaultProgress();
       const unique = cur.unique + 1;

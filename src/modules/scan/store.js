@@ -109,3 +109,43 @@ export function mergeConsents(serverList, progress) {
     };
   });
 }
+
+// ── Multi-device sync via Supabase (fcportal_scan_records table) ──────────────
+
+// Persist a single scan event. ON CONFLICT DO NOTHING → unique(consent_id, barcode)
+// prevents double-counting when two devices scan the same seal.
+export async function insertScanRecord(consentId, alNumber, barcode) {
+  const { error } = await supabase
+    .from('fcportal_scan_records')
+    .insert({ consent_id: consentId, al_number: alNumber, barcode });
+  if (error && error.code !== '23505') throw error; // 23505 = unique_violation (safe to ignore)
+}
+
+// Pull all barcodes already stored for a consent (from any device).
+export async function fetchScanRecords(consentId) {
+  const { data, error } = await supabase
+    .from('fcportal_scan_records')
+    .select('barcode, scanned_at')
+    .eq('consent_id', consentId)
+    .order('scanned_at', { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+// Subscribe to live INSERTs for a consent. callback(barcode) fires when another
+// device scans a new seal. Returns the channel — pass to unsubscribeScanRecords().
+export function subscribeScanRecords(consentId, callback) {
+  return supabase
+    .channel('fcportal_scan:' + consentId)
+    .on('postgres_changes', {
+      event: 'INSERT',
+      schema: 'public',
+      table: 'fcportal_scan_records',
+      filter: `consent_id=eq.${consentId}`,
+    }, (payload) => callback(payload.new.barcode))
+    .subscribe();
+}
+
+export function unsubscribeScanRecords(channel) {
+  if (channel) supabase.removeChannel(channel);
+}
