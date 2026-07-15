@@ -10,6 +10,7 @@ import { useLang } from './context/LanguageContext.jsx';
 // on demand so the initial app shell stays small.
 const ScanModule = lazy(() => import('./modules/scan/ScanModule.jsx'));
 const DoModule = lazy(() => import('./modules/do/DoModule.jsx'));
+const PlotStatusModule = lazy(() => import('./modules/plotstatus/PlotStatusModule.jsx'));
 
 function Loading() {
   const { t } = useLang();
@@ -75,6 +76,18 @@ export default function App() {
             <ErrorBoundary>
               <Suspense fallback={<Loading />}>
                 <DoModule />
+              </Suspense>
+            </ErrorBoundary>
+          </Protected>
+        }
+      />
+      <Route
+        path="/plot-status"
+        element={
+          <Protected>
+            <ErrorBoundary>
+              <Suspense fallback={<Loading />}>
+                <PlotStatusModule />
               </Suspense>
             </ErrorBoundary>
           </Protected>
