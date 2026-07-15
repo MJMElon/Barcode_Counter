@@ -52,3 +52,14 @@ export function groupEntriesByPlot(rows) {
 }
 
 export const todayStr = () => new Date().toISOString().slice(0, 10);
+
+/**
+ * Natural plot-name ordering: B1, B2, … B10, B11 (not B1, B10, B11, B2).
+ * Works on rows with a plot_name field.
+ */
+export function byPlotName(a, b) {
+  return String(a.plot_name).localeCompare(String(b.plot_name), undefined, {
+    numeric: true,
+    sensitivity: 'base',
+  });
+}

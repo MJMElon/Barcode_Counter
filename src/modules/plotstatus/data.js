@@ -2,7 +2,7 @@
 // (no imports there, so they stay unit-testable in plain node).
 
 import { supabase } from '../../lib/supabase.js';
-import { groupEntriesByPlot } from './helpers.js';
+import { byPlotName, groupEntriesByPlot } from './helpers.js';
 
 export { allowedNurseries, currentStatus, groupEntriesByPlot, todayStr } from './helpers.js';
 
@@ -22,7 +22,8 @@ export async function loadPlotStatusData() {
   const err = plotsRes.error || stagesRes.error || entriesRes.error;
   if (err) throw err;
   return {
-    plots: plotsRes.data || [],
+    // Natural order (B1, B2 … B10), not the DB's alphabetical order.
+    plots: (plotsRes.data || []).slice().sort(byPlotName),
     stages: stagesRes.data || [],
     entriesByPlot: groupEntriesByPlot(entriesRes.data || []),
   };
