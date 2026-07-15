@@ -23,6 +23,9 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   // null = not yet checked, true / false = ops-gate result
   const [allowed, setAllowed] = useState(null);
+  // The user's permissions JSONB from shared_profiles (set by the ops gate).
+  // Modules read finer-grained flags from here, e.g. plot_status_nurseries.
+  const [permissions, setPermissions] = useState(null);
   const [recovering, setRecovering] = useState(
     typeof window !== 'undefined' && window.location.hash.includes('type=recovery')
   );
@@ -38,7 +41,10 @@ export function AuthProvider({ children }) {
         .select('role, user_type, permissions')
         .eq('id', sess.user.id)
         .maybeSingle();
-      if (resp && !resp.error) ok = hasOpsAccess(resp.data);
+      if (resp && !resp.error) {
+        ok = hasOpsAccess(resp.data);
+        setPermissions((resp.data && resp.data.permissions) || {});
+      }
     } catch (e) {
       console.warn('[ops-gate] profile read failed (allowing through):', e);
     }
@@ -63,6 +69,7 @@ export function AuthProvider({ children }) {
       setSession(sess);
       if (event === 'SIGNED_OUT' || !sess) {
         setAllowed(null);
+        setPermissions(null);
         setLoading(false);
         return;
       }
@@ -85,6 +92,7 @@ export function AuthProvider({ children }) {
     }
     setSession(null);
     setAllowed(null);
+    setPermissions(null);
   }
 
   const staffName = session
@@ -93,7 +101,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ session, loading, allowed, recovering, setRecovering, signOut, staffName }}
+      value={{ session, loading, allowed, permissions, recovering, setRecovering, signOut, staffName }}
     >
       {children}
     </AuthContext.Provider>

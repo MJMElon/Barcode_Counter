@@ -8,10 +8,11 @@ export default function Dashboard() {
   const { staffName } = useAuth();
   const { t } = useLang();
 
-  // Order: Scan Barcode Counter first, then Issue Collection DO. No subtitles.
+  // Order: Scan Barcode Counter first, then Issue Collection DO, then Plot Status.
   const modules = [
     { to: '/scan', icon: '📷', tint: 'bg-blue-100', title: t('dash.scanTitle') },
     { to: '/do', icon: '📋', tint: 'bg-emerald-100', title: t('dash.doTitle') },
+    { to: '/plot-status', icon: '🚦', tint: 'bg-amber-100', title: t('dash.plotStatusTitle') },
   ];
 
   return (
