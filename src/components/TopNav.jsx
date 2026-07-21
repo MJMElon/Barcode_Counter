@@ -6,8 +6,9 @@ import { useLang, LangToggle } from '../context/LanguageContext.jsx';
 // - `title`: heading text
 // - `back`: optional route for a Back link (otherwise the brand block shows)
 // - `user`: optional staff name shown top-right, to the left of the language button
+// - `settingsTo`: optional route for a settings gear icon (admin only)
 // - `theme`: 'light' (default) or 'dark' to match a dark page background
-export default function TopNav({ title, subtitle, back, user, theme = 'light' }) {
+export default function TopNav({ title, subtitle, back, user, settingsTo, theme = 'light' }) {
   const { signOut } = useAuth();
   const { t } = useLang();
   const navigate = useNavigate();
@@ -57,6 +58,15 @@ export default function TopNav({ title, subtitle, back, user, theme = 'light' })
             <span className="hidden sm:inline">{t('dash.welcome', { name: user })}</span>
             <span className="sm:hidden">{user}</span>
           </span>
+        )}
+        {settingsTo && (
+          <Link
+            to={settingsTo}
+            title="Nursery Access Settings"
+            className={`text-[10px] font-bold ${signOutCls} uppercase tracking-widest px-3 py-2 rounded-full border cursor-pointer transition-colors shrink-0 no-underline`}
+          >
+            ⚙
+          </Link>
         )}
         <LangToggle dark={dark} />
         <button

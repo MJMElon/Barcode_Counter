@@ -99,9 +99,13 @@ export function AuthProvider({ children }) {
     ? session.user.user_metadata?.full_name || session.user.email
     : '';
 
+  const isAdmin = !!(permissions?.manage_users);
+  // null = no restriction (all nurseries). Array = only those nurseries.
+  const plotNurseries = permissions?.plot_status_nurseries ?? null;
+
   return (
     <AuthContext.Provider
-      value={{ session, loading, allowed, permissions, recovering, setRecovering, signOut, staffName }}
+      value={{ session, loading, allowed, permissions, isAdmin, plotNurseries, recovering, setRecovering, signOut, staffName }}
     >
       {children}
     </AuthContext.Provider>

@@ -5,7 +5,7 @@ import TopNav from './TopNav.jsx';
 import CollectionBoard from './CollectionBoard.jsx';
 
 export default function Dashboard() {
-  const { staffName } = useAuth();
+  const { staffName, isAdmin } = useAuth();
   const { t } = useLang();
 
   // Order: Scan Barcode Counter first, then Issue Collection DO, then Plot Status.
@@ -17,7 +17,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-slate-100 fade-enter">
-      <TopNav title="MJM Nursery" subtitle="FC Portal" user={staffName} />
+      <TopNav title="MJM Nursery" subtitle="FC Portal" user={staffName} settingsTo={isAdmin ? '/settings' : undefined} />
       <div className="max-w-[900px] mx-auto px-3 sm:px-6 py-4 sm:py-6">
         {/* "TV" board: who is coming today to collect seedlings */}
         <CollectionBoard />

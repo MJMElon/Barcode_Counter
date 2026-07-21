@@ -11,6 +11,7 @@ import { useLang } from './context/LanguageContext.jsx';
 const ScanModule = lazy(() => import('./modules/scan/ScanModule.jsx'));
 const DoModule = lazy(() => import('./modules/do/DoModule.jsx'));
 const PlotStatusModule = lazy(() => import('./modules/plotstatus/PlotStatusModule.jsx'));
+const UserSettings = lazy(() => import('./components/UserSettings.jsx'));
 
 function Loading() {
   const { t } = useLang();
@@ -29,6 +30,14 @@ function Protected({ children }) {
   const { session, loading, allowed } = useAuth();
   if (loading) return <Loading />;
   if (!session || allowed === false) return <Navigate to="/" replace />;
+  return children;
+}
+
+// Admin-only gate — non-admins bounce to dashboard.
+function AdminOnly({ children }) {
+  const { loading, isAdmin } = useAuth();
+  if (loading) return <Loading />;
+  if (!isAdmin) return <Navigate to="/dashboard" replace />;
   return children;
 }
 
@@ -90,6 +99,20 @@ export default function App() {
                 <PlotStatusModule />
               </Suspense>
             </ErrorBoundary>
+          </Protected>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <Protected>
+            <AdminOnly>
+              <ErrorBoundary>
+                <Suspense fallback={<Loading />}>
+                  <UserSettings />
+                </Suspense>
+              </ErrorBoundary>
+            </AdminOnly>
           </Protected>
         }
       />
