@@ -569,6 +569,19 @@ function Scanner({ consent, lastInfo, issuing, activeDOs, onScan, onBack, onIssu
   const camStateRef = useRef('idle');
   const cancelRef = useRef(false);
 
+  // Hardware (Bluetooth/USB) barcode scanner support. These scanners act as a
+  // keyboard: they "type" the whole code in a fast burst, usually ending with
+  // Enter or Tab. Once one is detected we remember it (localStorage) and show
+  // the scanner-linked panel instead of opening the camera.
+  const [hwMode, setHwMode] = useState(() => {
+    try { return localStorage.getItem('mjm_hw_scanner') === '1'; } catch (e) { return false; }
+  });
+  const hwModeRef = useRef(hwMode);
+  hwModeRef.current = hwMode;
+  const wedgeRef = useRef({ chars: '', last: 0, timer: null });
+  const onScanRef = useRef(onScan);
+  onScanRef.current = onScan;
+
   // Use the higher of localStorage-tracked qty and server-derived qty from activeDOs.
   // This ensures the correct balance even when DOs were issued through the AI system.
   const serverIssuedQty = activeDOs.reduce((sum, d) => sum + (d.total_qty || 0), 0);
@@ -723,10 +736,64 @@ function Scanner({ consent, lastInfo, issuing, activeDOs, onScan, onBack, onIssu
   }
 
   useEffect(() => {
-    startCamera().catch(() => setStatusKey('ready'));
+    // A linked hardware scanner replaces the camera; the camera stays one tap
+    // away via the "Use Camera Instead" button.
+    if (hwModeRef.current) setStatusKey('hwLinked');
+    else startCamera().catch(() => setStatusKey('ready'));
     return () => {
       cancelRef.current = true;
       if (qrRef.current?.isScanning) qrRef.current.stop().catch(() => {});
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Keyboard-wedge listener: catches the fast keystroke bursts a hardware
+  // barcode scanner sends and routes them into the same recordScan flow as
+  // camera reads. Also how a scanner is auto-detected the first time.
+  useEffect(() => {
+    function submitWedge(code) {
+      ensureAudio();
+      if (!hwModeRef.current) {
+        try { localStorage.setItem('mjm_hw_scanner', '1'); } catch (e) { /* private mode */ }
+        setHwMode(true);
+        setStatusKey('hwLinked');
+        stopCamera();
+      }
+      onScanRef.current(code);
+    }
+    function onKey(e) {
+      const el = e.target;
+      const tag = el && el.tagName;
+      // Never swallow real typing into form fields (search box, DO modal...).
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (el && el.isContentEditable)) return;
+      const b = wedgeRef.current;
+      const now = Date.now();
+      // Humans pause >250ms between keys; scanners blast the whole code.
+      if (now - b.last > 250) b.chars = '';
+      b.last = now;
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        clearTimeout(b.timer);
+        if (b.chars.length >= 3) {
+          e.preventDefault();
+          submitWedge(b.chars);
+        }
+        b.chars = '';
+        return;
+      }
+      if (e.key.length === 1) {
+        b.chars += e.key;
+        clearTimeout(b.timer);
+        // Scanners configured without an Enter suffix: flush after the burst.
+        b.timer = setTimeout(() => {
+          if (b.chars.length >= 6) submitWedge(b.chars);
+          b.chars = '';
+        }, 300);
+      }
+    }
+    window.addEventListener('keydown', onKey, true);
+    return () => {
+      window.removeEventListener('keydown', onKey, true);
+      clearTimeout(wedgeRef.current.timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -757,26 +824,60 @@ function Scanner({ consent, lastInfo, issuing, activeDOs, onScan, onBack, onIssu
       </div>
 
       <div className="bg-[#0f1620] border border-[#1f2a38] rounded-2xl p-3 mb-3">
-        <div id="reader" onClick={scanning ? refocus : undefined} className="rounded-xl overflow-hidden bg-black min-h-[160px] cursor-pointer" />
+        {/* #reader must stay mounted (html5-qrcode targets it by id), so it is
+            hidden — not removed — while the hardware-scanner panel shows. */}
+        <div
+          id="reader"
+          onClick={scanning ? refocus : undefined}
+          className={`rounded-xl overflow-hidden bg-black min-h-[160px] cursor-pointer ${hwMode && !scanning ? 'hidden' : ''}`}
+        />
+        {hwMode && !scanning && (
+          <div className="rounded-xl bg-[#0a0f14] border border-emerald-600/40 min-h-[160px] flex flex-col items-center justify-center gap-2.5 px-4 text-center">
+            <span className="relative flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+            </span>
+            <div className="font-mono text-sm font-bold text-emerald-400 uppercase tracking-wider">🔗 {t('scan.hwTitle')}</div>
+            <div className="font-mono text-[11px] text-slate-400">{t('scan.hwReady')}</div>
+          </div>
+        )}
         {scanning && (
           <div className="text-center text-[10px] font-mono text-slate-500 mt-1.5">{t('scan.focusHint')}</div>
         )}
         <div className="flex gap-2 mt-2.5">
-          <button
-            onClick={() => (scanning ? stopCamera() : startCamera().catch((e) => { setStatusKey('error'); alert(t('scan.cameraError', { msg: e?.message || e })); }))}
-            className="flex-1 bg-emerald-500 text-[#0a0f14] font-mono font-bold text-xs uppercase tracking-wider rounded-lg py-3.5"
-          >
-            {scanning ? t('scan.stopCamera') : t('scan.startCamera')}
-          </button>
-          {scanning && (
+          {hwMode && !scanning ? (
             <button
-              onClick={refocus}
-              className="shrink-0 bg-[#111821] border border-[#1f2a38] text-emerald-400 font-mono font-bold text-xs uppercase tracking-wider rounded-lg px-4 py-3.5"
+              onClick={() => {
+                setHwMode(false);
+                try { localStorage.removeItem('mjm_hw_scanner'); } catch (e) { /* ignore */ }
+                setTimeout(() => startCamera().catch((e) => { setStatusKey('error'); alert(t('scan.cameraError', { msg: e?.message || e })); }), 50);
+              }}
+              className="flex-1 bg-[#111821] border border-[#1f2a38] text-slate-200 font-mono font-bold text-xs uppercase tracking-wider rounded-lg py-3.5"
             >
-              🎯 {t('scan.refocus')}
+              {t('scan.hwUseCamera')}
             </button>
+          ) : (
+            <>
+              <button
+                onClick={() => (scanning ? stopCamera() : startCamera().catch((e) => { setStatusKey('error'); alert(t('scan.cameraError', { msg: e?.message || e })); }))}
+                className="flex-1 bg-emerald-500 text-[#0a0f14] font-mono font-bold text-xs uppercase tracking-wider rounded-lg py-3.5"
+              >
+                {scanning ? t('scan.stopCamera') : t('scan.startCamera')}
+              </button>
+              {scanning && (
+                <button
+                  onClick={refocus}
+                  className="shrink-0 bg-[#111821] border border-[#1f2a38] text-emerald-400 font-mono font-bold text-xs uppercase tracking-wider rounded-lg px-4 py-3.5"
+                >
+                  🎯 {t('scan.refocus')}
+                </button>
+              )}
+            </>
           )}
         </div>
+        {!hwMode && (
+          <div className="text-center text-[10px] font-mono text-slate-500 mt-2">{t('scan.hwHint')}</div>
+        )}
       </div>
 
       <div className={`bg-[#0f1620] border rounded-2xl px-5 py-4 text-center mb-3 ${st === 'over' ? 'border-red-500' : 'border-[#1f2a38]'}`}>
