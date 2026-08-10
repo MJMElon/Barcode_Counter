@@ -1,23 +1,29 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
+import { canMaintain } from '../modules/maintenance/helpers.js';
 import { useLang } from '../context/LanguageContext.jsx';
 import TopNav from './TopNav.jsx';
 import CollectionBoard from './CollectionBoard.jsx';
 
 export default function Dashboard() {
-  const { staffName } = useAuth();
+  const { staffName, permissions } = useAuth();
   const { t } = useLang();
 
-  // Order: Scan Barcode Counter first, then Issue Collection DO, then Plot Status.
+  // Order: Scan Barcode Counter first, then Issue Collection DO, Plot Status,
+  // then Maintenance. Maintenance is hidden for anyone whose FC Scan Portal
+  // User Access has that page switched off.
   const modules = [
     { to: '/scan', icon: '📷', tint: 'bg-blue-100', title: t('dash.scanTitle') },
     { to: '/do', icon: '📋', tint: 'bg-emerald-100', title: t('dash.doTitle') },
     { to: '/plot-status', icon: '🚦', tint: 'bg-amber-100', title: t('dash.plotStatusTitle') },
+    ...(canMaintain(permissions, 'view')
+      ? [{ to: '/maintenance', icon: '🛠️', tint: 'bg-teal-100', title: t('dash.maintTitle') }]
+      : []),
   ];
 
   return (
     <div className="min-h-screen bg-slate-100 fade-enter">
-      <TopNav title="MJM Nursery" subtitle="FC Portal" user={staffName} />
+      <TopNav title="MJM Nursery" subtitle="FC Portal" user={staffName} portal />
       <div className="max-w-[900px] mx-auto px-3 sm:px-6 py-4 sm:py-6">
         {/* "TV" board: who is coming today to collect seedlings */}
         <CollectionBoard />

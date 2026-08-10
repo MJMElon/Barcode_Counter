@@ -11,6 +11,7 @@ import { useLang } from './context/LanguageContext.jsx';
 const ScanModule = lazy(() => import('./modules/scan/ScanModule.jsx'));
 const DoModule = lazy(() => import('./modules/do/DoModule.jsx'));
 const PlotStatusModule = lazy(() => import('./modules/plotstatus/PlotStatusModule.jsx'));
+const MaintenanceModule = lazy(() => import('./modules/maintenance/MaintenanceModule.jsx'));
 
 function Loading() {
   const { t } = useLang();
@@ -88,6 +89,18 @@ export default function App() {
             <ErrorBoundary>
               <Suspense fallback={<Loading />}>
                 <PlotStatusModule />
+              </Suspense>
+            </ErrorBoundary>
+          </Protected>
+        }
+      />
+      <Route
+        path="/maintenance"
+        element={
+          <Protected>
+            <ErrorBoundary>
+              <Suspense fallback={<Loading />}>
+                <MaintenanceModule />
               </Suspense>
             </ErrorBoundary>
           </Protected>

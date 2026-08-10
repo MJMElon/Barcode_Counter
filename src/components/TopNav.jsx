@@ -1,13 +1,16 @@
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useLang, LangToggle } from '../context/LanguageContext.jsx';
+import { MAIN_PORTAL_URL } from '../config.js';
 
 // Shared top navigation bar.
 // - `title`: heading text
 // - `back`: optional route for a Back link (otherwise the brand block shows)
+// - `portal`: show a link out to the main MJM portal. Used on the dashboard,
+//   which has nowhere to go "back" to inside this app
 // - `user`: optional staff name shown top-right, to the left of the language button
 // - `theme`: 'light' (default) or 'dark' to match a dark page background
-export default function TopNav({ title, subtitle, back, user, theme = 'light' }) {
+export default function TopNav({ title, subtitle, back, portal, user, theme = 'light' }) {
   const { signOut } = useAuth();
   const { t } = useLang();
   const navigate = useNavigate();
@@ -52,6 +55,17 @@ export default function TopNav({ title, subtitle, back, user, theme = 'light' })
       </div>
 
       <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+        {/* A different site, so a real link — and no target=_blank: a Field
+            Conductor on a phone wants to go there, not collect tabs. */}
+        {portal && (
+          <a
+            href={MAIN_PORTAL_URL}
+            className={`${backCls} rounded-full px-3 py-2 transition-colors font-bold text-[10px] uppercase tracking-widest whitespace-nowrap no-underline border ${dark ? '' : 'border-slate-200'} shrink-0`}
+          >
+            <span className="hidden sm:inline">{t('common.backToPortal')}</span>
+            <span className="sm:hidden">{t('common.portalShort')}</span>
+          </a>
+        )}
         {user && (
           <span className={`text-[11px] font-bold ${userCls} max-w-[84px] sm:max-w-none truncate`}>
             <span className="hidden sm:inline">{t('dash.welcome', { name: user })}</span>

@@ -16,6 +16,11 @@ export const SUPABASE_URL = 'https://kibqjztozokohqmhqqqf.supabase.co';
 export const SUPABASE_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpYnFqenRvem9rb2hxbWhxcXFmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyMzQzNjIsImV4cCI6MjA4OTgxMDM2Mn0.J7qJUZhWXYf5b9oey4wXJkjdi66jomEMw_NeV9NWF7M';
 
+// The main MJM portal this app is one module of. The "Back to Portal" button
+// on the dashboard sends a Field Conductor there — it is a different site, so
+// this is a full URL rather than a route.
+export const MAIN_PORTAL_URL = 'https://ai.mjmnursery.com';
+
 // Optional — only needed for the AI "Take Photo" DO scan.
 export const GEMINI_KEY = import.meta.env.VITE_GEMINI_KEY || '';
 export const AI_SCAN_ENABLED = !!GEMINI_KEY;
