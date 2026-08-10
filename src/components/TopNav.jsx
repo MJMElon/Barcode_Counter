@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useLang, LangToggle } from '../context/LanguageContext.jsx';
 import { MAIN_PORTAL_URL } from '../config.js';
+import { supabase } from '../lib/supabase.js';
 
 // Shared top navigation bar.
 // - `title`: heading text
@@ -15,10 +17,42 @@ export default function TopNav({ title, subtitle, back, portal, user, theme = 'l
   const { t } = useLang();
   const navigate = useNavigate();
   const dark = theme === 'dark';
+  const [leaving, setLeaving] = useState(false);
 
   async function handleLogout() {
     await signOut();
     navigate('/');
+  }
+
+  /* The portal is a different domain, so the sign-in kept in this one's
+     storage does not travel with the link — following it plainly lands on
+     the portal's login screen even though the user is signed in here.
+     Carry the session across in the URL fragment instead: it is Supabase's
+     own implicit-flow shape, the portal already expects it (it skips its
+     session-reset when the URL carries a token), and supabase-js strips the
+     fragment out of the address bar once it has read it.
+
+     Falls back to a plain link if the session cannot be read, so the button
+     always goes somewhere. */
+  async function goToPortal(e) {
+    if (e) e.preventDefault();
+    if (leaving) return;
+    setLeaving(true);
+    let url = MAIN_PORTAL_URL;
+    try {
+      const { data } = await supabase.auth.getSession();
+      const s = data && data.session;
+      if (s && s.access_token && s.refresh_token) {
+        url +=
+          '#access_token=' + encodeURIComponent(s.access_token) +
+          '&refresh_token=' + encodeURIComponent(s.refresh_token) +
+          '&expires_in=' + (s.expires_in || 3600) +
+          '&token_type=bearer';
+      }
+    } catch (_) {
+      /* keep the plain URL */
+    }
+    window.location.href = url;
   }
 
   const bar = dark
@@ -36,6 +70,16 @@ export default function TopNav({ title, subtitle, back, portal, user, theme = 'l
   return (
     <div className={`${bar} border-b px-3 sm:px-6 py-3 flex justify-between items-center gap-2 sticky top-0 z-30 shadow-sm`}>
       <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+        {portal && (
+          <a
+            href={MAIN_PORTAL_URL}
+            onClick={goToPortal}
+            className={`${backCls} rounded-full px-3 sm:px-4 py-2 border ${dark ? 'border-[#1f2a38]' : 'border-slate-200'} transition-colors font-bold text-[10px] uppercase tracking-widest whitespace-nowrap no-underline shrink-0 cursor-pointer`}
+          >
+            <span className="hidden sm:inline">{t('common.moduleSelection')}</span>
+            <span className="sm:hidden">{t('common.moduleSelectionShort')}</span>
+          </a>
+        )}
         {back && (
           <Link
             to={back}
@@ -55,17 +99,6 @@ export default function TopNav({ title, subtitle, back, portal, user, theme = 'l
       </div>
 
       <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-        {/* A different site, so a real link — and no target=_blank: a Field
-            Conductor on a phone wants to go there, not collect tabs. */}
-        {portal && (
-          <a
-            href={MAIN_PORTAL_URL}
-            className={`${backCls} rounded-full px-3 py-2 transition-colors font-bold text-[10px] uppercase tracking-widest whitespace-nowrap no-underline border ${dark ? '' : 'border-slate-200'} shrink-0`}
-          >
-            <span className="hidden sm:inline">{t('common.backToPortal')}</span>
-            <span className="sm:hidden">{t('common.portalShort')}</span>
-          </a>
-        )}
         {user && (
           <span className={`text-[11px] font-bold ${userCls} max-w-[84px] sm:max-w-none truncate`}>
             <span className="hidden sm:inline">{t('dash.welcome', { name: user })}</span>

@@ -11,8 +11,8 @@ const en = {
   'common.cancel': 'Cancel',
   'common.close': 'Close',
   'common.back': '← Back',
-  'common.backToPortal': '← MJM Portal',
-  'common.portalShort': '← Portal',
+  'common.moduleSelection': '← Module Selection',
+  'common.moduleSelectionShort': '← Modules',
   'common.signOut': 'Sign Out',
 
   // auth
@@ -283,8 +283,8 @@ const ms = {
   'common.cancel': 'Batal',
   'common.close': 'Tutup',
   'common.back': '← Kembali',
-  'common.backToPortal': '← Portal MJM',
-  'common.portalShort': '← Portal',
+  'common.moduleSelection': '← Pilihan Modul',
+  'common.moduleSelectionShort': '← Modul',
   'common.signOut': 'Log Keluar',
 
   // auth
