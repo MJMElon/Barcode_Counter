@@ -18,9 +18,29 @@ function hasOpsAccess(profile) {
   return false;
 }
 
+/* The session Supabase already has in this browser, read synchronously so the
+   app can render on the first paint. supabase.auth.getSession() returns the
+   same thing but as a promise, and that one tick was long enough to show a
+   loading screen in front of every entry. Anything doubtful — no token, past
+   its expiry, unparseable — returns null and the normal async path decides. */
+function cachedSession() {
+  try {
+    const key = Object.keys(localStorage).find((k) => /^sb-.+-auth-token$/.test(k));
+    if (!key) return null;
+    const raw = JSON.parse(localStorage.getItem(key));
+    const s = (raw && (raw.currentSession || raw)) || null;
+    if (!s || !s.access_token || !s.user) return null;
+    if (s.expires_at && Number(s.expires_at) * 1000 <= Date.now()) return null;
+    return s;
+  } catch (e) {
+    return null;
+  }
+}
+
 export function AuthProvider({ children }) {
-  const [session, setSession] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [session, setSession] = useState(cachedSession);
+  // Already signed in ⇒ nothing to wait for before drawing the app.
+  const [loading, setLoading] = useState(() => !cachedSession());
   // null = not yet checked, true / false = ops-gate result
   const [allowed, setAllowed] = useState(null);
   // The user's permissions JSONB from shared_profiles (set by the ops gate).
@@ -54,9 +74,13 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: sess } }) => {
+      // Knowing there IS a session is enough to render the app. The ops gate
+      // is a network round-trip; waiting for it put a loading screen in front
+      // of every entry. It now resolves behind the app and only bounces
+      // somebody out if it comes back denied.
       setSession(sess);
+      setLoading(false);
       if (sess) runOpsGate(sess);
-      else setLoading(false);
     });
 
     const { data: sub } = supabase.auth.onAuthStateChange((event, sess) => {
@@ -67,10 +91,10 @@ export function AuthProvider({ children }) {
         return;
       }
       setSession(sess);
+      setLoading(false);
       if (event === 'SIGNED_OUT' || !sess) {
         setAllowed(null);
         setPermissions(null);
-        setLoading(false);
         return;
       }
       // Defer to release the auth lock before querying shared_profiles.

@@ -43,7 +43,10 @@ export default function App() {
         element={
           loading ? (
             <Loading />
-          ) : session && allowed ? (
+          ) : // `allowed` is null until the ops gate answers. Waiting for it
+          // here would show the login screen to somebody already signed in,
+          // so only a definite NO keeps them on it.
+          session && allowed !== false ? (
             <Navigate to="/dashboard" replace />
           ) : (
             <AuthScreen />
