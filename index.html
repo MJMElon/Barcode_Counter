@@ -24,9 +24,18 @@
     // screen instead of a blank page so the problem is visible.
     (function () {
       var errs = [];
+      // Capture phase, so a script/stylesheet that 404s is recorded too. A
+      // resource error fires on the element and never reaches a bubbling
+      // window listener — which is why a missing bundle used to report
+      // "no JavaScript error was captured" and tell nobody anything.
       window.addEventListener('error', function (e) {
+        var el = e.target;
+        if (el && el !== window && (el.src || el.href)) {
+          errs.push('Failed to load ' + (el.tagName || '?').toLowerCase() + ': ' + (el.src || el.href));
+          return;
+        }
         errs.push((e.message || 'error') + (e.filename ? ' @ ' + e.filename + ':' + e.lineno : ''));
-      });
+      }, true);
       window.addEventListener('unhandledrejection', function (e) {
         var r = e.reason;
         errs.push('promise: ' + ((r && (r.stack || r.message)) || r));
@@ -63,7 +72,7 @@
           });
         }
         var go = function () {
-          if (forceAgain) sessionStorage.removeItem('mjm-sw-reset');
+          if (forceAgain) sessionStorage.setItem('mjm-sw-reset', '1');
           // Bypass any HTTP-cached index.html by loading a cache-busted URL.
           var base = location.pathname.replace(/[?].*$/, '');
           location.replace(base + '?cb=' + Date.now() + (location.hash || ''));
@@ -78,7 +87,7 @@
           '<h2 style="color:#c12842;margin:0 0 8px">App could not load</h2>' +
           '<p style="color:#475569;font-size:14px">Please screenshot this and send it. Or tap the button to clear the cache and retry.</p>' +
           '<pre style="white-space:pre-wrap;background:#f1f5f9;border:1px solid #cdd5de;border-radius:8px;padding:12px;font-size:12px;overflow:auto">' +
-          (errs.length ? errs.join('\n\n') : 'No JavaScript error was captured — the app script may not have downloaded (network or cache).') +
+          (errs.length ? errs.join('\n\n') : 'No JavaScript error was captured — the app script may not have downloaded (network, or a cached copy of this page pointing at files that no longer exist).\n\nTry: tap the button below, or open the site in a private window.') +
           '\n\nURL: ' + location.href + '\nBrowser: ' + navigator.userAgent + '</pre>' +
           '<button id="mjm-reset" style="padding:12px 18px;border:none;border-radius:10px;background:#10b981;color:#fff;font-weight:700;cursor:pointer">Clear cache &amp; reload</button>' +
           '</div>';
@@ -89,8 +98,9 @@
         setTimeout(function () {
           var root = document.getElementById('root');
           if (root && root.childElementCount > 0) return; // app mounted fine
-          if (!sessionStorage.getItem('mjm-sw-reset')) {
-            sessionStorage.setItem('mjm-sw-reset', '1');
+          var tries = Number(sessionStorage.getItem('mjm-sw-reset') || 0);
+          if (tries < 2) {
+            sessionStorage.setItem('mjm-sw-reset', String(tries + 1));
             hardReset(false);
             return;
           }
