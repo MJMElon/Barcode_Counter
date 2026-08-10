@@ -177,6 +177,11 @@ const en = {
   'scan.cameraError': 'Camera error: {msg}',
   'scan.shareWhatsApp': '📲 Share via WhatsApp',
   'scan.issuedDOs': 'Issued DOs',
+  'scan.hwLinked': 'SCANNER LINKED',
+  'scan.hwTitle': 'Barcode scanner connected',
+  'scan.hwReady': 'Ready — just scan, items record automatically.',
+  'scan.hwUseCamera': '📷 Use Camera Instead',
+  'scan.hwHint': 'Using a Bluetooth scanner? Just scan — it will be detected automatically.',
 
   // DO module
   'do.headerTitle': 'Issue Collection DO — Sign & Print',
@@ -449,6 +454,11 @@ const ms = {
   'scan.cameraError': 'Ralat kamera: {msg}',
   'scan.shareWhatsApp': '📲 Kongsi via WhatsApp',
   'scan.issuedDOs': 'DO Dikeluarkan',
+  'scan.hwLinked': 'PENGIMBAS DISAMBUNG',
+  'scan.hwTitle': 'Pengimbas kod bar disambung',
+  'scan.hwReady': 'Sedia — imbas sahaja, item direkod secara automatik.',
+  'scan.hwUseCamera': '📷 Guna Kamera',
+  'scan.hwHint': 'Guna pengimbas Bluetooth? Imbas sahaja — ia akan dikesan secara automatik.',
 
   // DO module
   'do.headerTitle': 'Isu Kutipan DO — Tandatangan & Cetak',
