@@ -17,9 +17,14 @@ export default class ErrorBoundary extends Component {
   }
 
   handleReload = () => {
-    // A failed lazy chunk is usually fixed by a fresh load.
+    // A failed lazy chunk means this tab is running an old index.html that
+    // names chunks which no longer exist. A plain reload can be answered from
+    // cache with that same old HTML, which fails again in exactly the same
+    // way — so ask for a URL the cache cannot have. The hash carries the
+    // current route, so the user comes back to the page they were on.
     this.setState({ error: null });
-    window.location.reload();
+    const base = window.location.pathname.replace(/[?].*$/, '');
+    window.location.replace(base + '?cb=' + Date.now() + (window.location.hash || ''));
   };
 
   render() {

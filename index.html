@@ -55,6 +55,35 @@
           }).catch(function () {});
         }
       } catch (e) {}
+      /* Every build renames the JS: assets/index-<hash>.js, and one chunk per
+         lazy module. That is deliberate — it makes CDN caching safe — but it
+         also means a browser holding an older index.html asks for filenames
+         that no longer exist, and gets a 404. Unlike the other modules, which
+         are plain files whose names never change, this app breaks that way
+         after every single deploy. So a stale shell must reload itself rather
+         than becoming an error screen. */
+      function reloadForStaleBuild() {
+        var k = 'mjm-stale-reload';
+        var last = Number(sessionStorage.getItem(k) || 0);
+        // One escape attempt per 20s. Without this, a genuine outage would
+        // turn into a reload loop that never shows anyone the error.
+        if (Date.now() - last < 20000) return false;
+        sessionStorage.setItem(k, String(Date.now()));
+        var base = location.pathname.replace(/[?].*$/, '');
+        // Keep the hash: HashRouter puts the current route there, so the user
+        // lands back where they were instead of at the dashboard.
+        location.replace(base + '?cb=' + Date.now() + (location.hash || ''));
+        return true;
+      }
+
+      /* Vite fires this when a lazy module's chunk fails to download — the
+         usual shape of "it broke right after a change", because each module
+         is its own hashed chunk fetched only when opened. Recover instead of
+         letting it reach the error boundary. */
+      window.addEventListener('vite:preloadError', function (e) {
+        if (reloadForStaleBuild()) e.preventDefault();
+      });
+
       function hardReset(forceAgain) {
         var p = Promise.resolve();
         if ('serviceWorker' in navigator) {
@@ -121,7 +150,14 @@
       window.addEventListener('load', function () {
         setTimeout(function () {
           var root = document.getElementById('root');
-          if (root && root.childElementCount > 0) return; // app mounted fine
+          if (root && root.childElementCount > 0) {
+            // Mounted. Forget the earlier attempts, or a later failure in the
+            // same session — a lazy chunk 404 on the next screen, say — would
+            // find the counter already spent and go straight to the error
+            // screen without ever retrying.
+            sessionStorage.removeItem('mjm-sw-reset');
+            return;
+          }
           var tries = Number(sessionStorage.getItem('mjm-sw-reset') || 0);
           if (tries < 2) {
             sessionStorage.setItem('mjm-sw-reset', String(tries + 1));
