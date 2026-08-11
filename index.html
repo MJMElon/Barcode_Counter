@@ -63,6 +63,20 @@
               return Promise.all(rs.map(function (r) { return r.unregister(); }));
             });
           });
+          // unregister() does not evict a worker that is already controlling
+          // this page — it goes when the last client using it unloads. Reload
+          // too early and the very worker we are escaping answers the
+          // navigation, which is how a device gets stuck on a dead shell
+          // reloading forever. Wait for control to be released first.
+          p = p.then(function () {
+            if (!navigator.serviceWorker.controller) return null;
+            return new Promise(function (res) {
+              var done = false;
+              var finish = function () { if (!done) { done = true; res(); } };
+              navigator.serviceWorker.addEventListener('controllerchange', finish);
+              setTimeout(finish, 1500);   // never hang on this
+            });
+          });
         }
         if (window.caches && caches.keys) {
           p = p.then(function () {
@@ -82,9 +96,19 @@
       function showOverlay() {
         var root = document.getElementById('root');
         if (!root) return;
+        // /src/main.jsx only exists before the app is built. If the browser is
+        // asking for it, it is running a shell left over from an old
+        // deployment, not anything the live site serves — so say that plainly
+        // rather than leaving it as an unexplained failure.
+        var devShell = errs.join(' ').indexOf('/src/main.jsx') !== -1;
         root.innerHTML =
           '<div style="font-family:system-ui,sans-serif;padding:22px;max-width:680px;margin:0 auto;color:#0b1220">' +
           '<h2 style="color:#c12842;margin:0 0 8px">App could not load</h2>' +
+          (devShell
+            ? '<p style="color:#475569;font-size:14px">This device is holding an <b>old copy</b> of the page from a ' +
+              'previous version of the site. The live site is fine — open it in a private window to confirm. ' +
+              'Tap the button below to clear it; if it comes back, close this tab completely and reopen the site.</p>'
+            : '') +
           '<p style="color:#475569;font-size:14px">Please screenshot this and send it. Or tap the button to clear the cache and retry.</p>' +
           '<pre style="white-space:pre-wrap;background:#f1f5f9;border:1px solid #cdd5de;border-radius:8px;padding:12px;font-size:12px;overflow:auto">' +
           (errs.length ? errs.join('\n\n') : 'No JavaScript error was captured — the app script may not have downloaded (network, or a cached copy of this page pointing at files that no longer exist).\n\nTry: tap the button below, or open the site in a private window.') +
