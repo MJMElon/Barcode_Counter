@@ -105,6 +105,7 @@ const en = {
   'ps.loadErr': 'Load failed: {msg}',
   'ps.noPlots': 'No plots found.',
   'ps.noNurseryAccess': 'You have no nursery access for Plot Status yet — ask an admin to set it in User Access.',
+  'ps.noReportAccess': 'You can view plot status but not report it. Ask an admin to enable it in User Access.',
   'ps.noStages': 'No status stages set up yet. An admin must create them in Nursery Operation Management → Life of Plot → Status Stages.',
 
   // top nav / offline
@@ -382,6 +383,7 @@ const ms = {
   'ps.loadErr': 'Gagal muat: {msg}',
   'ps.noPlots': 'Tiada plot dijumpai.',
   'ps.noNurseryAccess': 'Anda belum ada akses nurseri untuk Status Plot — minta admin tetapkan dalam User Access.',
+  'ps.noReportAccess': 'Anda boleh lihat status plot tetapi tidak boleh melaporkannya. Minta admin membukanya dalam User Access.',
   'ps.noStages': 'Peringkat status belum ditetapkan. Admin perlu cipta dalam Nursery Operation Management → Life of Plot → Status Stages.',
 
   // top nav / offline

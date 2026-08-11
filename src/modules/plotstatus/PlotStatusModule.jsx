@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { useLang } from '../../context/LanguageContext.jsx';
 import {
   allowedNurseries,
+  canPlotStatus,
   currentStatus,
   loadPlotStatusData,
   saveStatusEntry,
@@ -29,6 +30,9 @@ export default function PlotStatusModule() {
   const [toast, setToast] = useState(null);
 
   const allowed = allowedNurseries(permissions);
+  // "Report a plot stage" on the FC Scan Portal's User Access. Without it
+  // the module is read-only: the list still shows, nothing can be submitted.
+  const mayReport = canPlotStatus(permissions, 'report');
 
   const flash = (text) => {
     setToast(text);
@@ -75,6 +79,9 @@ export default function PlotStatusModule() {
   const today = todayStr();
 
   async function handleSave(stageId, date, remark) {
+    // The real gate. The button is disabled too, but that is presentation —
+    // this is the one path every save goes through.
+    if (!mayReport) { flash(t('ps.noReportAccess')); return; }
     const stage = stages.find((s) => String(s.id) === String(stageId));
     if (!stage || !editing) return;
     try {
@@ -193,7 +200,8 @@ export default function PlotStatusModule() {
 
                   <button
                     onClick={() => setEditing(p)}
-                    disabled={!stages.length}
+                    disabled={!stages.length || !mayReport}
+                    title={mayReport ? undefined : t('ps.noReportAccess')}
                     className="w-full mt-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-black text-[11px] uppercase tracking-widest rounded-xl py-2.5 transition-colors"
                   >
                     {t('ps.updateStatus')}
@@ -216,6 +224,7 @@ export default function PlotStatusModule() {
           current={currentStatus(entriesByPlot[editing.plot_name])}
           onClose={() => setEditing(null)}
           onSave={handleSave}
+          mayReport={mayReport}
           t={t}
         />
       )}
@@ -230,7 +239,7 @@ export default function PlotStatusModule() {
 }
 
 // Bottom sheet to key in / correct today's status for one plot.
-function EntrySheet({ plot, stages, current, onClose, onSave, t }) {
+function EntrySheet({ plot, stages, current, onClose, onSave, mayReport, t }) {
   const [stageId, setStageId] = useState(() => {
     if (current) {
       const s =
@@ -308,7 +317,7 @@ function EntrySheet({ plot, stages, current, onClose, onSave, t }) {
             await onSave(stageId, date, remark.trim());
             setSaving(false);
           }}
-          disabled={saving || !stageId || !date}
+          disabled={saving || !stageId || !date || !mayReport}
           className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-black text-[12px] uppercase tracking-widest rounded-xl py-3.5 transition-colors"
         >
           {saving ? t('auth.processing') : t('ps.saveStatus')}
