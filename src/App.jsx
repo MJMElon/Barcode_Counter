@@ -5,6 +5,7 @@ import AuthScreen from './components/AuthScreen.jsx';
 import Dashboard from './components/Dashboard.jsx';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
 import { useLang } from './context/LanguageContext.jsx';
+import { canScan } from './lib/access.js';
 
 // Heavy modules (camera scanner, PDF generation, Supabase queries) are loaded
 // on demand so the initial app shell stays small.
@@ -30,6 +31,17 @@ function Protected({ children }) {
   const { session, loading, allowed } = useAuth();
   if (loading) return <Loading />;
   if (!session || allowed === false) return <Navigate to="/" replace />;
+  return children;
+}
+
+// Gate for a single module. The dashboard already hides the card, but the URL
+// is still typeable and bookmarks outlive permissions, so the route has to
+// refuse too. Waits for permissions to arrive rather than bouncing someone out
+// of a page they are allowed to open.
+function PageGate({ page, children }) {
+  const { permissions } = useAuth();
+  if (permissions === null) return <Loading />;
+  if (!canScan(permissions, page, 'view')) return <Navigate to="/" replace />;
   return children;
 }
 
@@ -89,11 +101,13 @@ export default function App() {
         path="/plot-status"
         element={
           <Protected>
-            <ErrorBoundary>
-              <Suspense fallback={<Loading />}>
-                <PlotStatusModule />
-              </Suspense>
-            </ErrorBoundary>
+            <PageGate page="plot_status">
+              <ErrorBoundary>
+                <Suspense fallback={<Loading />}>
+                  <PlotStatusModule />
+                </Suspense>
+              </ErrorBoundary>
+            </PageGate>
           </Protected>
         }
       />
@@ -101,11 +115,13 @@ export default function App() {
         path="/maintenance"
         element={
           <Protected>
-            <ErrorBoundary>
-              <Suspense fallback={<Loading />}>
-                <MaintenanceModule />
-              </Suspense>
-            </ErrorBoundary>
+            <PageGate page="maintenance">
+              <ErrorBoundary>
+                <Suspense fallback={<Loading />}>
+                  <MaintenanceModule />
+                </Suspense>
+              </ErrorBoundary>
+            </PageGate>
           </Protected>
         }
       />

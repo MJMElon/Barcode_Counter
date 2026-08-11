@@ -19,33 +19,10 @@ export const workTypeByKey = (key) => WORK_TYPES.find((w) => w.key === key) || n
 
 export const todayStr = () => new Date().toISOString().slice(0, 10);
 
-/**
- * Which nurseries may this user see? Same rule the Plot Status module uses, so
- * one setting governs both.
- *  - permissions.plot_status_nurseries absent/null → null (= ALL nurseries)
- *  - array → exactly those (possibly empty = none)
- */
-export function allowedNurseries(permissions) {
-  const v = permissions && permissions.plot_status_nurseries;
-  return Array.isArray(v) ? v : null;
-}
-
-/**
- * Can this user do `action` on the Scan Portal's Maintenance page?
- * Set on the main portal's FC Scan Portal → User Access, stored as
- * permissions.scan_actions.maintenance.
- *
- * Fails OPEN when nothing has been set for the user: this module has always
- * been governed by having the Scan module at all, and somebody who has never
- * been through the new screen must not lose work they could do yesterday.
- */
-export function canMaintain(permissions, action) {
-  const acts = permissions && permissions.scan_actions && permissions.scan_actions.maintenance;
-  if (!acts) return true;
-  if (!acts.view) return false;            // page closed → every function closed
-  if (action === 'view') return true;
-  return !!acts[action];
-}
+// Access rules live in one place — see lib/access.js. Re-exported here so the
+// module's existing imports keep working, and so this file and the Plot Status
+// one cannot drift into two different answers to the same question.
+export { allowedNurseries, canMaintain } from '../../lib/access.js';
 
 /** Newest first, then by plot so a day's work reads in a stable order. */
 export function sortRecords(rows) {

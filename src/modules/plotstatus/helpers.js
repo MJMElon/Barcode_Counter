@@ -1,16 +1,10 @@
 // Pure helpers for the Plot Status module — no imports so they can be
 // unit-tested in plain node and reused anywhere.
 
-/**
- * Which nurseries may this user see?
- *  - permissions.plot_status_nurseries absent/null → null (= ALL nurseries)
- *  - array → exactly those nurseries (possibly empty = none)
- * Set on the main portal's User Access, under the Scan / FC Portal module.
- */
-export function allowedNurseries(permissions) {
-  const v = permissions && permissions.plot_status_nurseries;
-  return Array.isArray(v) ? v : null;
-}
+// Access rules live in one place — see lib/access.js. Re-exported here so the
+// module's existing imports keep working, and so this file and the Maintenance
+// one cannot drift into two different answers to the same question.
+export { allowedNurseries, canPlotStatus } from '../../lib/access.js';
 
 /**
  * Given a plot's daily entries sorted NEWEST FIRST, work out its current
