@@ -4,7 +4,7 @@
 import { supabase } from '../../lib/supabase.js';
 import { groupEntriesByPlot } from './helpers.js';
 
-export { allowedNurseries, currentStatus, groupEntriesByPlot, todayStr } from './helpers.js';
+export { allowedNurseries, canPlotStatus, currentStatus, groupEntriesByPlot, todayStr } from './helpers.js';
 
 // ── Supabase I/O ─────────────────────────────────────────────
 
