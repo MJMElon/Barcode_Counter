@@ -27,18 +27,73 @@ import {
 // phones: one tap to open, one tap to pick, one tap to save — no wide grid
 // to scroll sideways through.
 
+// Each plot is a carriage. Body colour carries the status so the whole train
+// reads at a glance; the roof is a deeper shade of the same colour.
 const DOT = {
   ontrack: 'bg-emerald-500',
   soon: 'bg-amber-500',
   overdue: 'bg-rose-500',
   none: 'bg-slate-300',
 };
-const CHIP = {
-  ontrack: 'border-emerald-200 hover:border-emerald-400',
-  soon: 'border-amber-200 hover:border-amber-400',
-  overdue: 'border-rose-200 hover:border-rose-400',
-  none: 'border-slate-200 hover:border-slate-300',
+const CAR = {
+  ontrack: { body: 'bg-emerald-400', roof: 'bg-emerald-600' },
+  soon: { body: 'bg-amber-400', roof: 'bg-amber-600' },
+  overdue: { body: 'bg-rose-400', roof: 'bg-rose-600' },
+  none: { body: 'bg-slate-300', roof: 'bg-slate-400' },
 };
+
+// Sleepers + rail, drawn per cell so the track runs unbroken across a row and
+// starts again cleanly on the next one.
+function Track() {
+  return (
+    <div className="relative h-2.5">
+      <div className="absolute inset-x-0 top-0 h-[3px] bg-slate-400/70" />
+      <div
+        className="absolute inset-x-0 top-[3px] h-1.5"
+        style={{
+          backgroundImage:
+            'repeating-linear-gradient(90deg, rgb(148 163 184 / .55) 0 4px, transparent 4px 13px)',
+        }}
+      />
+    </div>
+  );
+}
+
+// Cartoon locomotive at the head of the train. Decorative only.
+function Locomotive() {
+  return (
+    <div className="select-none">
+      <div className="h-[78px] flex items-end">
+        <svg viewBox="0 0 104 78" className="w-full h-full" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
+          {/* smoke */}
+          <circle cx="30" cy="8" r="4.5" fill="#cbd5e1" opacity=".45" />
+          <circle cx="22" cy="17" r="6" fill="#cbd5e1" opacity=".6" />
+          <circle cx="30" cy="26" r="4" fill="#cbd5e1" opacity=".75" />
+          {/* chimney */}
+          <rect x="18" y="30" width="12" height="14" rx="2.5" fill="#64748b" />
+          {/* boiler */}
+          <rect x="8" y="42" width="52" height="22" rx="10" fill="#ef4444" />
+          {/* cab + roof */}
+          <rect x="50" y="24" width="38" height="40" rx="6" fill="#ef4444" />
+          <rect x="46" y="17" width="48" height="9" rx="3.5" fill="#f59e0b" />
+          <rect x="58" y="31" width="24" height="17" rx="3.5" fill="#bae6fd" />
+          {/* footplate */}
+          <rect x="4" y="60" width="90" height="8" rx="3" fill="#f59e0b" />
+          {/* wheels */}
+          <circle cx="22" cy="70" r="7" fill="#64748b" />
+          <circle cx="22" cy="70" r="2.5" fill="#e2e8f0" />
+          <circle cx="46" cy="70" r="7" fill="#64748b" />
+          <circle cx="46" cy="70" r="2.5" fill="#e2e8f0" />
+          <circle cx="74" cy="69" r="8.5" fill="#64748b" />
+          <circle cx="74" cy="69" r="3" fill="#e2e8f0" />
+          {/* coupling to the first carriage */}
+          <rect x="92" y="64" width="12" height="4" rx="2" fill="#94a3b8" />
+        </svg>
+      </div>
+      <Track />
+    </div>
+  );
+}
 
 // Every storage key belonging to a plot (one per area for multi-area plots).
 export function keysOfPlot(pid) {
@@ -136,40 +191,55 @@ export default function EntryTab({ db, t, staffName, refresh, flash, openMap }) 
       </div>
       <div className="text-center text-[11px] font-semibold text-slate-400 -mt-1">{t('pm.railHint')}</div>
 
-      {/* The railway: one station per plot */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] px-3 py-4 sm:px-5">
-        <div className="relative max-w-[520px] mx-auto">
-          {/* the rail itself */}
-          <div className="absolute left-[18px] top-5 bottom-5 w-[3px] bg-slate-200 rounded-full" />
+      {/* The train: a locomotive pulling one carriage per plot. Carriages wrap
+          onto the next length of track, so the page still scrolls downwards. */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] px-2 py-4 sm:px-4 overflow-hidden">
+        <div className="grid grid-cols-4 sm:grid-cols-6 gap-y-3">
+          <Locomotive />
           {plots.map((pid) => {
             const st = effStatus(db, pid);
             const keys = keysOfPlot(pid);
             const done = keys.every((k) => tickedToday(db, k));
             const locked = keys.every((k) => isLocked(db, k));
+            const c = CAR[st.state];
             return (
               <button
                 key={pid}
                 onClick={() => setOpen(pid)}
-                className="relative w-full flex items-center gap-3 py-1.5 cursor-pointer group"
+                title={pid}
+                className="cursor-pointer group"
               >
-                {/* station node */}
-                <span
-                  className={`relative z-10 shrink-0 w-[22px] h-[22px] ml-[8px] rounded-full ring-4 ring-white ${DOT[st.state]} transition-transform group-hover:scale-110`}
-                />
-                {/* plot chip — plot number only */}
-                <span
-                  className={`flex-1 flex items-center justify-between gap-2 bg-white border-2 rounded-xl px-4 py-3 transition-colors ${CHIP[st.state]}`}
-                >
-                  <span className="font-black text-slate-800 text-[17px] tracking-wide">{pid}</span>
-                  <span className="flex items-center gap-1.5 text-[11px] font-black">
-                    {isMulti(pid) && (
-                      <span className="text-sky-600">{t('pm.multiTag', { n: MULTI[pid].areas.length })}</span>
+                <div className="h-[78px] flex flex-col items-center justify-end">
+                  <div className="relative w-[92%] max-w-[86px]">
+                    {/* roof */}
+                    <div className={`w-full h-[10px] rounded-t-lg ${c.roof}`} />
+                    {/* body + window carrying the plot number */}
+                    <div
+                      className={`w-[92%] mx-auto h-[42px] rounded-md ${c.body} flex items-center justify-center transition-transform group-hover:-translate-y-0.5`}
+                    >
+                      <span className="w-[78%] h-[27px] rounded bg-sky-50 border border-white/70 grid place-items-center">
+                        <span className="font-black text-slate-800 text-[14px] leading-none tracking-wide">
+                          {pid}
+                        </span>
+                      </span>
+                    </div>
+                    {/* wheels */}
+                    <div className="w-[92%] mx-auto flex justify-around -mt-[3px]">
+                      {[0, 1].map((i) => (
+                        <span key={i} className="w-4 h-4 rounded-full bg-slate-500 grid place-items-center">
+                          <span className="w-1.5 h-1.5 rounded-full bg-slate-200" />
+                        </span>
+                      ))}
+                    </div>
+                    {/* done / locked / multi-area badge */}
+                    {(locked || done || isMulti(pid)) && (
+                      <span className="absolute -top-2 -right-1 text-[10px] leading-none bg-white rounded-full px-1.5 py-1 shadow-sm border border-slate-200">
+                        {locked ? '🔒' : done ? '✅' : `${MULTI[pid].areas.length}⬦`}
+                      </span>
                     )}
-                    {locked && <span title={t('pm.lockedTip')}>🔒</span>}
-                    {done && !locked && <span className="text-emerald-600">✓</span>}
-                    <span className="text-slate-300 text-lg">›</span>
-                  </span>
-                </span>
+                  </div>
+                </div>
+                <Track />
               </button>
             );
           })}
