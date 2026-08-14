@@ -51,9 +51,18 @@ export default function PalmsModule() {
 
   // The DB is a plain mutable object persisted to localStorage; a tick
   // counter re-renders after each mutation (same pattern as the source app's
-  // re-render calls).
+  // re-render calls). A device with no data yet gets randomly generated
+  // stages (same generator as the "Isi data contoh" demo tool) so there is
+  // something to check straight away.
   const dbRef = useRef(null);
-  if (!dbRef.current) dbRef.current = loadDB();
+  if (!dbRef.current) {
+    let d = loadDB();
+    if (!Object.keys(d.logs || {}).length) {
+      d = seedSample();
+      saveDB(d);
+    }
+    dbRef.current = d;
+  }
   const db = dbRef.current;
   const [, setTick] = useState(0);
   const refresh = () => setTick((n) => n + 1);
@@ -279,16 +288,26 @@ function EntryTab({ db, t, staffName, refresh, flash, openMap }) {
       {/* Entry grid */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="text-sm border-collapse">
+          <table className="w-full table-fixed text-sm border-collapse min-w-[780px]">
+            {/* One fixed plot column + 11 equal activity columns keeps the
+                grid on a straight, even layout at every width. */}
+            <colgroup>
+              <col className="w-[150px]" />
+              {ACTIVITIES.map((a) => (
+                <col key={a.n} />
+              ))}
+            </colgroup>
             <thead>
               <tr className="bg-slate-50">
-                <th className="sticky left-0 bg-slate-50 z-10 px-3 py-2 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest min-w-[130px]">
+                <th className="sticky left-0 bg-slate-50 z-10 px-3 py-2 text-left align-bottom text-[10px] font-black text-slate-500 uppercase tracking-widest">
                   Plot
                 </th>
                 {ACTIVITIES.map((a) => (
-                  <th key={a.n} className="px-1 pb-2 pt-3 align-bottom">
-                    <div className="[writing-mode:vertical-rl] rotate-180 mx-auto text-[10px] font-black text-slate-500 uppercase tracking-wide whitespace-nowrap h-[110px]">
-                      {a.short}
+                  <th key={a.n} className="px-0 pb-2.5 pt-3 align-bottom">
+                    <div className="flex justify-center">
+                      <span className="[writing-mode:vertical-rl] rotate-180 text-[10px] font-black text-slate-500 uppercase tracking-wide whitespace-nowrap h-[104px] flex items-center">
+                        {a.short}
+                      </span>
                     </div>
                   </th>
                 ))}
@@ -302,9 +321,9 @@ function EntryTab({ db, t, staffName, refresh, flash, openMap }) {
                 const pend = db.editReq[key];
                 const missing = missingKeys.includes(key);
                 return (
-                  <tr key={key} className="border-t border-slate-100">
+                  <tr key={key} className="border-t border-slate-100 hover:bg-slate-50/60 transition-colors">
                     <td
-                      className={`sticky left-0 z-10 px-3 py-2 min-w-[130px] ${
+                      className={`sticky left-0 z-10 px-3 py-2.5 align-middle ${
                         missing ? 'bg-rose-50' : 'bg-white'
                       }`}
                     >
@@ -339,7 +358,7 @@ function EntryTab({ db, t, staffName, refresh, flash, openMap }) {
                       <td
                         key={a.n}
                         onClick={() => pick(key, a.n)}
-                        className={`text-center px-1 py-2 ${
+                        className={`text-center align-middle px-0 py-2.5 ${
                           locked ? 'bg-slate-50' : 'cursor-pointer hover:bg-emerald-50'
                         }`}
                       >
