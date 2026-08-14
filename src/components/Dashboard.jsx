@@ -23,6 +23,7 @@ export default function Dashboard() {
       ? [{ to: '/maintenance', icon: '🛠️', tint: 'bg-teal-100', title: t('dash.maintTitle') }]
       : []),
     { to: '/culling', icon: '🌴', tint: 'bg-lime-100', title: t('dash.cullingTitle') },
+    { to: '/palms', icon: '🪴', tint: 'bg-violet-100', title: t('dash.palmsTitle') },
   ];
 
   return (

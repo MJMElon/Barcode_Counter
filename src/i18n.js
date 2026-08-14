@@ -50,6 +50,7 @@ const en = {
   'dash.plotStatusTitle': 'Plot Status',
   'dash.maintTitle': 'Maintenance',
   'dash.cullingTitle': 'Culling Calculator',
+  'dash.palmsTitle': 'PALMS',
 
   // culling calculator
   'cull.title': 'Culling Calculator',
@@ -361,6 +362,7 @@ const ms = {
   'dash.plotStatusTitle': 'Status Plot',
   'dash.maintTitle': 'Penyelenggaraan',
   'dash.cullingTitle': 'Kalkulator Culling',
+  'dash.palmsTitle': 'PALMS',
 
   // culling calculator
   'cull.title': 'Kalkulator Culling',
