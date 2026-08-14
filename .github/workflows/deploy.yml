@@ -1,8 +1,18 @@
 name: Deploy to GitHub Pages
 
 # Builds the Vite + React app and publishes the static output to GitHub Pages.
-# IMPORTANT: in the repo settings, set Pages → Build and deployment → Source
-# to "GitHub Actions" (one-time setup).
+#
+# This repository can be published by TWO builders at once: this workflow, and
+# GitHub's own "pages build and deployment" (active while Pages → Source is set
+# to "Deploy from a branch"), which publishes the repository root verbatim.
+# Both run on a push to main and whichever finishes last wins the race — which
+# used to put the raw, unbuilt source on the live site and break it.
+#
+# So the build is also committed back to the repository root. Then the root IS
+# a working site, and it no longer matters which builder wins.
+#
+# Setting Pages → Source to "GitHub Actions" makes the other builder stop
+# running; the root sync below then becomes belt-and-braces and can be removed.
 
 on:
   push:
@@ -10,7 +20,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -32,9 +42,39 @@ jobs:
         env:
           # Optional AI scan key — add as a repo secret to enable it.
           VITE_GEMINI_KEY: ${{ secrets.VITE_GEMINI_KEY }}
+
+      # The entry is app.html (see vite.config.js); the published site needs it
+      # served as index.html.
+      - name: Name the entry index.html
+        run: mv dist/app.html dist/index.html
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
+
+      # Keep the repository root in sync with the build, so the branch-based
+      # builder serves this same working site instead of raw source.
+      - name: Sync built site to repository root
+        run: |
+          rm -rf assets
+          cp -r dist/. .
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Stage exactly what the build emitted at the root, nothing else.
+          git add -A $(ls -A dist)
+          if git diff --cached --quiet; then
+            echo "Root already matches this build — nothing to commit."
+            exit 0
+          fi
+          git commit -m "Publish built site to repository root [skip ci]"
+          # Pushes made with GITHUB_TOKEN do not start another workflow run, so
+          # this cannot loop. Rebase first in case main moved during the build.
+          for i in 1 2 3; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            sleep 5
+          done
+          echo "Could not push the root sync." >&2
+          exit 1
 
   deploy:
     needs: build

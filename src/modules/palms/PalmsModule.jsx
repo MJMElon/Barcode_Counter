@@ -1,5 +1,4 @@
 import { useMemo, useRef, useState } from 'react';
-import { IMG_U8, IMG_B1, IMG_B4 } from './maps.js';
 import CullingTab from './CullingTab.jsx';
 import EntryTab from './EntryTab.jsx';
 import TopNav from '../../components/TopNav.jsx';
@@ -509,7 +508,9 @@ function DetailModal({ db, pid, t, onClose, openMap }) {
 }
 
 /* ================= AREA MAP MODAL ================= */
-const AREA_IMGS = { U8: IMG_U8, B1: IMG_B1, B4: IMG_B4 };
+// Area-map photos are static files under public/maps so they are cached by
+// the browser and never inflate the JS bundle.
+const AREA_IMGS = { U8: './maps/u8.jpeg', B1: './maps/b1.jpeg', B4: './maps/b4.jpeg' };
 
 function AreaMapModal({ pid, t, onClose }) {
   const cfg = MULTI[pid];
