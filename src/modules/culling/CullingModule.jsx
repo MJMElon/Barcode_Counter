@@ -40,68 +40,78 @@ export default function CullingModule() {
       <div className="max-w-[900px] mx-auto px-3 sm:px-6 py-4 space-y-3">
         {!nursery ? (
           <>
-            <div className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.25em]">
-              {t('cull.step1')}
+            <div className="text-center pt-2">
+              <div className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.25em]">
+                {t('cull.step1')}
+              </div>
+              <h2 className="text-xl font-black text-slate-800 mt-0.5">{t('cull.pickNursery')}</h2>
             </div>
-            <h2 className="text-xl font-black text-slate-800 -mt-1">{t('cull.pickNursery')}</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {Object.entries(NURSERIES).map(([key, c]) => (
                 <button
                   key={key}
                   onClick={() => setNursery(key)}
                   className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] hover:shadow-[0_8px_32px_rgba(0,0,0,.12)] hover:-translate-y-0.5 hover:border-emerald-500 transition-all p-4 text-left cursor-pointer"
                 >
-                  <span className="inline-block text-[9px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-1">
-                    {c.count} plot
-                  </span>
-                  <div className="text-2xl font-black text-slate-800 mt-2">{key}</div>
-                  <div className="text-[11px] font-bold text-slate-400 mt-0.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-1">
+                      {c.count} plot
+                    </span>
+                    <span className="text-slate-300 font-black text-lg">→</span>
+                  </div>
+                  <div className="text-2xl font-black text-slate-800 mt-2.5">{key}</div>
+                  <div className="text-[11px] font-bold text-slate-400 mt-0.5 truncate">
                     {c.label ? `${c.label} · ` : ''}
                     {c.prefix}1–{c.prefix}
                     {c.count}
                   </div>
-                  <div className="text-slate-300 font-black text-lg mt-1">→</div>
                 </button>
               ))}
             </div>
           </>
         ) : (
           <>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setNursery(null)}
-                className="bg-white hover:bg-emerald-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-black text-slate-500 hover:text-emerald-700 uppercase tracking-wider transition-colors cursor-pointer"
-              >
-                ← {t('cull.nurseries')}
-              </button>
-              <div className="min-w-0">
-                <div className="font-black text-slate-800 text-[15px] leading-tight">{nursery}</div>
-                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
-                  {cfg.label || `${cfg.count} plot`}
+            {/* Header card: back button + nursery identity left, plot count right */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] px-4 py-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <button
+                  onClick={() => setNursery(null)}
+                  className="bg-slate-100 hover:bg-emerald-100 rounded-lg px-2.5 py-2 text-xs font-black text-slate-500 hover:text-emerald-700 uppercase tracking-wider whitespace-nowrap transition-colors cursor-pointer shrink-0"
+                >
+                  ← {t('cull.nurseries')}
+                </button>
+                <div className="min-w-0 leading-tight">
+                  <div className="font-black text-slate-800 text-[15px] truncate">{nursery}</div>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wide truncate">
+                    {cfg.label || 'Nurseri'}
+                  </div>
                 </div>
               </div>
+              <span className="shrink-0 text-[10px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2.5 py-1">
+                {cfg.count} plot
+              </span>
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              <span className="bg-white border border-slate-200 rounded-full px-3 py-1.5 text-[11px] font-bold text-slate-500">
-                <b className="text-slate-800">{cfg.count}</b> plot
-              </span>
-              <span className="bg-white border border-slate-200 rounded-full px-3 py-1.5 text-[11px] font-bold text-slate-500">
-                {t('cull.tapHint')}
-              </span>
-            </div>
+            <div className="text-center text-[11px] font-semibold text-slate-400">{t('cull.tapHint')}</div>
 
             <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full text-sm min-w-[480px]">
+                <table className="w-full table-fixed text-sm min-w-[420px]">
+                  {/* Fixed column widths keep every row on the same grid. */}
+                  <colgroup>
+                    <col className="w-[16%]" />
+                    <col className="w-[27%]" />
+                    <col className="w-[24%]" />
+                    <col className="w-[33%]" />
+                  </colgroup>
                   <thead>
-                    <tr className="bg-slate-50 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                    <tr className="bg-slate-50 text-[10px] font-black text-slate-500 uppercase tracking-widest">
                       {/* Transplant and Baki stay in the data (the rate needs
                           them) but are deliberately not shown to the user. */}
-                      <th className="px-3 py-2.5 sticky left-0 bg-slate-50">Plot</th>
-                      <th className="px-3 py-2.5">Pokok Inang</th>
-                      <th className="px-3 py-2.5">{t('cull.rate')}</th>
-                      <th className="px-3 py-2.5">{t('cull.action')}</th>
+                      <th className="px-3 py-3 text-left">Plot</th>
+                      <th className="px-3 py-3 text-center">Pokok Inang</th>
+                      <th className="px-3 py-3 text-center">{t('cull.rate')}</th>
+                      <th className="px-3 py-3 text-center">{t('cull.action')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -116,7 +126,7 @@ export default function CullingModule() {
                       let act;
                       if (!hot) {
                         act = (
-                          <span className="text-emerald-700 font-bold text-[11px] leading-tight">
+                          <span className="text-emerald-700 font-bold text-[11px] leading-snug">
                             {row.pokok === null ? (
                               t('cull.actDrone')
                             ) : (
@@ -129,21 +139,19 @@ export default function CullingModule() {
                           </span>
                         );
                       } else if (row.pokokAuditor !== null) {
-                        act = <span className="text-amber-600 font-bold text-[11px]">{t('cull.actHQ')}</span>;
+                        act = <span className="text-amber-600 font-bold text-[11px] leading-snug">{t('cull.actHQ')}</span>;
                       } else if (row.pokok !== null) {
-                        act = <span className="text-rose-600 font-bold text-[11px]">{t('cull.actWait')}</span>;
+                        act = <span className="text-rose-600 font-bold text-[11px] leading-snug">{t('cull.actWait')}</span>;
                       } else {
                         act = <span className="text-slate-300 font-bold">—</span>;
                       }
                       return (
-                        <tr key={row.plot} className="border-t border-slate-100">
-                          <td className="px-3 py-2.5 font-black text-slate-800 sticky left-0 bg-white">
-                            {row.plot}
-                          </td>
-                          <td className="px-3 py-2.5">
+                        <tr key={row.plot} className="border-t border-slate-100 hover:bg-slate-50/60 transition-colors">
+                          <td className="px-3 py-2.5 align-middle font-black text-slate-800">{row.plot}</td>
+                          <td className="px-3 py-2.5 align-middle text-center">
                             <button
                               onClick={() => setEditing(idx)}
-                              className={`rounded-xl px-3 py-1.5 text-[12px] font-black transition-colors cursor-pointer ${
+                              className={`min-w-[92px] rounded-xl px-3 py-1.5 text-[12px] font-black tabular-nums transition-colors cursor-pointer ${
                                 row.pokok === null
                                   ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
                                   : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200'
@@ -154,9 +162,9 @@ export default function CullingModule() {
                                 : fmtNum((row.pokok || 0) + (row.pokokAuditor || 0))}
                             </button>
                           </td>
-                          <td className="px-3 py-2.5">
+                          <td className="px-3 py-2.5 align-middle text-center">
                             <span
-                              className={`inline-block rounded-full px-2.5 py-1 text-[11px] font-black border ${
+                              className={`inline-block min-w-[68px] rounded-full px-2.5 py-1 text-[11px] font-black tabular-nums border ${
                                 hot
                                   ? 'bg-rose-50 text-rose-700 border-rose-200'
                                   : 'bg-teal-50 text-teal-700 border-teal-200'
@@ -165,7 +173,7 @@ export default function CullingModule() {
                               {fmtPct(rate)}
                             </span>
                           </td>
-                          <td className="px-3 py-2.5">{act}</td>
+                          <td className="px-3 py-2.5 align-middle text-center">{act}</td>
                         </tr>
                       );
                     })}

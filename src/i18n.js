@@ -61,7 +61,7 @@ const en = {
   'cull.rate': 'Culling Rate',
   'cull.action': 'Action',
   'cull.actDrone': 'Request drone flight',
-  'cull.actMove': 'Move pokok inang',
+  'cull.actMove': 'Transfer seedling reserved',
   'cull.actHQ': 'Please inform HQ',
   'cull.actWait': 'Wait for Site Auditor',
   'cull.fillIn': 'Fill in amount',
