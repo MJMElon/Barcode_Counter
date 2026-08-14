@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { IMG_U8, IMG_B1, IMG_B4 } from './maps.js';
+import CullingTab from './CullingTab.jsx';
 import TopNav from '../../components/TopNav.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useLang } from '../../context/LanguageContext.jsx';
@@ -90,6 +91,7 @@ export default function PalmsModule() {
           {[
             ['entry', t('pm.tabEntry')],
             ['dash', t('pm.tabDash')],
+            ['cull', t('cull.title')],
           ].map(([id, label]) => (
             <button
               key={id}
@@ -109,6 +111,8 @@ export default function PalmsModule() {
       <div className="max-w-[1000px] mx-auto px-3 sm:px-6 py-4 space-y-3">
         {tab === 'entry' ? (
           <EntryTab db={db} t={t} staffName={staffName} refresh={refresh} flash={flash} openMap={setMapPid} />
+        ) : tab === 'cull' ? (
+          <CullingTab t={t} />
         ) : (
           <DashTab
             db={db}

@@ -13,7 +13,6 @@ const ScanModule = lazy(() => import('./modules/scan/ScanModule.jsx'));
 const DoModule = lazy(() => import('./modules/do/DoModule.jsx'));
 const PlotStatusModule = lazy(() => import('./modules/plotstatus/PlotStatusModule.jsx'));
 const MaintenanceModule = lazy(() => import('./modules/maintenance/MaintenanceModule.jsx'));
-const CullingModule = lazy(() => import('./modules/culling/CullingModule.jsx'));
 const PalmsModule = lazy(() => import('./modules/palms/PalmsModule.jsx'));
 
 function Loading() {
@@ -139,18 +138,8 @@ export default function App() {
           </Protected>
         }
       />
-      <Route
-        path="/culling"
-        element={
-          <Protected>
-            <ErrorBoundary>
-              <Suspense fallback={<Loading />}>
-                <CullingModule />
-              </Suspense>
-            </ErrorBoundary>
-          </Protected>
-        }
-      />
+      {/* The Culling Calculator now lives inside PALMS; keep old links working. */}
+      <Route path="/culling" element={<Navigate to="/palms" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

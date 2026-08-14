@@ -49,15 +49,11 @@ const en = {
   'dash.scanDesc': 'Scan seals/barcodes and count them against a target quantity.',
   'dash.plotStatusTitle': 'Plot Status',
   'dash.maintTitle': 'Maintenance',
-  'dash.cullingTitle': 'Culling Calculator',
   'dash.palmsTitle': 'PALMS',
 
-  // culling calculator
+  // culling calculator (PALMS tab)
   'cull.title': 'Culling Calculator',
-  'cull.step1': 'Step 1',
-  'cull.pickNursery': 'Choose a nursery',
-  'cull.nurseries': 'Nurseries',
-  'cull.tapHint': 'Tap a Pokok Inang cell to record the amount',
+  'cull.tapHint': 'Tap a Pokok Inang cell to record the amount.',
   'cull.balance': 'Balance',
   'cull.rate': 'Culling Rate',
   'cull.action': 'Action',
@@ -423,15 +419,11 @@ const ms = {
   'dash.scanDesc': 'Imbas seal/barkod dan kira mengikut kuantiti sasaran.',
   'dash.plotStatusTitle': 'Status Plot',
   'dash.maintTitle': 'Penyelenggaraan',
-  'dash.cullingTitle': 'Kalkulator Culling',
   'dash.palmsTitle': 'PALMS',
 
-  // culling calculator
+  // culling calculator (PALMS tab)
   'cull.title': 'Kalkulator Culling',
-  'cull.step1': 'Langkah 1',
-  'cull.pickNursery': 'Pilih nurseri',
-  'cull.nurseries': 'Nurseri',
-  'cull.tapHint': 'Ketik sel Pokok Inang untuk merekod bilangan',
+  'cull.tapHint': 'Ketik sel Pokok Inang untuk merekod bilangan.',
   'cull.balance': 'Baki',
   'cull.rate': 'Kadar Culling',
   'cull.action': 'Tindakan',
