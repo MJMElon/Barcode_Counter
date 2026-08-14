@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { IMG_U8, IMG_B1, IMG_B4 } from './maps.js';
 import CullingTab from './CullingTab.jsx';
+import EntryTab from './EntryTab.jsx';
 import TopNav from '../../components/TopNav.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useLang } from '../../context/LanguageContext.jsx';
@@ -14,15 +15,11 @@ import {
   combinedLabel,
   currentEntry,
   diffDays,
-  durFor,
   effActivityName,
   effEstEnd,
   effStatus,
-  entryUnits,
   freshDB,
-  isLocked,
   isMulti,
-  keyLabel,
   loadDB,
   nurseryOfPlot,
   plotInActivity,
@@ -30,14 +27,13 @@ import {
   prettyD,
   saveDB,
   seedSample,
-  startEntry,
-  todayStr,
 } from './data.js';
 
 // PALMS — Plot Activity Log Monitoring System, ported from the standalone
 // NurseryPALMS app into the portal: portal login and theme, EN/BM via the
 // portal language toggle, data still offline on the device (localStorage).
-// Two tabs: the daily status entry grid and the monitoring dashboard.
+// Three tabs: the daily status railway, the monitoring dashboard and the
+// Culling Calculator.
 
 const STATE_BADGE = {
   ontrack: 'bg-teal-50 text-teal-700 border-teal-200',
@@ -141,265 +137,6 @@ export default function PalmsModule() {
         </div>
       )}
     </div>
-  );
-}
-
-/* ================= ENTRY TAB ================= */
-function EntryTab({ db, t, staffName, refresh, flash, openMap }) {
-  const [nursery, setNursery] = useState('BNN');
-  const [saveMsg, setSaveMsg] = useState(null); // {err, text}
-  const [missingKeys, setMissingKeys] = useState([]);
-
-  const units = useMemo(() => entryUnits(nursery), [nursery]);
-
-  // Draft selection per unit, pre-filled from the current open entry.
-  const [draft, setDraft] = useState(() => initDraft(db, units));
-  function initDraft(d, us) {
-    const dr = {};
-    us.forEach((u) => {
-      const c = currentEntry(d, u.key);
-      if (c) dr[u.key] = c.actN;
-    });
-    return dr;
-  }
-  function changeNursery(nk) {
-    setNursery(nk);
-    setDraft(initDraft(db, entryUnits(nk)));
-    setSaveMsg(null);
-    setMissingKeys([]);
-  }
-
-  const pending = units.map((u) => u.key).filter((k) => db.editReq[k]);
-
-  async function requestEdit(key) {
-    db.editReq[key] = { by: 'FC', at: todayStr(), status: 'pending' };
-    saveDB(db);
-    refresh();
-    flash(t('pm.reqSent'));
-  }
-  async function approveEdit(key) {
-    db.unlocked[key] = true;
-    delete db.editReq[key];
-    saveDB(db);
-    refresh();
-    flash(t('pm.unlockedToast', { k: keyLabel(key) }));
-  }
-  async function rejectEdit(key) {
-    delete db.editReq[key];
-    saveDB(db);
-    refresh();
-    flash(t('pm.rejectedToast', { k: keyLabel(key) }));
-  }
-
-  function pick(key, n) {
-    if (isLocked(db, key)) return;
-    setDraft((d) => ({ ...d, [key]: n }));
-    setMissingKeys((m) => m.filter((k) => k !== key));
-  }
-
-  function onSave() {
-    const today = todayStr();
-    const missing = units.filter((u) => !currentEntry(db, u.key) && draft[u.key] == null);
-    if (missing.length) {
-      setMissingKeys(missing.map((u) => u.key));
-      setSaveMsg({
-        err: true,
-        text: t('pm.missingMsg', { n: missing.length, list: missing.map((u) => u.label).join(', ') }),
-      });
-      flash(t('pm.missingToast'));
-      return;
-    }
-    units.forEach((u) => {
-      const key = u.key;
-      const d = draft[key];
-      if (d == null) return;
-      if (isLocked(db, key)) return;
-      const cur = currentEntry(db, key);
-      if (!cur) {
-        startEntry(db, key, d, today);
-      } else if (d > cur.actN) {
-        cur.end = today;
-        startEntry(db, key, d, today);
-      } else if (d < cur.actN) {
-        cur.actN = d;
-        cur.ideal = durFor(key, activityByN(d));
-      }
-      db.updated[key] = { by: staffName || 'FC', at: today };
-      delete db.unlocked[key];
-    });
-    const ok = saveDB(db);
-    refresh();
-    setMissingKeys([]);
-    setSaveMsg(
-      ok ? { err: false, text: t('pm.savedMsg', { name: staffName || 'FC', date: prettyD(today) }) } : { err: true, text: t('pm.saveFail') }
-    );
-    flash(ok ? t('pm.savedToast') : t('pm.saveFailToast'));
-  }
-
-  return (
-    <>
-      {/* Header: title + nursery picker */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
-        <h2 className="font-black text-slate-800 text-[15px]">
-          {t('pm.entryTitle', { n: NURSERIES[nursery].label })}
-        </h2>
-        <label className="flex items-center gap-2 text-[11px] font-bold text-slate-500">
-          {t('pm.nursery')}
-          <select
-            value={nursery}
-            onChange={(e) => changeNursery(e.target.value)}
-            className="bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-800 outline-none focus:border-emerald-500"
-          >
-            {Object.keys(NURSERIES).map((k) => (
-              <option key={k} value={k}>
-                {NURSERIES[k].label}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      {/* Edit requests needing supervisor approval */}
-      {pending.length > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3.5">
-          <h4 className="text-[11px] font-black text-amber-800 uppercase tracking-wide mb-2">
-            {t('pm.reqPanelTitle')}
-          </h4>
-          {pending.map((k) => (
-            <div key={k} className="flex items-center gap-2 flex-wrap py-1.5 border-t border-amber-100 first:border-0">
-              <span className="font-black text-slate-800 text-[13px]">{keyLabel(k)}</span>
-              <span className="text-[11px] font-bold text-amber-700">
-                {t('pm.requestedBy', { by: db.editReq[k].by, date: prettyD(db.editReq[k].at) })}
-              </span>
-              <span className="flex-1" />
-              <button
-                onClick={() => approveEdit(k)}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black uppercase tracking-wider rounded-lg px-3 py-1.5 cursor-pointer"
-              >
-                {t('pm.approve')}
-              </button>
-              <button
-                onClick={() => rejectEdit(k)}
-                className="bg-white border border-slate-300 text-slate-600 text-[10px] font-black uppercase tracking-wider rounded-lg px-3 py-1.5 cursor-pointer"
-              >
-                {t('pm.reject')}
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Entry grid */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full table-fixed text-sm border-collapse min-w-[780px]">
-            {/* One fixed plot column + 11 equal activity columns keeps the
-                grid on a straight, even layout at every width. */}
-            <colgroup>
-              <col className="w-[150px]" />
-              {ACTIVITIES.map((a) => (
-                <col key={a.n} />
-              ))}
-            </colgroup>
-            <thead>
-              <tr className="bg-slate-50">
-                <th className="sticky left-0 bg-slate-50 z-10 px-3 py-2 text-left align-bottom text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                  Plot
-                </th>
-                {ACTIVITIES.map((a) => (
-                  <th key={a.n} className="px-0 pb-2.5 pt-3 align-bottom">
-                    <div className="flex justify-center">
-                      <span className="[writing-mode:vertical-rl] rotate-180 text-[10px] font-black text-slate-500 uppercase tracking-wide whitespace-nowrap h-[104px] flex items-center">
-                        {a.short}
-                      </span>
-                    </div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {units.map((u) => {
-                const key = u.key;
-                const locked = isLocked(db, key);
-                const unlocked = !!db.unlocked[key];
-                const pend = db.editReq[key];
-                const missing = missingKeys.includes(key);
-                return (
-                  <tr key={key} className="border-t border-slate-100 hover:bg-slate-50/60 transition-colors">
-                    <td
-                      className={`sticky left-0 z-10 px-3 py-2.5 align-middle ${
-                        missing ? 'bg-rose-50' : 'bg-white'
-                      }`}
-                    >
-                      <div className="flex items-center gap-1 font-black text-slate-800 text-[13px]">
-                        {locked && <span title={t('pm.lockedTip')}>🔒</span>}
-                        {u.label}
-                      </div>
-                      {u.info && (
-                        <button
-                          onClick={() => openMap(u.pid)}
-                          className="text-[10px] font-bold text-sky-600 hover:underline cursor-pointer"
-                        >
-                          ⓘ {t('pm.areasInfo', { pid: u.pid, n: areasOf(u.pid).length })}
-                        </button>
-                      )}
-                      {locked &&
-                        (pend ? (
-                          <div className="text-[10px] font-bold text-amber-600">{t('pm.pendingEdit')}</div>
-                        ) : (
-                          <button
-                            onClick={() => requestEdit(key)}
-                            className="text-[10px] font-bold text-emerald-600 hover:underline cursor-pointer"
-                          >
-                            {t('pm.requestEdit')}
-                          </button>
-                        ))}
-                      {!locked && unlocked && (
-                        <div className="text-[10px] font-bold text-emerald-600">{t('pm.unlockedNote')}</div>
-                      )}
-                    </td>
-                    {ACTIVITIES.map((a) => (
-                      <td
-                        key={a.n}
-                        onClick={() => pick(key, a.n)}
-                        className={`text-center align-middle px-0 py-2.5 ${
-                          locked ? 'bg-slate-50' : 'cursor-pointer hover:bg-emerald-50'
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name={`r_${key}`}
-                          checked={draft[key] === a.n}
-                          disabled={locked}
-                          onChange={() => pick(key, a.n)}
-                          className="accent-emerald-600 w-4 h-4 cursor-pointer disabled:cursor-not-allowed"
-                        />
-                      </td>
-                    ))}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Save bar */}
-      <div className="flex items-center gap-3 flex-wrap">
-        {saveMsg && (
-          <div className={`text-[12px] font-bold ${saveMsg.err ? 'text-rose-600' : 'text-emerald-700'}`}>
-            {saveMsg.text}
-          </div>
-        )}
-        <span className="flex-1" />
-        <button
-          onClick={onSave}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[12px] uppercase tracking-widest rounded-xl px-6 py-3 transition-colors cursor-pointer"
-        >
-          {t('pm.save')}
-        </button>
-      </div>
-    </>
   );
 }
 
