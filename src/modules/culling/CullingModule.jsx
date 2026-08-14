@@ -10,12 +10,15 @@ import {
   getSessionData,
   videoNeeded,
 } from './data.js';
+import { cullingScopePlots } from '../palms/data.js';
 
 // Culling Calculator for Field Conductors — ported from the NurseryFCmobile
 // trial app. Flow: pick a nursery → plot table → tap Pokok Inang to record
 // amounts (Field Conductor first; a Site Auditor second entry unlocks when the
 // rate stays above 10%; video evidence is requested when even the Auditor
-// amount leaves the rate above 10%). Labels stay in Malay like the original.
+// amount leaves the rate above 10%).
+// Linked to PALMS: only plots whose current PALMS activity is Saringan Anak
+// Bibit, Tunggu buat culling, Culling or Pengambilan are listed here.
 export default function CullingModule() {
   const { staffName } = useAuth();
   const { t } = useLang();
@@ -26,8 +29,13 @@ export default function CullingModule() {
   const [, setTick] = useState(0); // re-render after mutating session data
   const refresh = () => setTick((n) => n + 1);
 
+  // Plots currently at a culling-related stage in PALMS (re-read on each
+  // screen change so fresh PALMS entries show up straight away).
+  const scope = useMemo(() => cullingScopePlots(), [nursery]);
+
   const cfg = nursery ? NURSERIES[nursery] : null;
-  const rows = nursery ? data[nursery] : [];
+  const rows = nursery ? data[nursery].filter((r) => scope.has(r.plot)) : [];
+  const scopeCount = (key) => data[key].filter((r) => scope.has(r.plot)).length;
 
   return (
     <div className="min-h-screen bg-slate-100 fade-enter">
@@ -45,6 +53,9 @@ export default function CullingModule() {
                 {t('cull.step1')}
               </div>
               <h2 className="text-xl font-black text-slate-800 mt-0.5">{t('cull.pickNursery')}</h2>
+              <p className="text-[11px] font-semibold text-slate-400 mt-1.5 max-w-md mx-auto">
+                {t('cull.palmsNote')}
+              </p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {Object.entries(NURSERIES).map(([key, c]) => (
@@ -55,13 +66,12 @@ export default function CullingModule() {
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-[9px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-1">
-                      {c.count} plot
+                      {scopeCount(key)} plot
                     </span>
                     <span className="text-slate-300 font-black text-lg">→</span>
                   </div>
                   <div className="text-2xl font-black text-slate-800 mt-2.5">{key}</div>
                   <div className="text-[11px] font-bold text-slate-400 mt-0.5 truncate">
-                    {c.label ? `${c.label} · ` : ''}
                     {c.prefix}1–{c.prefix}
                     {c.count}
                   </div>
@@ -88,12 +98,19 @@ export default function CullingModule() {
                 </div>
               </div>
               <span className="shrink-0 text-[10px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2.5 py-1">
-                {cfg.count} plot
+                {rows.length} plot
               </span>
             </div>
 
             <div className="text-center text-[11px] font-semibold text-slate-400">{t('cull.tapHint')}</div>
 
+            {rows.length === 0 && (
+              <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-2xl px-4 py-6 text-center text-sm font-bold">
+                {t('cull.noPalmsPlots')}
+              </div>
+            )}
+
+            {rows.length > 0 && (
             <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full table-fixed text-sm min-w-[420px]">
@@ -181,6 +198,7 @@ export default function CullingModule() {
                 </table>
               </div>
             </div>
+            )}
           </>
         )}
       </div>
