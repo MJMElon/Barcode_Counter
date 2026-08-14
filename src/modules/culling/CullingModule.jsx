@@ -8,7 +8,6 @@ import {
   fmtNum,
   fmtPct,
   getSessionData,
-  targetPokok,
   videoNeeded,
 } from './data.js';
 
@@ -94,12 +93,12 @@ export default function CullingModule() {
 
             <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full text-sm min-w-[640px]">
+                <table className="w-full text-sm min-w-[480px]">
                   <thead>
                     <tr className="bg-slate-50 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                      {/* Transplant and Baki stay in the data (the rate needs
+                          them) but are deliberately not shown to the user. */}
                       <th className="px-3 py-2.5 sticky left-0 bg-slate-50">Plot</th>
-                      <th className="px-3 py-2.5">Transplant</th>
-                      <th className="px-3 py-2.5">{t('cull.balance')}</th>
                       <th className="px-3 py-2.5">Pokok Inang</th>
                       <th className="px-3 py-2.5">{t('cull.rate')}</th>
                       <th className="px-3 py-2.5">{t('cull.action')}</th>
@@ -141,8 +140,6 @@ export default function CullingModule() {
                           <td className="px-3 py-2.5 font-black text-slate-800 sticky left-0 bg-white">
                             {row.plot}
                           </td>
-                          <td className="px-3 py-2.5 font-semibold text-slate-600">{fmtNum(row.transplant)}</td>
-                          <td className="px-3 py-2.5 font-semibold text-slate-600">{fmtNum(row.balance)}</td>
                           <td className="px-3 py-2.5">
                             <button
                               onClick={() => setEditing(idx)}
@@ -224,15 +221,6 @@ function EntryModal({ nurseryKey, row, onClose, t }) {
   const fcVisible = stage === 'fc' || fcRevealed;
   const audVisible = stage === 'auditor';
 
-  // value in play for each side: from a visible input, else the saved value
-  const fc = fcVisible ? parseAmount(fcVal) : row.pokok;
-  const aud = audVisible ? parseAmount(audVal) : row.pokokAuditor;
-
-  const beforeRate = cullingRate(row.balance, row.pokok, row.pokokAuditor, row.transplant);
-  const afterRate = cullingRate(row.balance, fc, aud, row.transplant);
-  const hasInput = (fcVisible && fcVal !== '') || (audVisible && audVal !== '');
-  const diff = beforeRate - afterRate; // positive = went DOWN
-
   function confirmEdit() {
     if (pendingEdit === 'fc-reveal') {
       setFcRevealed(true);
@@ -298,45 +286,9 @@ function EntryModal({ nurseryKey, row, onClose, t }) {
           </button>
         )}
 
-        {/* live before / after culling rate */}
-        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 mb-3">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">{t('cull.rateNow')}</span>
-            <span className={`font-black ${beforeRate > 0.1 ? 'text-rose-600' : 'text-slate-800'}`}>
-              {fmtPct(beforeRate)}
-            </span>
-          </div>
-          <div className="border-t border-dashed border-slate-200 my-2.5" />
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">{t('cull.rateNew')}</span>
-            <span className={`font-black text-lg ${afterRate > 0.1 ? 'text-rose-600' : 'text-emerald-600'}`}>
-              {fmtPct(afterRate)}
-            </span>
-          </div>
-          <div
-            className={`mt-2 text-center text-[11px] font-black rounded-lg py-1.5 ${
-              !hasInput || Math.abs(diff) <= 0.00001
-                ? 'bg-slate-100 text-slate-400'
-                : diff > 0
-                  ? 'bg-emerald-50 text-emerald-700'
-                  : 'bg-rose-50 text-rose-600'
-            }`}
-          >
-            {!hasInput
-              ? `– ${t('cull.enterValue')}`
-              : diff > 0.00001
-                ? `▼ ${fmtPct(diff)} ${t('cull.lower')}`
-                : diff < -0.00001
-                  ? `▲ ${fmtPct(-diff)} ${t('cull.higher')}`
-                  : `– ${t('cull.noChange')}`}
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 mb-3">
-          <span className="text-[12px] font-bold text-amber-800">{t('cull.target')}</span>
-          <b className="text-amber-900">{fmtNum(targetPokok(row))}</b>
-        </div>
-
+        {/* The culling rate (current, new, target) is deliberately hidden in
+            this pop-up — the user only keys in the amount; the rate maths
+            still run in the background for the table and the workflow. */}
         {fcVisible && (
           <div className="mb-3">
             <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
