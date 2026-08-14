@@ -141,3 +141,12 @@ body {
   white-space: nowrap;
 }
 .btn-open:hover { background: #10b981; color: white; border-color: #10b981; }
+
+/* ── Motion ──
+   Anyone who has asked their device to reduce motion gets a still train. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-chug,
+  .animate-puff {
+    animation: none !important;
+  }
+}

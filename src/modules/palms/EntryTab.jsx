@@ -64,11 +64,19 @@ function Locomotive() {
   return (
     <div className="select-none">
       <div className="h-[78px] flex items-end">
-        <svg viewBox="0 0 104 78" className="w-full h-full" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
-          {/* smoke */}
-          <circle cx="30" cy="8" r="4.5" fill="#cbd5e1" opacity=".45" />
-          <circle cx="22" cy="17" r="6" fill="#cbd5e1" opacity=".6" />
-          <circle cx="30" cy="26" r="4" fill="#cbd5e1" opacity=".75" />
+        <svg viewBox="0 0 104 78" className="w-full h-full animate-chug" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
+          {/* smoke — three puffs leaving the funnel on a stagger */}
+          {[0, 0.8, 1.6].map((d, i) => (
+            <circle
+              key={i}
+              cx="24"
+              cy="30"
+              r={4 + i * 0.6}
+              fill="#cbd5e1"
+              className="animate-puff"
+              style={{ animationDelay: `${d}s` }}
+            />
+          ))}
           {/* chimney */}
           <rect x="18" y="30" width="12" height="14" rx="2.5" fill="#64748b" />
           {/* boiler */}
@@ -196,7 +204,7 @@ export default function EntryTab({ db, t, staffName, refresh, flash, openMap }) 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] px-2 py-4 sm:px-4 overflow-hidden">
         <div className="grid grid-cols-4 sm:grid-cols-6 gap-y-3">
           <Locomotive />
-          {plots.map((pid) => {
+          {plots.map((pid, i) => {
             const st = effStatus(db, pid);
             const keys = keysOfPlot(pid);
             const done = keys.every((k) => tickedToday(db, k));
@@ -210,7 +218,12 @@ export default function EntryTab({ db, t, staffName, refresh, flash, openMap }) 
                 className="cursor-pointer group"
               >
                 <div className="h-[78px] flex flex-col items-center justify-end">
-                  <div className="relative w-[92%] max-w-[86px]">
+                  {/* Offsetting each carriage makes the chug travel along the
+                      train instead of every carriage bouncing in unison. */}
+                  <div
+                    className="relative w-[92%] max-w-[86px] animate-chug"
+                    style={{ animationDelay: `${((i + 1) % 6) * 0.1}s` }}
+                  >
                     {/* roof */}
                     <div className={`w-full h-[10px] rounded-t-lg ${c.roof}`} />
                     {/* body + window carrying the plot number */}
