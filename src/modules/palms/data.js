@@ -32,20 +32,26 @@ const STORE_KEY = 'palms_status_v8';
 /* ---------- multi-area plots (only B1, B4 & U8) ----------
    The map photos live in maps.js and are imported only where shown (the
    area-map modal) so other modules that read this data stay lightweight. */
+// `band` is where each area sits across the width of its map photo, as
+// [left%, right%]. The areas run left to right on all three maps, so a
+// vertical band is enough to make the picture itself tappable.
 export const MULTI = {
   U8: {
     areas: ['A', 'B', 'C'],
     weights: { A: 33, B: 33, C: 33 },
+    band: { A: [0, 35], B: [35, 61], C: [61, 100] },
     cap: 'U8 mempunyai 3 kawasan (A, B, C) — setiap kawasan 33%. Mana-mana 2 kawasan = 70% plot.',
   },
   B1: {
     areas: ['A', 'B'],
     weights: { A: 30, B: 70 },
+    band: { A: [0, 51], B: [51, 100] },
     cap: 'B1 mempunyai 2 kawasan (A, B). Kawasan B = 70% plot, kawasan A = 30%.',
   },
   B4: {
     areas: ['A', 'B'],
     weights: { A: 30, B: 70 },
+    band: { A: [0, 23], B: [23, 100] },
     cap: 'B4 mempunyai 2 kawasan (A, B). Kawasan B = 70% plot, kawasan A = 30%.',
   },
 };

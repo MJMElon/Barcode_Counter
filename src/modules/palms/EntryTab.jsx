@@ -366,35 +366,49 @@ function AreaMapStep({ db, pid, areas, target, t, onPick, onClose }) {
         </div>
 
         <div className="px-4 py-3 overflow-y-auto flex-1">
-          <img
-            src={areaMapUrl(pid)}
-            alt={`Peta kawasan ${pid}`}
-            className="w-full rounded-xl border border-slate-200"
-          />
+          {/* The photo IS the control: each area is a tappable band over its
+              own part of the picture. The outstanding area is tinted green,
+              areas already keyed in today are dimmed and ticked. */}
+          <div className="relative rounded-xl overflow-hidden border border-slate-200">
+            <img src={areaMapUrl(pid)} alt={`Peta kawasan ${pid}`} className="w-full block" />
+            {areas.map((a) => {
+              const done = tickedToday(db, aKey(pid, a));
+              const isTarget = a === target;
+              const [l, r] = cfg.band[a];
+              return (
+                <button
+                  key={a}
+                  onClick={() => onPick(a)}
+                  title={t('pm.area', { a })}
+                  aria-label={t('pm.area', { a })}
+                  style={{ left: `${l}%`, width: `${r - l}%` }}
+                  className={`absolute inset-y-0 grid place-items-center cursor-pointer transition-colors ${
+                    isTarget
+                      ? 'bg-emerald-500/25 ring-2 ring-inset ring-emerald-400'
+                      : done
+                        ? 'bg-slate-900/35 hover:bg-slate-900/20'
+                        : 'bg-transparent hover:bg-white/20'
+                  }`}
+                >
+                  {/* Just the letter — the narrowest band (B4's A) is only
+                      23% wide, and the photo already labels each area. */}
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-[13px] font-black whitespace-nowrap shadow-sm ${
+                      isTarget
+                        ? 'bg-emerald-600 text-white'
+                        : done
+                          ? 'bg-white/85 text-slate-500'
+                          : 'bg-white/90 text-slate-800'
+                    }`}
+                  >
+                    {a}
+                    {done && ' ✓'}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
           <p className="text-[11px] font-semibold text-slate-500 mt-2">{cfg.cap}</p>
-        </div>
-
-        <div className="px-4 py-3 border-t border-slate-100 grid grid-cols-3 gap-2">
-          {areas.map((a) => {
-            const done = tickedToday(db, aKey(pid, a));
-            const isTarget = a === target;
-            return (
-              <button
-                key={a}
-                onClick={() => onPick(a)}
-                className={`rounded-xl px-2 py-3 text-[12px] font-black transition-colors cursor-pointer border-2 ${
-                  isTarget
-                    ? 'bg-emerald-600 border-emerald-600 text-white'
-                    : done
-                      ? 'bg-slate-50 border-slate-200 text-slate-400'
-                      : 'bg-white border-slate-300 text-slate-700 hover:border-emerald-400'
-                }`}
-              >
-                {t('pm.area', { a })}
-                {done && <span className="block text-[10px] font-bold mt-0.5">✓</span>}
-              </button>
-            );
-          })}
         </div>
       </div>
     </div>
