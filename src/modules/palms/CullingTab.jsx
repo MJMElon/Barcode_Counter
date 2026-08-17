@@ -5,6 +5,7 @@ import {
   fmtNum,
   fmtPct,
   getSessionData,
+  persistSessionData,
   videoNeeded,
 } from './cullingData.js';
 import { cullingScopePlots, prettyD, todayStr } from './data.js';
@@ -362,6 +363,7 @@ function CullingEntryModal({ nurseryKey, row, onClose, t }) {
   function save() {
     if (fcVisible) row.pokok = parseAmount(fcVal);
     if (audVisible) row.pokokAuditor = parseAmount(audVal);
+    persistSessionData();
 
     // After the Auditor submits: if still > 10%, keep the pop-up open and
     // reveal the video-evidence box (first save only). The next Simpan closes.
@@ -377,6 +379,7 @@ function CullingEntryModal({ nurseryKey, row, onClose, t }) {
     const f = e.target.files && e.target.files[0];
     if (!f) return;
     row.video = f.name;
+    persistSessionData();
     setVideoName(f.name);
     setVideoUrl(URL.createObjectURL(f));
   }

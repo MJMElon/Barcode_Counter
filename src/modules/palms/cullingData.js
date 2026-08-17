@@ -63,9 +63,34 @@ function buildData() {
   return data;
 }
 
+// Kept on the device, not just in memory. Amounts the Field Conductor keys
+// in used to vanish on a page reload, and the plot figures were re-rolled
+// from scratch — which left requests already raised pointing at plots whose
+// numbers had completely changed.
+const CULL_KEY = 'palms_culling_v1';
+
 let sessionData = null;
+
+function readStored() {
+  try {
+    const raw = localStorage.getItem(CULL_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+export function persistSessionData() {
+  try {
+    localStorage.setItem(CULL_KEY, JSON.stringify(sessionData));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 export function getSessionData() {
-  if (!sessionData) sessionData = buildData();
+  if (!sessionData) sessionData = readStored() || buildData();
   return sessionData;
 }
 
@@ -73,6 +98,7 @@ export function getSessionData() {
 // the plot statuses being reseeded alongside it.
 export function resetSessionData() {
   sessionData = buildData();
+  persistSessionData();
   return sessionData;
 }
 
