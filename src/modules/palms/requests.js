@@ -38,6 +38,12 @@ export function addRequest({ plot, nursery, purpose, by, at, note }) {
   return { list: next, added: true };
 }
 
+// Replace the queue wholesale — used when loading demo data.
+export function seedRequests(list) {
+  persist(list);
+  return list;
+}
+
 export function requestsForPlot(list, plot) {
   return list.filter((r) => r.plot === plot);
 }

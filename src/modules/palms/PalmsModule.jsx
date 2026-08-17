@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import CullingTab from './CullingTab.jsx';
 import EntryTab from './EntryTab.jsx';
+import { seedDemo } from './demo.js';
 import TopNav from '../../components/TopNav.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useLang } from '../../context/LanguageContext.jsx';
@@ -28,7 +29,6 @@ import {
   plotsOf,
   prettyD,
   saveDB,
-  seedSample,
   todayStr,
 } from './data.js';
 
@@ -87,10 +87,7 @@ export default function PalmsModule() {
   const dbRef = useRef(null);
   if (!dbRef.current) {
     let d = loadDB();
-    if (!Object.keys(d.logs || {}).length) {
-      d = seedSample();
-      saveDB(d);
-    }
+    if (!Object.keys(d.logs || {}).length) d = seedDemo();
     dbRef.current = d;
   }
   const db = dbRef.current;
@@ -478,7 +475,7 @@ function DashTab({ db, t, stateLabel, refresh, flash, openDetail, replaceDB }) {
         {t('pm.demoTools')}{' '}
         <button
           onClick={() => {
-            replaceDB(seedSample());
+            replaceDB(seedDemo());
             flash(t('pm.sampleLoaded'));
           }}
           className="text-emerald-600 hover:underline cursor-pointer"

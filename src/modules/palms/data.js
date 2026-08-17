@@ -284,38 +284,36 @@ export function historyOn(db, dateStr) {
   return (db.history || []).filter((h) => h.at === dateStr);
 }
 
-/* ---------- sample: simulate ~1 month of operation with logical dates ---------- */
+/* ---------- sample data ----------
+   Built to be checked rather than to look plausible: every activity from 1 to
+   11 is represented, and the three statuses (on schedule, needs attention,
+   overdue) all appear, so the pipeline, the stat cards and the filters each
+   have something to show. Prior stages are back-filled with sensible dates and
+   written into the history, giving the date filter about a month to look
+   through. */
 function randInt(a, b) {
   return a + Math.floor(Math.random() * (b - a + 1));
 }
-function seedUnit(db, key) {
-  const today = todayStr(),
-    yest = addDays(today, -1);
-  const stageWeights = [1, 2, 3, 3, 3, 3, 3, 3, 3, 6, 2];
-  const pool = [];
-  stageWeights.forEach((w, i) => {
-    for (let j = 0; j < w; j++) pool.push(i + 1);
-  });
-  const C = pool[randInt(0, pool.length - 1)];
-  const idealC = durFor(key, activityByN(C));
+
+// mood: 'ontrack' | 'overdue' | 'soon'
+// "soon" only exists for Membesar (<30 days left) and Pengambilan (<7), so it
+// falls back to on-schedule for any earlier stage.
+function seedUnit(db, key, actN, mood, by) {
+  const today = todayStr();
+  const idealC = durFor(key, activityByN(actN));
   let curStart;
-  if (C >= 10) {
-    const r = Math.random();
-    if (r < 0.25) {
-      const thr = C === 11 ? 7 : 30;
-      curStart = addDays(today, -randInt(idealC - thr + 1, idealC - 1));
-    } else if (r < 0.4) {
-      curStart = addDays(today, -(idealC + randInt(1, 5)));
-    } else {
-      curStart = addDays(today, -randInt(1, Math.min(25, idealC - 1)));
-    }
+  if (mood === 'overdue') {
+    curStart = addDays(today, -(idealC + randInt(1, 6)));
+  } else if (mood === 'soon' && (actN === 10 || actN === 11)) {
+    const window = actN === 11 ? 7 : 30;
+    curStart = addDays(today, -(idealC - randInt(1, window - 1)));
   } else {
-    const late = Math.random() < 0.35;
-    curStart = late ? addDays(today, -(idealC + randInt(1, 4))) : addDays(today, -randInt(1, Math.max(1, idealC)));
+    curStart = addDays(today, -randInt(0, Math.max(0, Math.min(20, idealC - 1))));
   }
-  const entries = [{ actN: C, start: curStart, end: null, ideal: idealC }];
+
+  const entries = [{ actN, start: curStart, end: null, ideal: idealC }];
   let endCursor = curStart;
-  for (let n = C - 1; n >= 1; n--) {
+  for (let n = actN - 1; n >= 1; n--) {
     const ideal = durFor(key, activityByN(n));
     const spent = Math.max(1, ideal + randInt(-1, 2));
     const start = addDays(endCursor, -spent);
@@ -324,20 +322,42 @@ function seedUnit(db, key) {
   }
   entries.forEach((e) => {
     e.no = ++db.seq;
-    e.by = 'Contoh';
-    // Mirror each stage change into the history so the dashboard's date
-    // filter has a month of realistic activity to look back through.
-    recordHistory(db, { key, actN: e.actN, by: 'Contoh', at: e.start });
+    e.by = by;
+    recordHistory(db, { key, actN: e.actN, by, at: e.start });
   });
   db.logs[key] = entries;
-  db.updated[key] = { by: 'Contoh', at: yest };
 }
+
 export function seedSample() {
   const db = freshDB();
-  Object.keys(NURSERIES).forEach((k) =>
-    plotsOf(k).forEach((pid) => {
-      if (isMulti(pid)) MULTI[pid].areas.forEach((a) => seedUnit(db, aKey(pid, a)));
-      else seedUnit(db, pid);
+  const today = todayStr();
+  const yest = addDays(today, -1);
+  const moods = ['ontrack', 'overdue', 'soon'];
+  let n = 0;
+
+  Object.keys(NURSERIES).forEach((nk) =>
+    plotsOf(nk).forEach((pid) => {
+      const areas = isMulti(pid) ? MULTI[pid].areas : [null];
+      areas.forEach((a, ai) => {
+        const key = a ? aKey(pid, a) : pid;
+        // Cycle the activities so all eleven are covered, and bias the
+        // "needs attention" mood onto the two stages that can show it.
+        const actN = (n % 11) + 1;
+        let mood = moods[n % 3];
+        if (mood === 'soon' && actN < 10) mood = 'ontrack';
+        if (actN >= 10 && n % 4 === 0) mood = 'soon';
+
+        seedUnit(db, key, actN, mood, 'Contoh');
+
+        // Roughly every third unit is already keyed in today, so the train
+        // shows a mix of done and outstanding. For a plot split into areas
+        // only the FIRST area is done, which is what makes the area map
+        // worth opening: one green, the rest still to do.
+        const doneToday = a ? ai === 0 : n % 3 === 0;
+        db.updated[key] = { by: 'Contoh', at: doneToday ? today : yest };
+        if (doneToday) recordHistory(db, { key, actN, by: 'Contoh', at: today });
+        n++;
+      });
     })
   );
   return db;
