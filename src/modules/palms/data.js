@@ -50,6 +50,12 @@ export const MULTI = {
   },
 };
 
+// Area-map photo for a multi-area plot. They are static files under
+// public/maps so they cache in the browser and stay out of the JS bundle.
+export function areaMapUrl(pid) {
+  return './maps/' + pid.toLowerCase() + '.jpeg';
+}
+
 export function isMulti(pid) {
   return !!MULTI[pid];
 }

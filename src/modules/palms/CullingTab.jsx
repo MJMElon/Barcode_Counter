@@ -56,10 +56,6 @@ export default function CullingTab({ t, staffName, flash }) {
         </label>
       </div>
 
-      <div className="text-center text-[11px] font-semibold text-slate-400">
-        {t('cull.palmsNote')} {rows.length > 0 && t('cull.tapHint')}
-      </div>
-
       {rows.length === 0 ? (
         <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-2xl px-4 py-6 text-center text-sm font-bold">
           {t('cull.noPalmsPlots')}

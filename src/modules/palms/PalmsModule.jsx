@@ -9,6 +9,7 @@ import {
   MULTI,
   NURSERIES,
   activityByN,
+  areaMapUrl,
   addDays,
   historyOn,
   keyLabel,
@@ -141,7 +142,7 @@ export default function PalmsModule() {
 
       <div className="max-w-[1000px] mx-auto px-3 sm:px-6 py-4 space-y-3">
         {tab === 'entry' ? (
-          <EntryTab db={db} t={t} staffName={staffName} refresh={refresh} flash={flash} openMap={setMapPid} />
+          <EntryTab db={db} t={t} staffName={staffName} refresh={refresh} flash={flash} />
         ) : tab === 'cull' ? (
           <CullingTab t={t} staffName={staffName} flash={flash} />
         ) : (
@@ -612,10 +613,6 @@ function DetailModal({ db, pid, t, onClose, openMap }) {
 }
 
 /* ================= AREA MAP MODAL ================= */
-// Area-map photos are static files under public/maps so they are cached by
-// the browser and never inflate the JS bundle.
-const AREA_IMGS = { U8: './maps/u8.jpeg', B1: './maps/b1.jpeg', B4: './maps/b4.jpeg' };
-
 function AreaMapModal({ pid, t, onClose }) {
   const cfg = MULTI[pid];
   if (!cfg) return null;
@@ -636,7 +633,7 @@ function AreaMapModal({ pid, t, onClose }) {
         </div>
         <div className="p-5 overflow-y-auto">
           <p className="text-[12px] font-bold text-slate-500 mb-3">{cfg.cap}</p>
-          <img src={AREA_IMGS[pid]} alt={`Peta kawasan ${pid}`} className="w-full rounded-xl border border-slate-200" />
+          <img src={areaMapUrl(pid)} alt={`Peta kawasan ${pid}`} className="w-full rounded-xl border border-slate-200" />
         </div>
       </div>
     </div>

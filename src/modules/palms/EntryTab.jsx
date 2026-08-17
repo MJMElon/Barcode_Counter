@@ -4,6 +4,7 @@ import {
   MULTI,
   NURSERIES,
   aKey,
+  areaMapUrl,
   activityByN,
   computeStatus,
   currentEntry,
@@ -109,7 +110,7 @@ export function keysOfPlot(pid) {
   return isMulti(pid) ? MULTI[pid].areas.map((a) => aKey(pid, a)) : [pid];
 }
 
-export default function EntryTab({ db, t, staffName, refresh, flash, openMap }) {
+export default function EntryTab({ db, t, staffName, refresh, flash }) {
   const [nursery, setNursery] = useState('BNN');
   const [open, setOpen] = useState(null); // plot id shown in the sheet
 
@@ -145,7 +146,7 @@ export default function EntryTab({ db, t, staffName, refresh, flash, openMap }) 
 
       {/* Legend + hint */}
       <div className="flex items-center justify-center gap-3 flex-wrap text-[10px] font-bold text-slate-400">
-        {['ontrack', 'soon', 'overdue', 'none'].map((s) => (
+        {['ontrack', 'soon', 'overdue'].map((s) => (
           <span key={s} className="inline-flex items-center gap-1.5">
             <span className={`w-2.5 h-2.5 rounded-full ${DOT[s]}`} />
             {t(`pm.state.${s}`)}
@@ -216,7 +217,6 @@ export default function EntryTab({ db, t, staffName, refresh, flash, openMap }) 
           staffName={staffName}
           refresh={refresh}
           flash={flash}
-          openMap={openMap}
           onClose={() => setOpen(null)}
         />
       )}
@@ -227,17 +227,45 @@ export default function EntryTab({ db, t, staffName, refresh, flash, openMap }) 
 /* ================= PLOT SHEET ================= */
 // One plot at a time. Multi-area plots get an area selector; picking an area
 // swaps in a fresh editor (keyed) so the selection never leaks between areas.
-function PlotSheet({ db, pid, t, staffName, refresh, flash, openMap, onClose }) {
-  const areas = isMulti(pid) ? MULTI[pid].areas : [null];
-  const [area, setArea] = useState(areas[0]);
+function PlotSheet({ db, pid, t, staffName, refresh, flash, onClose }) {
+  const multi = isMulti(pid);
+  const areas = multi ? MULTI[pid].areas : [null];
+
+  // A plot split into areas opens on its map, so the Field Conductor picks
+  // the area off the picture rather than from a list of letters. The area
+  // still waiting is the one preselected.
+  const firstTodo = areas.find((a) => a && !tickedToday(db, aKey(pid, a))) || areas[0];
+  const [area, setArea] = useState(firstTodo);
+  const [step, setStep] = useState(multi ? 'map' : 'pick');
   const key = area ? aKey(pid, area) : pid;
 
-  // After saving an area, move on to the next one still not done today;
-  // when the whole plot is done, close the sheet.
+  // After saving an area, show the map again with the area that is still
+  // outstanding preselected. Once every area is done, close the sheet.
   function afterSave() {
     const next = areas.find((a) => a && a !== area && !tickedToday(db, aKey(pid, a)));
-    if (next) setArea(next);
-    else onClose();
+    if (next) {
+      setArea(next);
+      setStep('map');
+    } else {
+      onClose();
+    }
+  }
+
+  if (multi && step === 'map') {
+    return (
+      <AreaMapStep
+        db={db}
+        pid={pid}
+        areas={areas}
+        target={area}
+        t={t}
+        onPick={(a) => {
+          setArea(a);
+          setStep('pick');
+        }}
+        onClose={onClose}
+      />
+    );
   }
 
   const cur = currentEntry(db, key);
@@ -277,12 +305,14 @@ function PlotSheet({ db, pid, t, staffName, refresh, flash, openMap, onClose }) 
               <div className="text-[12px] font-bold text-slate-400 italic">{t('pm.state.none')}</div>
             )}
           </div>
-          {isMulti(pid) && (
+          {multi && (
             <button
-              onClick={() => openMap(pid)}
+              onClick={() => setStep('map')}
+              title={t('pm.areaMap')}
+              aria-label={t('pm.areaMap')}
               className="shrink-0 bg-slate-100 hover:bg-emerald-100 text-slate-600 hover:text-emerald-700 text-[10px] font-black uppercase tracking-wider rounded-lg px-2 py-1.5 cursor-pointer"
             >
-              {t('pm.areaMap')}
+              {t('pm.area', { a: area })}
             </button>
           )}
           <button
@@ -292,28 +322,6 @@ function PlotSheet({ db, pid, t, staffName, refresh, flash, openMap, onClose }) 
             ×
           </button>
         </div>
-
-        {/* Area selector for multi-area plots */}
-        {isMulti(pid) && (
-          <div className="flex gap-1.5 px-4 pt-2.5 flex-wrap">
-            {areas.map((a) => {
-              const done = tickedToday(db, aKey(pid, a));
-              return (
-                <button
-                  key={a}
-                  onClick={() => setArea(a)}
-                  className={`rounded-lg px-3 py-1.5 text-[11px] font-black transition-colors cursor-pointer border ${
-                    area === a
-                      ? 'bg-emerald-600 border-emerald-600 text-white'
-                      : 'bg-white border-slate-300 text-slate-600 hover:border-emerald-400'
-                  }`}
-                >
-                  {t('pm.area', { a })} {done && '✓'}
-                </button>
-              );
-            })}
-          </div>
-        )}
 
         <AreaEditor
           key={key}
@@ -325,6 +333,69 @@ function PlotSheet({ db, pid, t, staffName, refresh, flash, openMap, onClose }) 
           flash={flash}
           onSaved={afterSave}
         />
+      </div>
+    </div>
+  );
+}
+
+// Step one for a multi-area plot: the map, with a button per area. Areas
+// already keyed in today are ticked; the outstanding one is ringed so it
+// reads as the default choice.
+function AreaMapStep({ db, pid, areas, target, t, onPick, onClose }) {
+  const cfg = MULTI[pid];
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl shadow-2xl max-h-[94vh] flex flex-col">
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100">
+          <div className="shrink-0">
+            <div className="text-[9px] font-black text-emerald-600 uppercase tracking-widest leading-none">
+              {NURSERIES[nurseryKeyOf(pid)].label}
+            </div>
+            <div className="font-black text-slate-800 text-xl leading-tight">{pid}</div>
+          </div>
+          <div className="flex-1 min-w-0 border-l border-slate-200 pl-3">
+            <div className="text-[11px] font-bold text-slate-500 leading-tight">{t('pm.pickArea')}</div>
+          </div>
+          <button
+            onClick={onClose}
+            className="shrink-0 w-8 h-8 rounded-full hover:bg-slate-100 text-slate-500 text-xl leading-none cursor-pointer"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="px-4 py-3 overflow-y-auto flex-1">
+          <img
+            src={areaMapUrl(pid)}
+            alt={`Peta kawasan ${pid}`}
+            className="w-full rounded-xl border border-slate-200"
+          />
+          <p className="text-[11px] font-semibold text-slate-500 mt-2">{cfg.cap}</p>
+        </div>
+
+        <div className="px-4 py-3 border-t border-slate-100 grid grid-cols-3 gap-2">
+          {areas.map((a) => {
+            const done = tickedToday(db, aKey(pid, a));
+            const isTarget = a === target;
+            return (
+              <button
+                key={a}
+                onClick={() => onPick(a)}
+                className={`rounded-xl px-2 py-3 text-[12px] font-black transition-colors cursor-pointer border-2 ${
+                  isTarget
+                    ? 'bg-emerald-600 border-emerald-600 text-white'
+                    : done
+                      ? 'bg-slate-50 border-slate-200 text-slate-400'
+                      : 'bg-white border-slate-300 text-slate-700 hover:border-emerald-400'
+                }`}
+              >
+                {t('pm.area', { a })}
+                {done && <span className="block text-[10px] font-bold mt-0.5">✓</span>}
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
