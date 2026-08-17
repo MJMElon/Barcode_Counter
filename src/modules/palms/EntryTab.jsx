@@ -257,7 +257,6 @@ function PlotSheet({ db, pid, t, staffName, refresh, flash, onClose }) {
         db={db}
         pid={pid}
         areas={areas}
-        target={area}
         t={t}
         onPick={(a) => {
           setArea(a);
@@ -338,10 +337,10 @@ function PlotSheet({ db, pid, t, staffName, refresh, flash, onClose }) {
   );
 }
 
-// Step one for a multi-area plot: the map, with a button per area. Areas
-// already keyed in today are ticked; the outstanding one is ringed so it
-// reads as the default choice.
-function AreaMapStep({ db, pid, areas, target, t, onPick, onClose }) {
+// Step one for a multi-area plot: the map itself. Nothing is preselected —
+// an area only turns green once its status has been keyed in today, so green
+// always means done rather than "we picked this for you".
+function AreaMapStep({ db, pid, areas, t, onPick, onClose }) {
   const cfg = MULTI[pid];
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
@@ -373,7 +372,6 @@ function AreaMapStep({ db, pid, areas, target, t, onPick, onClose }) {
             <img src={areaMapUrl(pid)} alt={`Peta kawasan ${pid}`} className="w-full block" />
             {areas.map((a) => {
               const done = tickedToday(db, aKey(pid, a));
-              const isTarget = a === target;
               const [l, r] = cfg.band[a];
               return (
                 <button
@@ -383,22 +381,16 @@ function AreaMapStep({ db, pid, areas, target, t, onPick, onClose }) {
                   aria-label={t('pm.area', { a })}
                   style={{ left: `${l}%`, width: `${r - l}%` }}
                   className={`absolute inset-y-0 grid place-items-center cursor-pointer transition-colors ${
-                    isTarget
-                      ? 'bg-emerald-500/25 ring-2 ring-inset ring-emerald-400'
-                      : done
-                        ? 'bg-slate-900/35 hover:bg-slate-900/20'
-                        : 'bg-transparent hover:bg-white/20'
+                    done
+                      ? 'bg-emerald-500/30 ring-2 ring-inset ring-emerald-400'
+                      : 'bg-transparent hover:bg-white/20'
                   }`}
                 >
                   {/* Just the letter — the narrowest band (B4's A) is only
                       23% wide, and the photo already labels each area. */}
                   <span
                     className={`rounded-full px-2.5 py-1 text-[13px] font-black whitespace-nowrap shadow-sm ${
-                      isTarget
-                        ? 'bg-emerald-600 text-white'
-                        : done
-                          ? 'bg-white/85 text-slate-500'
-                          : 'bg-white/90 text-slate-800'
+                      done ? 'bg-emerald-600 text-white' : 'bg-white/90 text-slate-800'
                     }`}
                   >
                     {a}
