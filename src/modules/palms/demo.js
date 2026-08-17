@@ -25,9 +25,9 @@ export function seedDemo() {
     for (const row of cull[nk]) {
       if (picks.length >= 2) break;
       if (!scope.has(row.plot)) continue;
+      // Only a drone request can be raised, so seed the pre-sent ones there.
       const rate = cullingRate(row.balance, row.pokok, row.pokokAuditor, row.transplant);
-      const sendable = rate <= 0.1 || (row.pokok !== null && row.pokokAuditor === null);
-      if (sendable) picks.push({ plot: row.plot, nursery: nk });
+      if (rate <= 0.1) picks.push({ plot: row.plot, nursery: nk });
     }
   }
   seedRequests(

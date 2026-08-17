@@ -233,13 +233,15 @@ export default function CullingTab({ t, staffName, flash }) {
   );
 }
 
-// Rate, colour and the action wording for one plot — shared so the phone
-// cards and the desktop table can never drift apart.
+// Rate, colour and the action wording for one plot.
 //  rate <= 10%                         -> green  (transfer seedling + drone)
 //  rate > 10% AND auditor has entered  -> amber  (tell HQ)
 //  rate > 10% AND only FC has entered  -> red    (wait for Site Auditor)
 //  rate > 10% AND nothing entered yet  -> neutral placeholder
-// Anything needing the Site Auditor to attend the plot is `sendable`.
+//
+// Only the drone request is `sendable`. "Tunggu Site Auditor" is a state the
+// plot is already in — the auditor still has to come and do their own count —
+// so there is nothing to raise from here.
 function derive(row, reqs, today, t) {
   const rate = cullingRate(row.balance, row.pokok, row.pokokAuditor, row.transplant);
   const hot = rate > 0.1;
@@ -264,7 +266,6 @@ function derive(row, reqs, today, t) {
   } else if (row.pokokAuditor !== null) {
     act = <span className="text-amber-600 font-bold text-[10px] sm:text-[11px] leading-snug">{t('cull.actHQ')}</span>;
   } else if (row.pokok !== null) {
-    sendable = true;
     act = <span className="text-rose-600 font-bold text-[10px] sm:text-[11px] leading-snug">{t('cull.actWait')}</span>;
   } else {
     act = <span className="text-slate-300 font-bold">—</span>;
