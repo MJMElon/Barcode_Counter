@@ -62,77 +62,26 @@ export default function CullingTab({ t, staffName, flash }) {
         </div>
       ) : (
         <>
-        {/* Phones get a card per plot — a four-column table cannot fit 360px
-            without scrolling sideways, which is exactly what we are avoiding. */}
-        <div className="sm:hidden space-y-2">
-          {rows.map((row, idx) => {
-            const d = derive(row, reqs, today, t);
-            return (
-              <div
-                key={row.plot}
-                className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] p-3"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-black text-slate-800 text-[17px]">{row.plot}</span>
-                  <span
-                    className={`rounded-full px-2.5 py-1 text-[11px] font-black tabular-nums border ${
-                      d.hot ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-teal-50 text-teal-700 border-teal-200'
-                    }`}
-                  >
-                    {fmtPct(d.rate)}
-                  </span>
-                </div>
-
-                <button
-                  onClick={() => setEditing(idx)}
-                  className={`mt-2 w-full rounded-xl px-3 py-2 text-[12px] font-black tabular-nums transition-colors cursor-pointer ${
-                    row.pokok === null
-                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                      : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200'
-                  }`}
-                >
-                  Pokok Inang:{' '}
-                  {row.pokok === null ? t('cull.fillIn') : fmtNum((row.pokok || 0) + (row.pokokAuditor || 0))}
-                </button>
-
-                <div className="mt-2 text-center">{d.act}</div>
-
-                {d.sendable &&
-                  (d.sent ? (
-                    <div className="mt-1.5 text-center text-[10px] font-black text-emerald-600 uppercase tracking-wide">
-                      ✓ {t('cull.sent')}
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setAsking(row)}
-                      className="mt-2 w-full bg-slate-800 hover:bg-slate-900 text-white text-[10px] font-black uppercase tracking-wider rounded-lg px-2 py-2 cursor-pointer"
-                    >
-                      {t('cull.sendAuditor')}
-                    </button>
-                  ))}
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="hidden sm:block bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
-          <div className="overflow-x-auto">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
+          {/* One layout everywhere. The columns are percentages and the
+              padding and type scale down on a phone, so the same table fits
+              360px without scrolling sideways. */}
+          <div>
             <table className="w-full table-fixed text-sm">
-              {/* Fixed column widths keep every row on the same grid. */}
               <colgroup>
-                <col className="w-[16%]" />
-                <col className="w-[27%]" />
-                <col className="w-[24%]" />
-                <col className="w-[33%]" />
+                <col className="w-[14%]" />
+                <col className="w-[26%]" />
+                <col className="w-[22%]" />
+                <col className="w-[38%]" />
               </colgroup>
               <thead>
-                <tr className="bg-slate-50 text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                <tr className="bg-slate-50 text-[9px] sm:text-[10px] font-black text-slate-500 uppercase tracking-wide sm:tracking-widest">
                   {/* Transplant and Baki stay in the data (the rate needs
                       them) but are deliberately not shown to the user. */}
-                  <th className="px-3 py-3 text-left">Plot</th>
-                  <th className="px-3 py-3 text-center">Pokok Inang</th>
-                  <th className="px-3 py-3 text-center">{t('cull.rate')}</th>
-                  <th className="px-3 py-3 text-center">{t('cull.action')}</th>
+                  <th className="px-1.5 sm:px-3 py-2.5 sm:py-3 text-left">Plot</th>
+                  <th className="px-1 sm:px-3 py-2.5 sm:py-3 text-center">Pokok Inang</th>
+                  <th className="px-1 sm:px-3 py-2.5 sm:py-3 text-center">{t('cull.rate')}</th>
+                  <th className="px-1 sm:px-3 py-2.5 sm:py-3 text-center">{t('cull.action')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -140,24 +89,31 @@ export default function CullingTab({ t, staffName, flash }) {
                   const { rate, hot, act, sendable, sent } = derive(row, reqs, today, t);
                   return (
                     <tr key={row.plot} className="border-t border-slate-100 hover:bg-slate-50/60 transition-colors">
-                      <td className="px-3 py-2.5 align-middle font-black text-slate-800">{row.plot}</td>
-                      <td className="px-3 py-2.5 align-middle text-center">
+                      <td className="px-1.5 sm:px-3 py-2.5 align-middle font-black text-slate-800 text-[13px] sm:text-sm">
+                        {row.plot}
+                      </td>
+                      <td className="px-1 sm:px-3 py-2.5 align-middle text-center">
                         <button
                           onClick={() => setEditing(idx)}
-                          className={`min-w-[92px] rounded-xl px-3 py-1.5 text-[12px] font-black tabular-nums transition-colors cursor-pointer ${
+                          className={`w-full sm:w-auto sm:min-w-[92px] rounded-lg sm:rounded-xl px-1.5 sm:px-3 py-1.5 text-[11px] sm:text-[12px] font-black tabular-nums leading-tight transition-colors cursor-pointer ${
                             row.pokok === null
                               ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
                               : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200'
                           }`}
                         >
-                          {row.pokok === null
-                            ? t('cull.fillIn')
-                            : fmtNum((row.pokok || 0) + (row.pokokAuditor || 0))}
+                          {row.pokok === null ? (
+                            <>
+                              <span className="sm:hidden">{t('cull.fillInShort')}</span>
+                              <span className="hidden sm:inline">{t('cull.fillIn')}</span>
+                            </>
+                          ) : (
+                            fmtNum((row.pokok || 0) + (row.pokokAuditor || 0))
+                          )}
                         </button>
                       </td>
-                      <td className="px-3 py-2.5 align-middle text-center">
+                      <td className="px-1 sm:px-3 py-2.5 align-middle text-center">
                         <span
-                          className={`inline-block min-w-[68px] rounded-full px-2.5 py-1 text-[11px] font-black tabular-nums border ${
+                          className={`inline-block sm:min-w-[68px] rounded-full px-1.5 sm:px-2.5 py-1 text-[10px] sm:text-[11px] font-black tabular-nums border ${
                             hot
                               ? 'bg-rose-50 text-rose-700 border-rose-200'
                               : 'bg-teal-50 text-teal-700 border-teal-200'
@@ -166,7 +122,7 @@ export default function CullingTab({ t, staffName, flash }) {
                           {fmtPct(rate)}
                         </span>
                       </td>
-                      <td className="px-3 py-2.5 align-middle text-center">
+                      <td className="px-1 sm:px-3 py-2.5 align-middle text-center">
                         {act}
                         {sendable &&
                           (sent ? (
@@ -176,9 +132,10 @@ export default function CullingTab({ t, staffName, flash }) {
                           ) : (
                             <button
                               onClick={() => setAsking(row)}
-                              className="mt-1.5 w-full bg-slate-800 hover:bg-slate-900 text-white text-[10px] font-black uppercase tracking-wider rounded-lg px-2 py-1.5 cursor-pointer"
+                              className="mt-1.5 w-full bg-slate-800 hover:bg-slate-900 text-white text-[9px] sm:text-[10px] font-black uppercase tracking-wide sm:tracking-wider rounded-lg px-1 sm:px-2 py-1.5 cursor-pointer"
                             >
-                              {t('cull.sendAuditor')}
+                              <span className="sm:hidden">{t('cull.sendAuditorShort')}</span>
+                              <span className="hidden sm:inline">{t('cull.sendAuditor')}</span>
                             </button>
                           ))}
                       </td>
@@ -292,7 +249,7 @@ function derive(row, reqs, today, t) {
   if (!hot) {
     sendable = true;
     act = (
-      <span className="text-emerald-700 font-bold text-[11px] leading-snug">
+      <span className="text-emerald-700 font-bold text-[10px] sm:text-[11px] leading-snug">
         {row.pokok === null ? (
           t('cull.actDrone')
         ) : (
@@ -305,10 +262,10 @@ function derive(row, reqs, today, t) {
       </span>
     );
   } else if (row.pokokAuditor !== null) {
-    act = <span className="text-amber-600 font-bold text-[11px] leading-snug">{t('cull.actHQ')}</span>;
+    act = <span className="text-amber-600 font-bold text-[10px] sm:text-[11px] leading-snug">{t('cull.actHQ')}</span>;
   } else if (row.pokok !== null) {
     sendable = true;
-    act = <span className="text-rose-600 font-bold text-[11px] leading-snug">{t('cull.actWait')}</span>;
+    act = <span className="text-rose-600 font-bold text-[10px] sm:text-[11px] leading-snug">{t('cull.actWait')}</span>;
   } else {
     act = <span className="text-slate-300 font-bold">—</span>;
   }
