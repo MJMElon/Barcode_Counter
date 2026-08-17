@@ -380,29 +380,29 @@ function AreaEditor({ db, storeKey, t, staffName, refresh, flash, onSaved }) {
         <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
           {t('pm.pickActivity')}
         </div>
-        {/* Two columns, filled downwards: 1–6 on the left, 7–11 on the right.
-            Half the height means every activity is reachable without a
-            scroll, and the rows can stay a comfortable size to tap. */}
-        <div className="grid grid-rows-6 grid-flow-col gap-1">
+        {/* Phones get two columns filled downwards — 1–6 left, 7–11 right —
+            so every activity is reachable without a scroll. On a laptop
+            there is room for the original single full-width list. */}
+        <div className="grid grid-rows-6 grid-flow-col gap-1 sm:grid-rows-none sm:grid-flow-row sm:grid-cols-1 sm:gap-1.5">
           {ACTIVITIES.map((a) => {
             const on = sel === a.n;
             return (
               <button
                 key={a.n}
                 onClick={() => setSel(a.n)}
-                className={`w-full flex items-center gap-1.5 rounded-lg px-2 py-2 border-2 text-left transition-colors cursor-pointer ${
+                className={`w-full flex items-center gap-1.5 sm:gap-2.5 rounded-lg px-2 sm:px-3 py-2 sm:py-2.5 border-2 text-left transition-colors cursor-pointer ${
                   on ? 'bg-emerald-50 border-emerald-500' : 'bg-white border-slate-200 hover:border-emerald-300'
                 }`}
               >
                 <span
-                  className={`shrink-0 w-5 h-5 rounded-full grid place-items-center text-[10px] font-black ${
+                  className={`shrink-0 w-5 h-5 sm:w-6 sm:h-6 rounded-full grid place-items-center text-[10px] sm:text-[11px] font-black ${
                     on ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500'
                   }`}
                 >
                   {a.n}
                 </span>
                 <span
-                  className={`flex-1 min-w-0 text-[12px] leading-tight font-black ${
+                  className={`flex-1 min-w-0 text-[12px] sm:text-[13px] leading-tight font-black ${
                     on ? 'text-emerald-800' : 'text-slate-700'
                   }`}
                 >
@@ -412,7 +412,7 @@ function AreaEditor({ db, storeKey, t, staffName, refresh, flash, onSaved }) {
                 </span>
                 {/* The ideal-day count is hidden on phones: the width it takes
                     is what forces the longer names onto a second line. */}
-                <span className="hidden sm:inline shrink-0 text-[9px] font-bold text-slate-400">
+                <span className="hidden sm:inline shrink-0 text-[10px] font-bold text-slate-400">
                   {t('pm.idealDays', { d: a.days })}
                 </span>
               </button>

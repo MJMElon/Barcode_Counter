@@ -37,6 +37,36 @@ import {
 // Three tabs: the daily status railway, the monitoring dashboard and the
 // Culling Calculator.
 
+// Tab icons for phones: a calendar for the daily status entry, a chart under
+// a magnifier for the monitoring board, and a calculator for the culling
+// figures. The words come back as soon as there is room for them.
+const TAB_ICON = {
+  entry: (
+    <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="4.5" width="18" height="16" rx="2.5" />
+      <path d="M3 9.5h18M8 2.5v4M16 2.5v4" />
+      <path d="M7.5 13.5h3M7.5 17h3M14 13.5h2.5" />
+    </svg>
+  ),
+  dash: (
+    <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 20V10M9 20v-6" />
+      <circle cx="15.5" cy="10.5" r="5" />
+      <path d="m19.2 14.2 3 3" />
+    </svg>
+  ),
+  cull: (
+    <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="4" y="2.5" width="16" height="19" rx="2.5" />
+      <path d="M7.5 6.5h9" />
+      <path d="M8 11.5h.01M12 11.5h.01M16 11.5h.01M8 15.5h.01M12 15.5h.01M16 15.5h.01M8 18.5h.01M12 18.5h.01M16 18.5h.01" />
+    </svg>
+  ),
+};
+
 const STATE_BADGE = {
   ontrack: 'bg-teal-50 text-teal-700 border-teal-200',
   soon: 'bg-amber-50 text-amber-700 border-amber-200',
@@ -94,13 +124,16 @@ export default function PalmsModule() {
             <button
               key={id}
               onClick={() => setTab(id)}
-              className={`px-4 py-3 text-[12px] font-black uppercase tracking-wider border-b-2 -mb-px transition-colors cursor-pointer ${
+              title={label}
+              aria-label={label}
+              className={`flex-1 sm:flex-none grid place-items-center sm:block px-4 py-2.5 sm:py-3 text-[12px] font-black uppercase tracking-wider border-b-2 -mb-px transition-colors cursor-pointer ${
                 tab === id
                   ? 'border-emerald-600 text-emerald-700'
                   : 'border-transparent text-slate-400 hover:text-slate-600'
               }`}
             >
-              {label}
+              <span className="sm:hidden">{TAB_ICON[id]}</span>
+              <span className="hidden sm:inline">{label}</span>
             </button>
           ))}
         </div>

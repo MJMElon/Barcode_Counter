@@ -806,8 +806,17 @@ function Scanner({ consent, lastInfo, issuing, activeDOs, onScan, onBack, onIssu
   return (
     <div className="max-w-[560px] mx-auto px-4 py-5">
       <div className="flex items-center gap-2.5 mb-3">
-        <button onClick={handleBack} className="bg-[#111821] border border-[#1f2a38] rounded-lg px-3 py-2.5 font-mono text-xs uppercase tracking-wider">
-          {t('common.back')}
+        <button
+          onClick={handleBack}
+          title={t('common.back')}
+          aria-label={t('common.back')}
+          className="grid place-items-center bg-[#111821] border border-[#1f2a38] rounded-lg w-10 h-10 shrink-0"
+        >
+          <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="3"
+            strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M19 12H5" />
+            <path d="m12 19-7-7 7-7" />
+          </svg>
         </button>
         <div className="min-w-0">
           <h2 className="text-lg font-bold leading-tight break-words">{consent.customer}</h2>

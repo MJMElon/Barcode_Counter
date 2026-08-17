@@ -5,6 +5,18 @@ import { useLang, LangToggle } from '../context/LanguageContext.jsx';
 import { MAIN_PORTAL_URL } from '../config.js';
 import { supabase } from '../lib/supabase.js';
 
+// A plain left arrow. Every "go back" control in the app is just this — the
+// destination is obvious from context, so the words were only taking room.
+function BackArrow() {
+  return (
+    <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="3"
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M19 12H5" />
+      <path d="m12 19-7-7 7-7" />
+    </svg>
+  );
+}
+
 // Shared top navigation bar.
 // - `title`: heading text
 // - `back`: optional route for a Back link (otherwise the brand block shows)
@@ -74,18 +86,21 @@ export default function TopNav({ title, subtitle, back, portal, user, theme = 'l
           <a
             href={MAIN_PORTAL_URL}
             onClick={goToPortal}
-            className={`${backCls} rounded-full px-3 sm:px-4 py-2 border ${dark ? 'border-[#1f2a38]' : 'border-slate-200'} transition-colors font-bold text-[10px] uppercase tracking-widest whitespace-nowrap no-underline shrink-0 cursor-pointer`}
+            title={t('common.moduleSelection')}
+            aria-label={t('common.moduleSelection')}
+            className={`${backCls} grid place-items-center rounded-full w-9 h-9 border ${dark ? 'border-[#1f2a38]' : 'border-slate-200'} transition-colors no-underline shrink-0 cursor-pointer`}
           >
-            <span className="hidden sm:inline">{t('common.moduleSelection')}</span>
-            <span className="sm:hidden">{t('common.moduleSelectionShort')}</span>
+            <BackArrow />
           </a>
         )}
         {back && (
           <Link
             to={back}
-            className={`flex items-center gap-1 ${backCls} rounded-lg px-2.5 py-2 transition-colors font-black text-xs uppercase tracking-wider whitespace-nowrap no-underline shrink-0`}
+            title={t('common.back')}
+            aria-label={t('common.back')}
+            className={`grid place-items-center ${backCls} rounded-lg w-9 h-9 transition-colors no-underline shrink-0`}
           >
-            {t('common.back')}
+            <BackArrow />
           </Link>
         )}
         {subtitle ? (

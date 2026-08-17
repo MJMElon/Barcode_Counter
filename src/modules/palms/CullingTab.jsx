@@ -65,9 +65,63 @@ export default function CullingTab({ t, staffName, flash }) {
           {t('cull.noPalmsPlots')}
         </div>
       ) : (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
+        <>
+        {/* Phones get a card per plot — a four-column table cannot fit 360px
+            without scrolling sideways, which is exactly what we are avoiding. */}
+        <div className="sm:hidden space-y-2">
+          {rows.map((row, idx) => {
+            const d = derive(row, reqs, today, t);
+            return (
+              <div
+                key={row.plot}
+                className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] p-3"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-black text-slate-800 text-[17px]">{row.plot}</span>
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-black tabular-nums border ${
+                      d.hot ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-teal-50 text-teal-700 border-teal-200'
+                    }`}
+                  >
+                    {fmtPct(d.rate)}
+                  </span>
+                </div>
+
+                <button
+                  onClick={() => setEditing(idx)}
+                  className={`mt-2 w-full rounded-xl px-3 py-2 text-[12px] font-black tabular-nums transition-colors cursor-pointer ${
+                    row.pokok === null
+                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                      : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200'
+                  }`}
+                >
+                  Pokok Inang:{' '}
+                  {row.pokok === null ? t('cull.fillIn') : fmtNum((row.pokok || 0) + (row.pokokAuditor || 0))}
+                </button>
+
+                <div className="mt-2 text-center">{d.act}</div>
+
+                {d.sendable &&
+                  (d.sent ? (
+                    <div className="mt-1.5 text-center text-[10px] font-black text-emerald-600 uppercase tracking-wide">
+                      ✓ {t('cull.sent')}
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setAsking(row)}
+                      className="mt-2 w-full bg-slate-800 hover:bg-slate-900 text-white text-[10px] font-black uppercase tracking-wider rounded-lg px-2 py-2 cursor-pointer"
+                    >
+                      {t('cull.sendAuditor')}
+                    </button>
+                  ))}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="hidden sm:block bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full table-fixed text-sm min-w-[420px]">
+            <table className="w-full table-fixed text-sm">
               {/* Fixed column widths keep every row on the same grid. */}
               <colgroup>
                 <col className="w-[16%]" />
@@ -87,42 +141,7 @@ export default function CullingTab({ t, staffName, flash }) {
               </thead>
               <tbody>
                 {rows.map((row, idx) => {
-                  const rate = cullingRate(row.balance, row.pokok, row.pokokAuditor, row.transplant);
-                  const hot = rate > 0.1;
-                  // Tindakan:
-                  //  rate <= 10%                         -> green  (move pokok inang + drone)
-                  //  rate > 10% AND auditor has entered  -> amber  (tell HQ)
-                  //  rate > 10% AND only FC has entered  -> red    (wait for Site Auditor)
-                  //  rate > 10% AND nothing entered yet  -> neutral placeholder
-                  // Anything that needs the Site Auditor to attend the plot —
-                  // a drone flight, or culling verification — offers a send
-                  // button right in the action cell.
-                  const sent = sentToday(reqs, row.plot, today);
-                  let act;
-                  let sendable = false;
-                  if (!hot) {
-                    sendable = true;
-                    act = (
-                      <span className="text-emerald-700 font-bold text-[11px] leading-snug">
-                        {row.pokok === null ? (
-                          t('cull.actDrone')
-                        ) : (
-                          <>
-                            {t('cull.actMove')}
-                            <br />
-                            {t('cull.actDrone')}
-                          </>
-                        )}
-                      </span>
-                    );
-                  } else if (row.pokokAuditor !== null) {
-                    act = <span className="text-amber-600 font-bold text-[11px] leading-snug">{t('cull.actHQ')}</span>;
-                  } else if (row.pokok !== null) {
-                    sendable = true;
-                    act = <span className="text-rose-600 font-bold text-[11px] leading-snug">{t('cull.actWait')}</span>;
-                  } else {
-                    act = <span className="text-slate-300 font-bold">—</span>;
-                  }
+                  const { rate, hot, act, sendable, sent } = derive(row, reqs, today, t);
                   return (
                     <tr key={row.plot} className="border-t border-slate-100 hover:bg-slate-50/60 transition-colors">
                       <td className="px-3 py-2.5 align-middle font-black text-slate-800">{row.plot}</td>
@@ -174,6 +193,7 @@ export default function CullingTab({ t, staffName, flash }) {
             </table>
           </div>
         </div>
+        </>
       )}
 
       {/* What has been raised for the Site Auditor */}
@@ -182,8 +202,23 @@ export default function CullingTab({ t, staffName, flash }) {
           <div className="px-4 py-3 border-b border-slate-100">
             <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-wide">{t('cull.reqTitle')}</h3>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[420px]">
+          {/* Phone: one stacked line per request, so nothing scrolls sideways */}
+          <div className="sm:hidden divide-y divide-slate-100">
+            {reqs.slice(0, 12).map((r) => (
+              <div key={r.id} className="px-4 py-2.5 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="font-black text-slate-800 text-[13px]">
+                    {r.plot} · {r.purpose}
+                  </div>
+                  <div className="text-[11px] font-semibold text-slate-500 truncate">{r.by || '—'}</div>
+                </div>
+                <div className="shrink-0 text-[11px] font-bold text-slate-500">{prettyD(r.at)}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="hidden sm:block overflow-x-auto">
+            <table className="w-full text-sm">
               <thead>
                 <tr className="bg-slate-50 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">
                   <th className="px-3 py-2">{t('cull.reqDate')}</th>
@@ -245,6 +280,45 @@ export default function CullingTab({ t, staffName, flash }) {
   );
 }
 
+// Rate, colour and the action wording for one plot — shared so the phone
+// cards and the desktop table can never drift apart.
+//  rate <= 10%                         -> green  (transfer seedling + drone)
+//  rate > 10% AND auditor has entered  -> amber  (tell HQ)
+//  rate > 10% AND only FC has entered  -> red    (wait for Site Auditor)
+//  rate > 10% AND nothing entered yet  -> neutral placeholder
+// Anything needing the Site Auditor to attend the plot is `sendable`.
+function derive(row, reqs, today, t) {
+  const rate = cullingRate(row.balance, row.pokok, row.pokokAuditor, row.transplant);
+  const hot = rate > 0.1;
+  const sent = sentToday(reqs, row.plot, today);
+  let act;
+  let sendable = false;
+  if (!hot) {
+    sendable = true;
+    act = (
+      <span className="text-emerald-700 font-bold text-[11px] leading-snug">
+        {row.pokok === null ? (
+          t('cull.actDrone')
+        ) : (
+          <>
+            {t('cull.actMove')}
+            <br />
+            {t('cull.actDrone')}
+          </>
+        )}
+      </span>
+    );
+  } else if (row.pokokAuditor !== null) {
+    act = <span className="text-amber-600 font-bold text-[11px] leading-snug">{t('cull.actHQ')}</span>;
+  } else if (row.pokok !== null) {
+    sendable = true;
+    act = <span className="text-rose-600 font-bold text-[11px] leading-snug">{t('cull.actWait')}</span>;
+  } else {
+    act = <span className="text-slate-300 font-bold">—</span>;
+  }
+  return { rate, hot, act, sendable, sent };
+}
+
 // Confirmation before anything reaches the Site Auditor: it shows exactly
 // what will be sent — the request date, the plot and the purpose, which for
 // anything raised here is always culling.
@@ -253,15 +327,14 @@ function SendRequestModal({ row, nurseryKey, date, by, t, onClose, onConfirm }) 
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
       <div className="relative bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl p-5 pb-7 shadow-2xl">
-        <h3 className="font-black text-slate-800 text-[15px] uppercase tracking-wide mb-1">
+        <h3 className="font-black text-slate-800 text-[15px] uppercase tracking-wide mb-3">
           {t('cull.confirmSendTitle')}
         </h3>
-        <p className="text-[12px] font-semibold text-slate-500 mb-3">{t('cull.confirmSendLead')}</p>
 
         <dl className="bg-slate-50 border border-slate-200 rounded-xl divide-y divide-slate-200 mb-4">
           {[
             [t('cull.reqDate'), prettyD(date)],
-            ['Plot', `${row.plot} · ${nurseryKey}`],
+            ['Plot', row.plot],
             [t('cull.reqPurpose'), PURPOSE_CULLING],
             [t('cull.reqBy'), by || 'FC'],
           ].map(([k, v]) => (
