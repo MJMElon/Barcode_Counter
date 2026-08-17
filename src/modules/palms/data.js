@@ -11,18 +11,20 @@ export const NURSERIES = {
 
 // Activity names are nursery domain vocabulary and stay as-is in both
 // languages; `days` is the ideal duration of the stage.
+// `mShort` is the phone-sized label — the picker has to show all eleven
+// activities without the Field Conductor scrolling.
 export const ACTIVITIES = [
-  { n: 1, name: 'Saringan Anak Bibit', short: 'Saringan Anak Bibit', days: 2 },
-  { n: 2, name: 'Tunggu buat culling', short: 'Tunggu cull', days: 3 },
-  { n: 3, name: 'Culling', short: 'Culling', days: 2 },
-  { n: 4, name: 'Membersih', short: 'Membersih', days: 1 },
-  { n: 5, name: 'Meracun secara selingan', short: 'Meracun', days: 1 },
-  { n: 6, name: 'Angkat tanah', short: 'Angkat tanah', days: 5 },
-  { n: 7, name: 'Isi polibeg', short: 'Isi polibeg', days: 5 },
-  { n: 8, name: 'Lining', short: 'Lining', days: 2 },
-  { n: 9, name: 'Transplanting', short: 'Transplant', days: 2 },
-  { n: 10, name: 'Membesar', short: 'Membesar', days: 270 },
-  { n: 11, name: 'Pengambilan', short: 'Pengambilan', days: 30 },
+  { n: 1, name: 'Saringan Anak Bibit', mShort: 'Saringan bibit', short: 'Saringan Anak Bibit', days: 2 },
+  { n: 2, name: 'Tunggu buat culling', mShort: 'Tunggu culling', short: 'Tunggu cull', days: 3 },
+  { n: 3, name: 'Culling', mShort: 'Culling', short: 'Culling', days: 2 },
+  { n: 4, name: 'Membersih', mShort: 'Membersih', short: 'Membersih', days: 1 },
+  { n: 5, name: 'Meracun secara selingan', mShort: 'Meracun selingan', short: 'Meracun', days: 1 },
+  { n: 6, name: 'Angkat tanah', mShort: 'Angkat tanah', short: 'Angkat tanah', days: 5 },
+  { n: 7, name: 'Isi polibeg', mShort: 'Isi polibeg', short: 'Isi polibeg', days: 5 },
+  { n: 8, name: 'Lining', mShort: 'Lining', short: 'Lining', days: 2 },
+  { n: 9, name: 'Transplanting', mShort: 'Transplanting', short: 'Transplant', days: 2 },
+  { n: 10, name: 'Membesar', mShort: 'Membesar', short: 'Membesar', days: 270 },
+  { n: 11, name: 'Pengambilan', mShort: 'Pengambilan', short: 'Pengambilan', days: 30 },
 ];
 
 const STORE_KEY = 'palms_status_v8';
@@ -63,7 +65,7 @@ export function keyLabel(k) {
 
 /* ---------- storage ---------- */
 export function freshDB() {
-  return { logs: {}, updated: {}, editReq: {}, unlocked: {}, seq: 0 };
+  return { logs: {}, updated: {}, editReq: {}, unlocked: {}, history: [], seq: 0 };
 }
 
 export function loadDB() {
@@ -255,9 +257,19 @@ export function entryUnits(nk) {
   return units;
 }
 
-export function startEntry(db, pid, actN, dateStr) {
+export function startEntry(db, pid, actN, dateStr, by) {
   db.logs[pid] = db.logs[pid] || [];
-  db.logs[pid].push({ no: ++db.seq, actN, start: dateStr, end: null, ideal: durFor(pid, activityByN(actN)) });
+  db.logs[pid].push({ no: ++db.seq, actN, start: dateStr, end: null, ideal: durFor(pid, activityByN(actN)), by });
+}
+
+// Every save is appended here, so "show me what was keyed in on 3 Aug" is an
+// exact answer rather than a guess reconstructed from the logs.
+export function recordHistory(db, { key, actN, by, at }) {
+  db.history = db.history || [];
+  db.history.push({ at, key, actN, by });
+}
+export function historyOn(db, dateStr) {
+  return (db.history || []).filter((h) => h.at === dateStr);
 }
 
 /* ---------- sample: simulate ~1 month of operation with logical dates ---------- */
@@ -300,6 +312,10 @@ function seedUnit(db, key) {
   }
   entries.forEach((e) => {
     e.no = ++db.seq;
+    e.by = 'Contoh';
+    // Mirror each stage change into the history so the dashboard's date
+    // filter has a month of realistic activity to look back through.
+    recordHistory(db, { key, actN: e.actN, by: 'Contoh', at: e.start });
   });
   db.logs[key] = entries;
   db.updated[key] = { by: 'Contoh', at: yest };

@@ -7,7 +7,8 @@ import {
   getSessionData,
   videoNeeded,
 } from './cullingData.js';
-import { cullingScopePlots } from './data.js';
+import { cullingScopePlots, prettyD, todayStr } from './data.js';
+import { PURPOSE_CULLING, addRequest, loadRequests, sentToday } from './requests.js';
 
 // Culling Calculator — lives inside PALMS as its third tab (it used to be a
 // standalone module). Only plots whose current PALMS activity is Saringan
@@ -15,12 +16,15 @@ import { cullingScopePlots } from './data.js';
 // Flow: tap Pokok Inang to record amounts — Field Conductor first; a Site
 // Auditor second entry unlocks while the rate stays above 10%; video
 // evidence is requested when even the Auditor amount leaves it above 10%.
-export default function CullingTab({ t }) {
+export default function CullingTab({ t, staffName, flash }) {
   const data = useMemo(() => getSessionData(), []);
   const [nursery, setNursery] = useState('BNN');
   const [editing, setEditing] = useState(null); // plot row index in the modal
+  const [asking, setAsking] = useState(null); // plot awaiting send confirmation
+  const [reqs, setReqs] = useState(() => loadRequests());
   const [, setTick] = useState(0); // re-render after mutating session data
   const refresh = () => setTick((n) => n + 1);
+  const today = todayStr();
 
   // Plots currently at a culling-related stage in PALMS.
   const scope = useMemo(() => cullingScopePlots(), [nursery]);
@@ -90,8 +94,14 @@ export default function CullingTab({ t }) {
                   //  rate > 10% AND auditor has entered  -> amber  (tell HQ)
                   //  rate > 10% AND only FC has entered  -> red    (wait for Site Auditor)
                   //  rate > 10% AND nothing entered yet  -> neutral placeholder
+                  // Anything that needs the Site Auditor to attend the plot —
+                  // a drone flight, or culling verification — offers a send
+                  // button right in the action cell.
+                  const sent = sentToday(reqs, row.plot, today);
                   let act;
+                  let sendable = false;
                   if (!hot) {
+                    sendable = true;
                     act = (
                       <span className="text-emerald-700 font-bold text-[11px] leading-snug">
                         {row.pokok === null ? (
@@ -108,6 +118,7 @@ export default function CullingTab({ t }) {
                   } else if (row.pokokAuditor !== null) {
                     act = <span className="text-amber-600 font-bold text-[11px] leading-snug">{t('cull.actHQ')}</span>;
                   } else if (row.pokok !== null) {
+                    sendable = true;
                     act = <span className="text-rose-600 font-bold text-[11px] leading-snug">{t('cull.actWait')}</span>;
                   } else {
                     act = <span className="text-slate-300 font-bold">—</span>;
@@ -140,7 +151,22 @@ export default function CullingTab({ t }) {
                           {fmtPct(rate)}
                         </span>
                       </td>
-                      <td className="px-3 py-2.5 align-middle text-center">{act}</td>
+                      <td className="px-3 py-2.5 align-middle text-center">
+                        {act}
+                        {sendable &&
+                          (sent ? (
+                            <div className="mt-1 text-[10px] font-black text-emerald-600 uppercase tracking-wide">
+                              ✓ {t('cull.sent')}
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setAsking(row)}
+                              className="mt-1.5 w-full bg-slate-800 hover:bg-slate-900 text-white text-[10px] font-black uppercase tracking-wider rounded-lg px-2 py-1.5 cursor-pointer"
+                            >
+                              {t('cull.sendAuditor')}
+                            </button>
+                          ))}
+                      </td>
                     </tr>
                   );
                 })}
@@ -148,6 +174,60 @@ export default function CullingTab({ t }) {
             </table>
           </div>
         </div>
+      )}
+
+      {/* What has been raised for the Site Auditor */}
+      {reqs.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100">
+            <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-wide">{t('cull.reqTitle')}</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[420px]">
+              <thead>
+                <tr className="bg-slate-50 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                  <th className="px-3 py-2">{t('cull.reqDate')}</th>
+                  <th className="px-3 py-2">Plot</th>
+                  <th className="px-3 py-2">{t('cull.reqPurpose')}</th>
+                  <th className="px-3 py-2">{t('cull.reqBy')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reqs.slice(0, 12).map((r) => (
+                  <tr key={r.id} className="border-t border-slate-100">
+                    <td className="px-3 py-2 font-semibold text-slate-600">{prettyD(r.at)}</td>
+                    <td className="px-3 py-2 font-black text-slate-800">{r.plot}</td>
+                    <td className="px-3 py-2 font-semibold text-slate-600">{r.purpose}</td>
+                    <td className="px-3 py-2 font-semibold text-slate-500">{r.by || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {asking && (
+        <SendRequestModal
+          row={asking}
+          nurseryKey={nursery}
+          date={today}
+          by={staffName}
+          t={t}
+          onClose={() => setAsking(null)}
+          onConfirm={() => {
+            const { list, added } = addRequest({
+              plot: asking.plot,
+              nursery,
+              purpose: PURPOSE_CULLING,
+              by: staffName || 'FC',
+              at: today,
+            });
+            setReqs(list);
+            setAsking(null);
+            if (flash) flash(added ? t('cull.sentToast', { p: asking.plot }) : t('cull.alreadySent', { p: asking.plot }));
+          }}
+        />
       )}
 
       {editing !== null && rows[editing] && (
@@ -162,6 +242,52 @@ export default function CullingTab({ t }) {
         />
       )}
     </>
+  );
+}
+
+// Confirmation before anything reaches the Site Auditor: it shows exactly
+// what will be sent — the request date, the plot and the purpose, which for
+// anything raised here is always culling.
+function SendRequestModal({ row, nurseryKey, date, by, t, onClose, onConfirm }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl p-5 pb-7 shadow-2xl">
+        <h3 className="font-black text-slate-800 text-[15px] uppercase tracking-wide mb-1">
+          {t('cull.confirmSendTitle')}
+        </h3>
+        <p className="text-[12px] font-semibold text-slate-500 mb-3">{t('cull.confirmSendLead')}</p>
+
+        <dl className="bg-slate-50 border border-slate-200 rounded-xl divide-y divide-slate-200 mb-4">
+          {[
+            [t('cull.reqDate'), prettyD(date)],
+            ['Plot', `${row.plot} · ${nurseryKey}`],
+            [t('cull.reqPurpose'), PURPOSE_CULLING],
+            [t('cull.reqBy'), by || 'FC'],
+          ].map(([k, v]) => (
+            <div key={k} className="flex items-center justify-between gap-3 px-3.5 py-2.5">
+              <dt className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">{k}</dt>
+              <dd className="text-[13px] font-black text-slate-800 text-right">{v}</dd>
+            </div>
+          ))}
+        </dl>
+
+        <div className="flex gap-2">
+          <button
+            onClick={onClose}
+            className="flex-1 bg-white border border-slate-300 text-slate-600 font-black text-[12px] uppercase tracking-widest rounded-xl py-3 cursor-pointer"
+          >
+            {t('common.cancel')}
+          </button>
+          <button
+            onClick={onConfirm}
+            className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[12px] uppercase tracking-widest rounded-xl py-3 cursor-pointer"
+          >
+            {t('cull.confirmSend')}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

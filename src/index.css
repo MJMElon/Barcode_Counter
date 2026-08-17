@@ -145,7 +145,6 @@ body {
 /* ── Motion ──
    Anyone who has asked their device to reduce motion gets a still train. */
 @media (prefers-reduced-motion: reduce) {
-  .animate-chug,
   .animate-puff {
     animation: none !important;
   }
