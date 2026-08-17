@@ -209,24 +209,33 @@ export function worstArea(db, pid) {
 export function multiStatus(db, pid) {
   return worstArea(db, pid).st;
 }
+// A plot split into areas is described by what share of it is at each
+// category — "30% Kosong, 70% Pengambilan" — using each area's weight.
+//
+// Kosong counts towards that mix. It used to be excluded: any area at an
+// early stage sent the whole plot down the fallback below, so a plot with
+// 70% at Pengambilan reported only the early area's activity and the
+// collection went unmentioned. The Kosong share was computed and then never
+// shown.
 export function combinedLabel(db, pid) {
   const cfg = MULTI[pid];
   const cats = cfg.areas.map((a) => areaCategory(db, aKey(pid, a)));
-  if (!cats.includes('Kosong')) {
-    // every area is Membesar / Pengambilan -> weighted % label
-    const pct = { Kosong: 0, Pengambilan: 0, Membesar: 0 };
-    cfg.areas.forEach((a) => {
-      pct[areaCategory(db, aKey(pid, a))] += cfg.weights[a];
-    });
-    const order = ['Kosong', 'Pengambilan', 'Membesar'];
-    const nz = order.filter((c) => pct[c] > 0);
-    if (nz.length === 0) return '—';
-    if (nz.length === 1) return nz[0];
-    return nz.map((c) => `${bucket(pct[c])}% ${c}`).join(', ');
+
+  // Nothing growing anywhere: the activity name is more use than "100% Kosong".
+  if (cats.every((c) => c === 'Kosong')) {
+    const w = worstArea(db, pid);
+    return w.st.state === 'none' ? '—' : w.st.act.name;
   }
-  // some area still in an early stage -> show the most-behind area's activity
-  const w = worstArea(db, pid);
-  return w.st.state === 'none' ? '—' : w.st.act.name;
+
+  const pct = { Kosong: 0, Pengambilan: 0, Membesar: 0 };
+  cfg.areas.forEach((a) => {
+    pct[areaCategory(db, aKey(pid, a))] += cfg.weights[a];
+  });
+  const order = ['Kosong', 'Pengambilan', 'Membesar'];
+  const nz = order.filter((c) => pct[c] > 0);
+  if (nz.length === 0) return '—';
+  if (nz.length === 1) return nz[0];
+  return nz.map((c) => `${bucket(pct[c])}% ${c}`).join(', ');
 }
 export function effStatus(db, p) {
   return isMulti(p) ? multiStatus(db, p) : computeStatus(db, p);
@@ -328,6 +337,15 @@ function seedUnit(db, key, actN, mood, by) {
   db.logs[key] = entries;
 }
 
+// Fixed stages for the multi-area plots so the weighted label has something
+// to show: B1 and U8 land on a Kosong/Pengambilan mix, B4 on Membesar with
+// Pengambilan.
+const MULTI_PLAN = {
+  B1: { A: 5, B: 11 },
+  B4: { A: 10, B: 11 },
+  U8: { A: 11, B: 11, C: 4 },
+};
+
 export function seedSample() {
   const db = freshDB();
   const today = todayStr();
@@ -342,7 +360,7 @@ export function seedSample() {
         const key = a ? aKey(pid, a) : pid;
         // Cycle the activities so all eleven are covered, and bias the
         // "needs attention" mood onto the two stages that can show it.
-        const actN = (n % 11) + 1;
+        const actN = a ? MULTI_PLAN[pid][a] : (n % 11) + 1;
         let mood = moods[n % 3];
         if (mood === 'soon' && actN < 10) mood = 'ontrack';
         if (actN >= 10 && n % 4 === 0) mood = 'soon';
