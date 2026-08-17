@@ -380,14 +380,17 @@ function AreaEditor({ db, storeKey, t, staffName, refresh, flash, onSaved }) {
         <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
           {t('pm.pickActivity')}
         </div>
-        <div className="space-y-0.5">
+        {/* Two columns, filled downwards: 1–6 on the left, 7–11 on the right.
+            Half the height means every activity is reachable without a
+            scroll, and the rows can stay a comfortable size to tap. */}
+        <div className="grid grid-rows-6 grid-flow-col gap-1">
           {ACTIVITIES.map((a) => {
             const on = sel === a.n;
             return (
               <button
                 key={a.n}
                 onClick={() => setSel(a.n)}
-                className={`w-full flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 border-2 text-left transition-colors cursor-pointer ${
+                className={`w-full flex items-center gap-1.5 rounded-lg px-2 py-2 border-2 text-left transition-colors cursor-pointer ${
                   on ? 'bg-emerald-50 border-emerald-500' : 'bg-white border-slate-200 hover:border-emerald-300'
                 }`}
               >
@@ -398,12 +401,18 @@ function AreaEditor({ db, storeKey, t, staffName, refresh, flash, onSaved }) {
                 >
                   {a.n}
                 </span>
-                <span className={`flex-1 text-[13px] font-black ${on ? 'text-emerald-800' : 'text-slate-700'}`}>
-                  {/* Short label on phones so all eleven fit without scrolling */}
+                <span
+                  className={`flex-1 min-w-0 text-[12px] leading-tight font-black ${
+                    on ? 'text-emerald-800' : 'text-slate-700'
+                  }`}
+                >
+                  {/* Short label on phones, full name once there is room */}
                   <span className="sm:hidden">{a.mShort}</span>
                   <span className="hidden sm:inline">{a.name}</span>
                 </span>
-                <span className="shrink-0 text-[10px] font-bold text-slate-400">
+                {/* The ideal-day count is hidden on phones: the width it takes
+                    is what forces the longer names onto a second line. */}
+                <span className="hidden sm:inline shrink-0 text-[9px] font-bold text-slate-400">
                   {t('pm.idealDays', { d: a.days })}
                 </span>
               </button>

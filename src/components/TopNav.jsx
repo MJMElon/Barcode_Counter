@@ -91,7 +91,11 @@ export default function TopNav({ title, subtitle, back, portal, user, theme = 'l
         {subtitle ? (
           <div className="leading-tight min-w-0">
             <div className={`font-black ${titleCls} text-sm sm:text-lg truncate`}>{title}</div>
-            <div className="font-black text-emerald-600 text-[10px] uppercase tracking-[0.25em] leading-none mt-0.5">{subtitle}</div>
+            {/* nowrap: the wide tracking used to break "FC PORTAL" onto two
+                lines on a phone, which then collided with the staff name */}
+            <div className="font-black text-emerald-600 text-[10px] uppercase tracking-[0.18em] sm:tracking-[0.25em] leading-none mt-0.5 whitespace-nowrap truncate">
+              {subtitle}
+            </div>
           </div>
         ) : (
           <span className={`font-black ${titleCls} uppercase tracking-wider text-[11px] sm:text-sm truncate`}>{title}</span>
@@ -99,18 +103,23 @@ export default function TopNav({ title, subtitle, back, portal, user, theme = 'l
       </div>
 
       <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+        {/* The staff name is dropped on phones. It was competing with the
+            title for a 360px bar and squeezing it out of view entirely. */}
         {user && (
-          <span className={`text-[11px] font-bold ${userCls} max-w-[84px] sm:max-w-none truncate`}>
-            <span className="hidden sm:inline">{t('dash.welcome', { name: user })}</span>
-            <span className="sm:hidden">{user}</span>
+          <span className={`hidden sm:inline text-[11px] font-bold ${userCls} truncate`}>
+            {t('dash.welcome', { name: user })}
           </span>
         )}
         <LangToggle dark={dark} />
+        {/* Icon only on phones — the words cost ~55px the title needs more. */}
         <button
           onClick={handleLogout}
-          className={`text-[10px] font-bold ${signOutCls} uppercase tracking-widest px-3 py-2 rounded-full border cursor-pointer transition-colors shrink-0`}
+          title={t('common.signOut')}
+          aria-label={t('common.signOut')}
+          className={`text-[10px] font-bold ${signOutCls} uppercase tracking-wider sm:tracking-widest px-2.5 sm:px-3 py-2 rounded-full border cursor-pointer transition-colors shrink-0`}
         >
-          {t('common.signOut')}
+          <span className="hidden sm:inline">{t('common.signOut')}</span>
+          <span className="sm:hidden text-[13px] leading-none">⏻</span>
         </button>
       </div>
     </div>
