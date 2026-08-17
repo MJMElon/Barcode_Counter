@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import CullingTab from './CullingTab.jsx';
 import EntryTab from './EntryTab.jsx';
-import { seedDemo } from './demo.js';
+import { clearAll, seedDemo } from './demo.js';
 import TopNav from '../../components/TopNav.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useLang } from '../../context/LanguageContext.jsx';
@@ -21,7 +21,6 @@ import {
   effActivityName,
   effEstEnd,
   effStatus,
-  freshDB,
   isMulti,
   loadDB,
   nurseryOfPlot,
@@ -485,7 +484,7 @@ function DashTab({ db, t, stateLabel, refresh, flash, openDetail, replaceDB }) {
         ·{' '}
         <button
           onClick={() => {
-            replaceDB(freshDB());
+            replaceDB(clearAll());
             flash(t('pm.cleared'));
           }}
           className="text-rose-500 hover:underline cursor-pointer"

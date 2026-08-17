@@ -5,7 +5,7 @@
 // and the calculator decides which plots can raise a request. Seeding them
 // together keeps the example coherent.
 
-import { saveDB, seedSample } from './data.js';
+import { freshDB, saveDB, seedSample } from './data.js';
 import { resetSessionData } from './cullingData.js';
 import { seedRequests } from './requests.js';
 
@@ -21,5 +21,15 @@ export function seedDemo() {
   // anything raised against an earlier, now-replaced set of plot figures.
   seedRequests([]);
 
+  return db;
+}
+
+// "Clear all data" should mean all of it — the plot statuses, the calculator's
+// figures and anything queued for the Site Auditor or HQ.
+export function clearAll() {
+  const db = freshDB();
+  saveDB(db);
+  resetSessionData();
+  seedRequests([]);
   return db;
 }

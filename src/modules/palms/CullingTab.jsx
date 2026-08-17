@@ -9,7 +9,7 @@ import {
   videoNeeded,
 } from './cullingData.js';
 import { cullingScopePlots, prettyD, todayStr } from './data.js';
-import { PURPOSE_CULLING, addRequest, loadRequests, sentToday } from './requests.js';
+import { PURPOSE_CULLING, TO_AUDITOR, TO_HQ, addRequest, loadRequests, sentToday } from './requests.js';
 
 // Culling Calculator — lives inside PALMS as its third tab (it used to be a
 // standalone module). Only plots whose current PALMS activity is Saringan
@@ -87,7 +87,7 @@ export default function CullingTab({ t, staffName, flash }) {
               </thead>
               <tbody>
                 {rows.map((row, idx) => {
-                  const { rate, hot, act, sendable, sent } = derive(row, reqs, today, t);
+                  const { rate, hot, act, sendTo, sent } = derive(row, reqs, today, t);
                   return (
                     <tr key={row.plot} className="border-t border-slate-100 hover:bg-slate-50/60 transition-colors">
                       <td className="px-1.5 sm:px-3 py-2.5 align-middle font-black text-slate-800 text-[13px] sm:text-sm">
@@ -125,18 +125,26 @@ export default function CullingTab({ t, staffName, flash }) {
                       </td>
                       <td className="px-1 sm:px-3 py-2.5 align-middle text-center">
                         {act}
-                        {sendable &&
+                        {sendTo &&
                           (sent ? (
                             <div className="mt-1 text-[10px] font-black text-emerald-600 uppercase tracking-wide">
-                              ✓ {t('cull.sent')}
+                              ✓ {sendTo === TO_HQ ? t('cull.sentHQ') : t('cull.sent')}
                             </div>
                           ) : (
                             <button
-                              onClick={() => setAsking(row)}
-                              className="mt-1.5 w-full bg-slate-800 hover:bg-slate-900 text-white text-[9px] sm:text-[10px] font-black uppercase tracking-wide sm:tracking-wider rounded-lg px-1 sm:px-2 py-1.5 cursor-pointer"
+                              onClick={() => setAsking({ row, to: sendTo })}
+                              className={`mt-1.5 w-full text-white text-[9px] sm:text-[10px] font-black uppercase tracking-wide sm:tracking-wider rounded-lg px-1 sm:px-2 py-1.5 cursor-pointer ${
+                                sendTo === TO_HQ
+                                  ? 'bg-amber-600 hover:bg-amber-700'
+                                  : 'bg-slate-800 hover:bg-slate-900'
+                              }`}
                             >
-                              <span className="sm:hidden">{t('cull.sendAuditorShort')}</span>
-                              <span className="hidden sm:inline">{t('cull.sendAuditor')}</span>
+                              <span className="sm:hidden">
+                                {sendTo === TO_HQ ? t('cull.sendHQShort') : t('cull.sendAuditorShort')}
+                              </span>
+                              <span className="hidden sm:inline">
+                                {sendTo === TO_HQ ? t('cull.sendHQ') : t('cull.sendAuditor')}
+                              </span>
                             </button>
                           ))}
                       </td>
@@ -162,9 +170,11 @@ export default function CullingTab({ t, staffName, flash }) {
               <div key={r.id} className="px-4 py-2.5 flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <div className="font-black text-slate-800 text-[13px]">
-                    {r.plot} · {r.purpose}
+                    {r.plot} · {r.to === TO_HQ ? t('cull.toHQ') : t('cull.toAuditor')}
                   </div>
-                  <div className="text-[11px] font-semibold text-slate-500 truncate">{r.by || '—'}</div>
+                  <div className="text-[11px] font-semibold text-slate-500 truncate">
+                    {r.purpose} · {r.by || '—'}
+                  </div>
                 </div>
                 <div className="shrink-0 text-[11px] font-bold text-slate-500">{prettyD(r.at)}</div>
               </div>
@@ -177,6 +187,7 @@ export default function CullingTab({ t, staffName, flash }) {
                 <tr className="bg-slate-50 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">
                   <th className="px-3 py-2">{t('cull.reqDate')}</th>
                   <th className="px-3 py-2">Plot</th>
+                  <th className="px-3 py-2">{t('cull.reqTo')}</th>
                   <th className="px-3 py-2">{t('cull.reqPurpose')}</th>
                   <th className="px-3 py-2">{t('cull.reqBy')}</th>
                 </tr>
@@ -186,6 +197,9 @@ export default function CullingTab({ t, staffName, flash }) {
                   <tr key={r.id} className="border-t border-slate-100">
                     <td className="px-3 py-2 font-semibold text-slate-600">{prettyD(r.at)}</td>
                     <td className="px-3 py-2 font-black text-slate-800">{r.plot}</td>
+                    <td className="px-3 py-2 font-semibold text-slate-600">
+                      {r.to === TO_HQ ? t('cull.toHQ') : t('cull.toAuditor')}
+                    </td>
                     <td className="px-3 py-2 font-semibold text-slate-600">{r.purpose}</td>
                     <td className="px-3 py-2 font-semibold text-slate-500">{r.by || '—'}</td>
                   </tr>
@@ -198,23 +212,32 @@ export default function CullingTab({ t, staffName, flash }) {
 
       {asking && (
         <SendRequestModal
-          row={asking}
+          row={asking.row}
+          to={asking.to}
           nurseryKey={nursery}
           date={today}
           by={staffName}
           t={t}
           onClose={() => setAsking(null)}
           onConfirm={() => {
+            const r = asking.row;
+            const rate = cullingRate(r.balance, r.pokok, r.pokokAuditor, r.transplant);
             const { list, added } = addRequest({
-              plot: asking.plot,
+              plot: r.plot,
               nursery,
               purpose: PURPOSE_CULLING,
+              to: asking.to,
               by: staffName || 'FC',
               at: today,
+              // HQ needs the figures behind the decision, not just the plot.
+              details:
+                asking.to === TO_HQ
+                  ? { transplant: r.transplant, balance: r.balance, rate: fmtPct(rate), video: r.video || null }
+                  : null,
             });
             setReqs(list);
             setAsking(null);
-            if (flash) flash(added ? t('cull.sentToast', { p: asking.plot }) : t('cull.alreadySent', { p: asking.plot }));
+            if (flash) flash(added ? t('cull.sentToast', { p: r.plot }) : t('cull.alreadySent', { p: r.plot }));
           }}
         />
       )}
@@ -240,17 +263,20 @@ export default function CullingTab({ t, staffName, flash }) {
 //  rate > 10% AND only FC has entered  -> red    (wait for Site Auditor)
 //  rate > 10% AND nothing entered yet  -> neutral placeholder
 //
-// Only the drone request is `sendable`. "Tunggu Site Auditor" is a state the
-// plot is already in — the auditor still has to come and do their own count —
-// so there is nothing to raise from here.
+// Two things can be raised, and neither happens on its own — both need the
+// Field Conductor to press the button and confirm:
+//   the drone request goes to the Site Auditor,
+//   'Sila bagitahu HQ' goes to HQ, carrying the plot's figures and video.
+// "Tunggu Site Auditor" raises nothing: the auditor still has to come and do
+// their own count. Once that count brings the rate under 10% the plot moves
+// to the drone request and becomes sendable again.
 function derive(row, reqs, today, t) {
   const rate = cullingRate(row.balance, row.pokok, row.pokokAuditor, row.transplant);
   const hot = rate > 0.1;
-  const sent = sentToday(reqs, row.plot, today);
   let act;
-  let sendable = false;
+  let sendTo = null;
   if (!hot) {
-    sendable = true;
+    sendTo = TO_AUDITOR;
     act = (
       <span className="text-emerald-700 font-bold text-[10px] sm:text-[11px] leading-snug">
         {row.pokok === null ? (
@@ -265,34 +291,49 @@ function derive(row, reqs, today, t) {
       </span>
     );
   } else if (row.pokokAuditor !== null) {
+    sendTo = TO_HQ;
     act = <span className="text-amber-600 font-bold text-[10px] sm:text-[11px] leading-snug">{t('cull.actHQ')}</span>;
   } else if (row.pokok !== null) {
     act = <span className="text-rose-600 font-bold text-[10px] sm:text-[11px] leading-snug">{t('cull.actWait')}</span>;
   } else {
     act = <span className="text-slate-300 font-bold">—</span>;
   }
-  return { rate, hot, act, sendable, sent };
+  const sent = sendTo ? sentToday(reqs, row.plot, today, sendTo) : null;
+  return { rate, hot, act, sendTo, sent };
 }
 
 // Confirmation before anything reaches the Site Auditor: it shows exactly
 // what will be sent — the request date, the plot and the purpose, which for
 // anything raised here is always culling.
-function SendRequestModal({ row, nurseryKey, date, by, t, onClose, onConfirm }) {
+function SendRequestModal({ row, to, nurseryKey, date, by, t, onClose, onConfirm }) {
+  const hq = to === TO_HQ;
+  const rate = cullingRate(row.balance, row.pokok, row.pokokAuditor, row.transplant);
+  // HQ is being asked to make a judgement, so it gets the figures behind the
+  // rate and the video, not just the plot number.
+  const lines = [
+    [t('cull.reqDate'), prettyD(date)],
+    ['Plot', row.plot],
+    [t('cull.reqPurpose'), PURPOSE_CULLING],
+    [t('cull.reqBy'), by || 'FC'],
+  ];
+  if (hq) {
+    lines.push(
+      [t('cull.transplant'), fmtNum(row.transplant)],
+      [t('cull.balance'), fmtNum(row.balance)],
+      [t('cull.rate'), fmtPct(rate)],
+      [t('cull.videoField'), row.video || t('cull.noVideo')]
+    );
+  }
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
       <div className="relative bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl p-5 pb-7 shadow-2xl">
         <h3 className="font-black text-slate-800 text-[15px] uppercase tracking-wide mb-3">
-          {t('cull.confirmSendTitle')}
+          {hq ? t('cull.confirmSendHQTitle') : t('cull.confirmSendTitle')}
         </h3>
 
         <dl className="bg-slate-50 border border-slate-200 rounded-xl divide-y divide-slate-200 mb-4">
-          {[
-            [t('cull.reqDate'), prettyD(date)],
-            ['Plot', row.plot],
-            [t('cull.reqPurpose'), PURPOSE_CULLING],
-            [t('cull.reqBy'), by || 'FC'],
-          ].map(([k, v]) => (
+          {lines.map(([k, v]) => (
             <div key={k} className="flex items-center justify-between gap-3 px-3.5 py-2.5">
               <dt className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">{k}</dt>
               <dd className="text-[13px] font-black text-slate-800 text-right">{v}</dd>
@@ -309,7 +350,9 @@ function SendRequestModal({ row, nurseryKey, date, by, t, onClose, onConfirm }) 
           </button>
           <button
             onClick={onConfirm}
-            className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[12px] uppercase tracking-widest rounded-xl py-3 cursor-pointer"
+            className={`flex-1 text-white font-black text-[12px] uppercase tracking-widest rounded-xl py-3 cursor-pointer ${
+              hq ? 'bg-amber-600 hover:bg-amber-700' : 'bg-emerald-600 hover:bg-emerald-700'
+            }`}
           >
             {t('cull.confirmSend')}
           </button>
