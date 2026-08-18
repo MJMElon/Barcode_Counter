@@ -417,12 +417,34 @@ function seedUnit(db, key, actN, mood, by) {
     entries.unshift({ actN: n, start, end: endCursor, ideal });
     endCursor = start;
   }
-  entries.forEach((e) => {
+  // Two finished cycles behind the current one. The Motion Study measures
+  // completed work, so without a past there would be nothing to look at until
+  // the nursery had run a full intake through — about a year. These are not
+  // written into the daily history: they are older than any date the filter
+  // reaches back to, and 52 plots' worth would be a lot of rows to carry for
+  // nothing.
+  const past = [];
+  let cursor = endCursor;
+  for (let c = 0; c < 2; c++) {
+    for (let n = 11; n >= 1; n--) {
+      const ideal = durFor(key, activityByN(n));
+      // Spread the durations either side of the ideal so shortest and longest
+      // are actually different figures.
+      const spent = Math.max(1, ideal + randInt(-Math.ceil(ideal * 0.3), Math.ceil(ideal * 0.4)));
+      const start = addDays(cursor, -spent);
+      past.unshift({ actN: n, start, end: cursor, ideal });
+      cursor = start;
+    }
+  }
+  // Numbered in the order they happened, oldest first: the Motion Study reads
+  // a log back in that order to tell one cycle from the next.
+  const all = [...past, ...entries];
+  all.forEach((e) => {
     e.no = ++db.seq;
     e.by = by;
-    recordHistory(db, { key, actN: e.actN, by, at: e.start });
   });
-  db.logs[key] = entries;
+  entries.forEach((e) => recordHistory(db, { key, actN: e.actN, by, at: e.start }));
+  db.logs[key] = all;
 }
 
 // Fixed stages for the multi-area plots so the weighted label has something

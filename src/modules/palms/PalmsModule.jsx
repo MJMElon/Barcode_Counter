@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import CullingTab from './CullingTab.jsx';
 import EntryTab from './EntryTab.jsx';
+import MotionTab from './MotionTab.jsx';
 import SettingsTab from './SettingsTab.jsx';
 import { clearAll, seedDemo } from './demo.js';
 import TopNav from '../../components/TopNav.jsx';
@@ -67,6 +68,13 @@ const TAB_ICON = {
       <path d="M8 11.5h.01M12 11.5h.01M16 11.5h.01M8 15.5h.01M12 15.5h.01M16 15.5h.01M8 18.5h.01M12 18.5h.01M16 18.5h.01" />
     </svg>
   ),
+  motion: (
+    <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="13.5" r="8" />
+      <path d="M12 9.5v4l2.5 2M9 2.5h6M19 6l1.5-1.5" />
+    </svg>
+  ),
   set: (
     <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"
       strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -126,6 +134,7 @@ export default function PalmsModule() {
             ['entry', t('pm.tabEntry')],
             ['dash', t('pm.tabDash')],
             ['cull', t('cull.title')],
+            ['motion', t('ms.title')],
             ['set', t('set.title')],
           ].map(([id, label]) => (
             <button
@@ -151,6 +160,8 @@ export default function PalmsModule() {
           <EntryTab db={db} t={t} staffName={staffName} refresh={refresh} flash={flash} />
         ) : tab === 'cull' ? (
           <CullingTab t={t} staffName={staffName} flash={flash} />
+        ) : tab === 'motion' ? (
+          <MotionTab db={db} t={t} />
         ) : tab === 'set' ? (
           <SettingsTab t={t} flash={flash} />
         ) : (
@@ -367,14 +378,28 @@ function DashTab({ db, t, stateLabel, refresh, flash, openDetail, replaceDB }) {
                 rows.map((p) => {
                   const st = effStatus(db, p);
                   const ee = effEstEnd(db, p);
+                  // The number counts down to the END OF THE CURRENT ACTIVITY,
+                  // so its date is shown beside it. The last column is a
+                  // different date — when the whole cycle finishes, activities
+                  // still to come included — and the two were being read as
+                  // though they were the same thing.
                   let days = <span className="text-slate-300">—</span>;
-                  if (st.state === 'overdue')
-                    days = <span className="text-rose-600 font-black tabular-nums">{Math.abs(st.left)}</span>;
-                  else if (st.state !== 'none')
+                  if (st.state !== 'none')
                     days = (
-                      <span className={`font-black tabular-nums ${st.left > 7 ? 'text-emerald-600' : 'text-amber-600'}`}>
-                        {st.left}
-                      </span>
+                      <div className="leading-tight">
+                        <span
+                          className={`font-black tabular-nums ${
+                            st.state === 'overdue'
+                              ? 'text-rose-600'
+                              : st.state === 'soon'
+                                ? 'text-amber-600'
+                                : 'text-emerald-600'
+                          }`}
+                        >
+                          {Math.abs(st.left)}
+                        </span>
+                        <div className="text-[10px] font-bold text-slate-400">{prettyD(st.due)}</div>
+                      </div>
                     );
                   return (
                     <tr key={p} className="border-t border-slate-100 hover:bg-slate-50/60 transition-colors">
