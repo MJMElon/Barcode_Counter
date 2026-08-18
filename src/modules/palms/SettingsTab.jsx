@@ -1,4 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import PlotAreaEditor from './PlotAreaEditor.jsx';
+import { fetchPlotMaps, loadCachedMaps, weightsFromDividers } from './plotMaps.js';
 import {
   ACTIVITIES,
   NURSERIES,
@@ -7,14 +9,7 @@ import {
   areaMapUrl,
   plotsOf,
 } from './data.js';
-import {
-  AREA_LETTERS,
-  bandsFromWeights,
-  defaultSettings,
-  loadSettings,
-  readImageScaled,
-  saveSettings,
-} from './settings.js';
+import { AREA_LETTERS, defaultSettings, loadSettings, saveSettings } from './settings.js';
 
 // Settings — the two things that used to need a code change: how a plot is
 // divided into areas, and when a plot starts needing attention.
@@ -26,86 +21,66 @@ export default function SettingsTab({ t, flash }) {
   );
   const [plot, setPlot] = useState(allPlots[0].plot);
 
-  // Working copy of the selected plot's split. One area means "not split".
+  // Plot outlines and the nursery aerial maps come from the main portal's
+  // Nursery Operation Management, so a plot drawn there is the plot shown
+  // here rather than a second, drifting copy.
+  const [maps, setMaps] = useState(() => loadCachedMaps());
+  const [loadingMaps, setLoadingMaps] = useState(false);
+  const [mapErr, setMapErr] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    setLoadingMaps(true);
+    fetchPlotMaps()
+      .then((m) => alive && setMaps(m))
+      .catch((e) => alive && setMapErr(e.message || String(e)))
+      .finally(() => alive && setLoadingMaps(false));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const cfg = settings.multi[plot];
   const [count, setCount] = useState(cfg ? cfg.areas.length : 1);
-  const [weights, setWeights] = useState(() => (cfg ? { ...cfg.weights } : { A: 100 }));
-  const [bands, setBands] = useState(() => (cfg ? { ...cfg.band } : null));
+  const [dividers, setDividers] = useState(() => (cfg && cfg.dividers ? cfg.dividers : []));
   const [cap, setCap] = useState(cfg ? cfg.cap : '');
-  const [photo, setPhoto] = useState(settings.photos[plot] || null);
-  const [busy, setBusy] = useState(false);
 
   function selectPlot(p) {
     const c = settings.multi[p];
     setPlot(p);
     setCount(c ? c.areas.length : 1);
-    setWeights(c ? { ...c.weights } : { A: 100 });
-    setBands(c ? { ...c.band } : null);
+    setDividers(c && c.dividers ? c.dividers : []);
     setCap(c ? c.cap : '');
-    setPhoto(settings.photos[p] || null);
   }
 
   const areas = AREA_LETTERS.slice(0, count);
-  const total = areas.reduce((s, a) => s + (Number(weights[a]) || 0), 0);
-  const balanced = total === 100;
+  const plotMap = maps && maps.plots ? maps.plots[plot] : null;
+  const poly = plotMap ? plotMap.poly : null;
+  const nurseryOfSel = plotMap ? plotMap.nursery : allPlots.find((x) => x.plot === plot).nursery;
+  const mapUrl = maps && maps.nurseries ? maps.nurseries[nurseryOfSel] : null;
+  const ready = count < 2 || dividers.length === count - 1;
+  const weights = ready && count > 1 ? weightsFromDividers(areas, dividers, poly) : null;
 
   function changeCount(n) {
     setCount(n);
-    const next = {};
-    AREA_LETTERS.slice(0, n).forEach((a, i) => {
-      // Spread evenly, giving any remainder to the last area.
-      next[a] = i === n - 1 ? 100 - Math.floor(100 / n) * (n - 1) : Math.floor(100 / n);
-    });
-    setWeights(next);
-    setBands(null); // recomputed from the shares on save unless edited
-  }
-
-  function setWeight(a, v) {
-    setWeights((w) => ({ ...w, [a]: v === '' ? '' : Math.max(0, Math.min(100, Number(v))) }));
-    setBands(null);
-  }
-
-  const effectiveBands = bands || bandsFromWeights(areas, weights);
-
-  function setSplit(i, v) {
-    // Split i is the boundary between area i and i+1, as a % of the photo.
-    const val = Math.max(1, Math.min(99, Number(v) || 0));
-    const next = {};
-    const points = areas.slice(0, -1).map((a, idx) => (idx === i ? val : effectiveBands[areas[idx]][1]));
-    points.sort((x, y) => x - y);
-    areas.forEach((a, idx) => {
-      next[a] = [idx === 0 ? 0 : points[idx - 1], idx === areas.length - 1 ? 100 : points[idx]];
-    });
-    setBands(next);
-  }
-
-  async function pickPhoto(e) {
-    const f = e.target.files && e.target.files[0];
-    if (!f) return;
-    setBusy(true);
-    try {
-      setPhoto(await readImageScaled(f));
-    } catch (err) {
-      flash(t('set.photoErr'));
-    }
-    setBusy(false);
+    setDividers((d) => d.slice(0, Math.max(0, n - 1)));
   }
 
   function savePlot() {
-    if (count > 1 && !balanced) {
-      flash(t('set.mustTotal'));
+    if (count > 1 && !ready) {
+      flash(t('set.drawFirst'));
       return;
     }
-    const next = { ...settings, multi: { ...settings.multi }, photos: { ...settings.photos } };
+    const next = { ...settings, multi: { ...settings.multi } };
     if (count <= 1) {
       delete next.multi[plot];
-      delete next.photos[plot];
     } else {
-      const w = {};
-      areas.forEach((a) => (w[a] = Number(weights[a]) || 0));
-      next.multi[plot] = { areas: [...areas], weights: w, band: effectiveBands, cap: cap.trim() };
-      if (photo) next.photos[plot] = photo;
-      else delete next.photos[plot];
+      next.multi[plot] = {
+        areas: [...areas],
+        weights,
+        dividers,
+        cap: cap.trim(),
+      };
     }
     if (!saveSettings(next)) {
       flash(t('set.saveFull'));
@@ -204,90 +179,43 @@ export default function SettingsTab({ t, flash }) {
             </label>
           </div>
 
+          {mapErr && (
+            <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl px-3 py-2 text-[12px] font-bold">
+              {t('set.mapErr', { msg: mapErr })}
+            </div>
+          )}
+
           {count > 1 && (
             <>
-              {/* share of the plot per area */}
-              <div>
-                <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
-                  {t('set.share')}
+              {mapUrl ? (
+                <PlotAreaEditor
+                  key={`${plot}-${count}`}
+                  mapUrl={mapUrl}
+                  poly={poly}
+                  areas={areas}
+                  dividers={dividers}
+                  onChange={setDividers}
+                  t={t}
+                />
+              ) : (
+                <div className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-6 text-center text-[12px] font-bold text-slate-400">
+                  {loadingMaps ? t('common.loading') : t('set.noMap', { n: nurseryOfSel })}
                 </div>
+              )}
+
+              {weights && (
                 <div className="flex gap-2 flex-wrap">
                   {areas.map((a) => (
-                    <label key={a} className="flex items-center gap-1.5 text-[12px] font-bold text-slate-600">
-                      {a}
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        value={weights[a] ?? ''}
-                        onChange={(e) => setWeight(a, e.target.value)}
-                        className="w-16 bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-sm font-bold tabular-nums outline-none focus:border-emerald-500"
-                      />
-                      %
-                    </label>
+                    <span
+                      key={a}
+                      className="text-[12px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-3 py-1"
+                    >
+                      {a} · {weights[a]}%
+                    </span>
                   ))}
-                  <span
-                    className={`text-[11px] font-black self-center ${
-                      balanced ? 'text-emerald-600' : 'text-rose-600'
-                    }`}
-                  >
-                    = {total}%
-                  </span>
+                  <span className="text-[11px] font-semibold text-slate-400 self-center">{t('set.measured')}</span>
                 </div>
-              </div>
-
-              {/* photo + where each area sits on it */}
-              <div>
-                <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
-                  {t('set.photo')}
-                </div>
-                <div className="relative rounded-xl overflow-hidden border border-slate-200">
-                  <img src={photo || areaMapUrl(plot)} alt={plot} className="w-full block" />
-                  {areas.map((a) => {
-                    const [l, r] = effectiveBands[a];
-                    return (
-                      <div
-                        key={a}
-                        style={{ left: `${l}%`, width: `${r - l}%` }}
-                        className="absolute inset-y-0 grid place-items-center ring-1 ring-inset ring-white/70"
-                      >
-                        <span className="rounded-full px-2 py-0.5 text-[11px] font-black bg-white/90 text-slate-800">
-                          {a}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <label className="mt-2 inline-block bg-slate-100 hover:bg-emerald-100 text-slate-600 hover:text-emerald-700 text-[11px] font-black uppercase tracking-wider rounded-lg px-3 py-2 cursor-pointer">
-                  {busy ? t('set.reading') : t('set.uploadPhoto')}
-                  <input type="file" accept="image/*" onChange={pickPhoto} hidden />
-                </label>
-
-                {areas.length > 1 && (
-                  <div className="mt-2">
-                    <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
-                      {t('set.splits')}
-                    </div>
-                    <div className="flex gap-2 flex-wrap">
-                      {areas.slice(0, -1).map((a, i) => (
-                        <label key={a} className="flex items-center gap-1.5 text-[12px] font-bold text-slate-600">
-                          {a}|{areas[i + 1]}
-                          <input
-                            type="number"
-                            min="1"
-                            max="99"
-                            value={effectiveBands[a][1]}
-                            onChange={(e) => setSplit(i, e.target.value)}
-                            className="w-16 bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-sm font-bold tabular-nums outline-none focus:border-emerald-500"
-                          />
-                          %
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+              )}
 
               <div>
                 <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">

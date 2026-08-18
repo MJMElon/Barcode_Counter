@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import { areaIndexAt, bbox, loadCachedMaps } from './plotMaps.js';
 import {
   ACTIVITIES,
   MULTI,
@@ -340,8 +341,60 @@ function PlotSheet({ db, pid, t, staffName, refresh, flash, onClose }) {
 // Step one for a multi-area plot: the map itself. Nothing is preselected —
 // an area only turns green once its status has been keyed in today, so green
 // always means done rather than "we picked this for you".
+//
+// Where Settings has drawn the dividing lines, the plot's real outline from
+// the main portal is shown and a tap is placed against those lines. Plots
+// still on the older left-to-right bands fall back to the shipped photo.
+const AREA_TINT = ['rgba(16,185,129,.28)', 'rgba(245,158,11,.28)', 'rgba(56,189,248,.28)', 'rgba(217,70,239,.28)', 'rgba(244,63,94,.28)'];
+
 function AreaMapStep({ db, pid, areas, t, onPick, onClose }) {
   const cfg = MULTI[pid];
+  const maps = useMemo(() => loadCachedMaps(), []);
+  const drawn = cfg.dividers && cfg.dividers.length === areas.length - 1;
+  const pm = maps && maps.plots ? maps.plots[pid] : null;
+  const mapUrl = pm && maps.nurseries ? maps.nurseries[pm.nursery] : null;
+  const useDrawn = drawn && !!mapUrl;
+
+  const view = useMemo(() => {
+    if (!pm) return { x: 0, y: 0, w: 100, h: 100 };
+    const b = bbox(pm.poly);
+    const pad = Math.max(b.w, b.h) * 0.12;
+    return {
+      x: Math.max(0, b.x - pad),
+      y: Math.max(0, b.y - pad),
+      w: Math.min(100, b.w + pad * 2),
+      h: Math.min(100, b.h + pad * 2),
+    };
+  }, [pm]);
+
+  const [aspect, setAspect] = useState(1.6);
+  const wrapRef = useRef(null);
+
+  function tap(e) {
+    const el = wrapRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const pt = {
+      x: view.x + ((e.clientX - r.left) / r.width) * view.w,
+      y: view.y + ((e.clientY - r.top) / r.height) * view.h,
+    };
+    onPick(areas[Math.min(areas.length - 1, areaIndexAt(cfg.dividers, pt))]);
+  }
+
+  // Tint each area, clipped to the plot outline, so the split reads at a glance.
+  const cells = useMemo(() => {
+    if (!useDrawn) return [];
+    const out = [];
+    const N = 24;
+    for (let i = 0; i < N; i++) {
+      for (let j = 0; j < N; j++) {
+        const pt = { x: view.x + ((i + 0.5) / N) * view.w, y: view.y + ((j + 0.5) / N) * view.h };
+        out.push({ i, j, a: Math.min(areas.length - 1, areaIndexAt(cfg.dividers, pt)) });
+      }
+    }
+    return out;
+  }, [useDrawn, cfg.dividers, areas.length, view]);
+
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
@@ -365,46 +418,143 @@ function AreaMapStep({ db, pid, areas, t, onPick, onClose }) {
         </div>
 
         <div className="px-4 py-3 overflow-y-auto flex-1">
-          {/* The photo IS the control: each area is a tappable band over its
-              own part of the picture. The outstanding area is tinted green,
-              areas already keyed in today are dimmed and ticked. */}
-          <div className="relative rounded-xl overflow-hidden border border-slate-200">
-            <img src={areaMapUrl(pid)} alt={`Peta kawasan ${pid}`} className="w-full block" />
-            {areas.map((a) => {
-              const done = tickedToday(db, aKey(pid, a));
-              const [l, r] = cfg.band[a];
-              return (
-                <button
-                  key={a}
-                  onClick={() => onPick(a)}
-                  title={t('pm.area', { a })}
-                  aria-label={t('pm.area', { a })}
-                  style={{ left: `${l}%`, width: `${r - l}%` }}
-                  className={`absolute inset-y-0 grid place-items-center cursor-pointer transition-colors ${
-                    done
-                      ? 'bg-emerald-500/30 ring-2 ring-inset ring-emerald-400'
-                      : 'bg-transparent hover:bg-white/20'
-                  }`}
-                >
-                  {/* Just the letter — the narrowest band (B4's A) is only
-                      23% wide, and the photo already labels each area. */}
+          {useDrawn ? (
+            <div
+              ref={wrapRef}
+              onClick={tap}
+              className="relative overflow-hidden rounded-xl border border-slate-200 bg-slate-100 cursor-pointer select-none"
+              style={{ aspectRatio: `${(view.w * aspect) / view.h}` }}
+            >
+              <img
+                src={mapUrl}
+                alt={`Peta ${pid}`}
+                draggable="false"
+                onLoad={(e) => setAspect(e.target.naturalWidth / e.target.naturalHeight || 1.6)}
+                className="absolute origin-top-left max-w-none block pointer-events-none"
+                style={{
+                  width: `${(100 / view.w) * 100}%`,
+                  left: `${(-view.x / view.w) * 100}%`,
+                  top: `${(-view.y / view.h) * 100}%`,
+                  height: `${(100 / view.h) * 100}%`,
+                }}
+              />
+              <svg
+                viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
+                preserveAspectRatio="none"
+                className="absolute inset-0 w-full h-full pointer-events-none"
+              >
+                <defs>
+                  <clipPath id={`clip-${pid}`}>
+                    <polygon points={pm.poly.map((p) => `${p.x},${p.y}`).join(' ')} />
+                  </clipPath>
+                </defs>
+                {cells.map((c) => {
+                  const done = tickedToday(db, aKey(pid, areas[c.a]));
+                  return (
+                    <rect
+                      key={`${c.i}-${c.j}`}
+                      x={view.x + (c.i / 24) * view.w}
+                      y={view.y + (c.j / 24) * view.h}
+                      width={view.w / 24}
+                      height={view.h / 24}
+                      fill={done ? 'rgba(16,185,129,.45)' : AREA_TINT[c.a % AREA_TINT.length]}
+                      clipPath={`url(#clip-${pid})`}
+                    />
+                  );
+                })}
+                <polygon
+                  points={pm.poly.map((p) => `${p.x},${p.y}`).join(' ')}
+                  fill="none"
+                  stroke="#0f172a"
+                  strokeWidth={view.w * 0.006}
+                />
+                {cfg.dividers.map((line, i) => (
+                  <polyline
+                    key={i}
+                    points={line.map((p) => `${p.x},${p.y}`).join(' ')}
+                    fill="none"
+                    stroke="#ffffff"
+                    strokeWidth={view.w * 0.012}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                ))}
+              </svg>
+              {areas.map((a, i) => {
+                const done = tickedToday(db, aKey(pid, a));
+                const lx = i === 0 ? view.x : dividerXAtLocal(cfg.dividers, i - 1, view.y + view.h / 2);
+                const rx =
+                  i === areas.length - 1 ? view.x + view.w : dividerXAtLocal(cfg.dividers, i, view.y + view.h / 2);
+                const mid = (lx + rx) / 2;
+                return (
                   <span
-                    className={`rounded-full px-2.5 py-1 text-[13px] font-black whitespace-nowrap shadow-sm ${
+                    key={a}
+                    className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full px-2.5 py-1 text-[13px] font-black shadow-sm pointer-events-none ${
                       done ? 'bg-emerald-600 text-white' : 'bg-white/90 text-slate-800'
                     }`}
+                    style={{ left: `${((mid - view.x) / view.w) * 100}%`, top: '50%' }}
                   >
                     {a}
                     {done && ' ✓'}
                   </span>
-                </button>
-              );
-            })}
-          </div>
-          <p className="text-[11px] font-semibold text-slate-500 mt-2">{cfg.cap}</p>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="relative rounded-xl overflow-hidden border border-slate-200">
+              <img src={areaMapUrl(pid)} alt={`Peta kawasan ${pid}`} className="w-full block" />
+              {areas.map((a) => {
+                const done = tickedToday(db, aKey(pid, a));
+                const [l, r] = (cfg.band || {})[a] || [0, 100];
+                return (
+                  <button
+                    key={a}
+                    onClick={() => onPick(a)}
+                    title={t('pm.area', { a })}
+                    aria-label={t('pm.area', { a })}
+                    style={{ left: `${l}%`, width: `${r - l}%` }}
+                    className={`absolute inset-y-0 grid place-items-center cursor-pointer transition-colors ${
+                      done
+                        ? 'bg-emerald-500/30 ring-2 ring-inset ring-emerald-400'
+                        : 'bg-transparent hover:bg-white/20'
+                    }`}
+                  >
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-[13px] font-black whitespace-nowrap shadow-sm ${
+                        done ? 'bg-emerald-600 text-white' : 'bg-white/90 text-slate-800'
+                      }`}
+                    >
+                      {a}
+                      {done && ' ✓'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {cfg.cap && <p className="text-[11px] font-semibold text-slate-500 mt-2">{cfg.cap}</p>}
         </div>
       </div>
     </div>
   );
+}
+
+// The divider's x at a given height, used to centre each area's label.
+function dividerXAtLocal(dividers, i, y) {
+  const line = dividers[i];
+  if (!line || !line.length) return 50;
+  const pts = [...line].sort((a, b) => a.y - b.y);
+  if (y <= pts[0].y) return pts[0].x;
+  if (y >= pts[pts.length - 1].y) return pts[pts.length - 1].x;
+  for (let k = 1; k < pts.length; k++) {
+    if (y <= pts[k].y) {
+      const a = pts[k - 1];
+      const b = pts[k];
+      const span = b.y - a.y;
+      return span === 0 ? b.x : a.x + ((y - a.y) / span) * (b.x - a.x);
+    }
+  }
+  return pts[pts.length - 1].x;
 }
 
 function nurseryKeyOf(pid) {
