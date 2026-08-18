@@ -152,12 +152,20 @@ export function prettyD(s) {
   return parseD(s).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-/* ---------- state derivation ---------- */
+/* ---------- state derivation ----------
+   A plot can have more than one activity running at once — culling may still
+   be going while the soil crew starts angkat tanah — so "what is open" is a
+   list, not a single entry. */
+export const MAX_CONCURRENT = 2;
+
+export function currentEntries(db, pid) {
+  return (db.logs[pid] || []).filter((e) => e.end === null);
+}
+
+// The first open activity. Kept for the places that only need one.
 export function currentEntry(db, pid) {
-  const l = db.logs[pid];
-  if (!l || !l.length) return null;
-  const last = l[l.length - 1];
-  return last.end === null ? last : null;
+  const open = currentEntries(db, pid);
+  return open.length ? open[0] : null;
 }
 export function tickedToday(db, pid) {
   return db.updated[pid] && db.updated[pid].at === todayStr();
@@ -166,26 +174,52 @@ export function isLocked(db, pid) {
   return !!currentEntry(db, pid) && tickedToday(db, pid) && !db.unlocked[pid];
 }
 
-export function computeStatus(db, pid) {
-  const cur = currentEntry(db, pid);
-  if (!cur) return { state: 'none' };
-  const act = activityByN(cur.actN);
-  const due = addDays(cur.start, cur.ideal);
+function statusOfEntry(pid, e) {
+  const act = activityByN(e.actN);
+  const due = addDays(e.start, e.ideal);
   const left = diffDays(todayStr(), due);
-  if (left < 0) return { state: 'overdue', act, due, left, start: cur.start, key: pid };
+  if (left < 0) return { state: 'overdue', act, due, left, start: e.start, key: pid };
   // "Needs attention" is configured in Settings: an activity listed there
   // warns once fewer than that many days remain. Anything unlisted is only
   // ever on schedule or overdue.
-  const warnAt = ATTENTION[cur.actN];
+  const warnAt = ATTENTION[e.actN];
   const soon = warnAt != null && left < warnAt;
-  return { state: soon ? 'soon' : 'ontrack', act, due, left, start: cur.start, key: pid };
+  return { state: soon ? 'soon' : 'ontrack', act, due, left, start: e.start, key: pid };
 }
+
+const STATE_RANK = { overdue: 0, soon: 1, ontrack: 2, none: 3 };
+
+// With two activities running, the plot is only as healthy as its worse one.
+export function computeStatus(db, pid) {
+  const open = currentEntries(db, pid);
+  if (!open.length) return { state: 'none' };
+  return open
+    .map((e) => statusOfEntry(pid, e))
+    .sort((a, b) => {
+      const r = STATE_RANK[a.state] - STATE_RANK[b.state];
+      return r !== 0 ? r : (a.left ?? Infinity) - (b.left ?? Infinity);
+    })[0];
+}
+
+// Every activity open on this unit right now.
+export function openActivities(db, pid) {
+  return currentEntries(db, pid)
+    .map((e) => activityByN(e.actN))
+    .filter(Boolean)
+    .sort((a, b) => a.n - b.n);
+}
+
 export function estEndDate(db, pid) {
-  const cur = currentEntry(db, pid);
-  if (!cur) return null;
-  let s = 0;
-  for (let n = cur.actN; n <= 11; n++) s += durFor(pid, activityByN(n));
-  return addDays(cur.start, s);
+  const open = currentEntries(db, pid);
+  if (!open.length) return null;
+  // The plot is finished when its slowest running activity has worked through
+  // the rest of the sequence.
+  const ends = open.map((e) => {
+    let s = 0;
+    for (let n = e.actN; n <= 11; n++) s += durFor(pid, activityByN(n));
+    return addDays(e.start, s);
+  });
+  return ends.sort()[ends.length - 1];
 }
 
 /* ---------- multi-area derivation ---------- */
@@ -195,10 +229,9 @@ function bucket(p) {
   return 70;
 }
 function areaCategory(db, key) {
-  const cur = currentEntry(db, key);
-  if (!cur) return 'Kosong';
-  if (cur.actN === 10) return 'Membesar';
-  if (cur.actN === 11) return 'Pengambilan';
+  const ns = currentEntries(db, key).map((e) => e.actN);
+  if (ns.includes(11)) return 'Pengambilan';
+  if (ns.includes(10)) return 'Membesar';
   return 'Kosong';
 }
 export function worstArea(db, pid) {
@@ -261,14 +294,8 @@ export function effEstEnd(db, p) {
   return estEndDate(db, p);
 }
 export function plotInActivity(db, p, n) {
-  if (isMulti(p)) {
-    return MULTI[p].areas.some((a) => {
-      const c = currentEntry(db, aKey(p, a));
-      return c && c.actN === n;
-    });
-  }
-  const c = currentEntry(db, p);
-  return c && c.actN === n;
+  const keys = isMulti(p) ? MULTI[p].areas.map((a) => aKey(p, a)) : [p];
+  return keys.some((k) => currentEntries(db, k).some((e) => e.actN === n));
 }
 
 /* ---------- entry grid units ---------- */
@@ -286,6 +313,35 @@ export function entryUnits(nk) {
   return units;
 }
 
+// Record one unit's activities for a day.
+//
+// Whatever the Field Conductor leaves out is treated as finished: an activity
+// that was running yesterday and is not chosen today gets closed with today's
+// date. That is how "angkat tanah is done" gets recorded without anyone having
+// to say so.
+export function applyDailySelection(db, key, selected, by, date) {
+  const sel = [...new Set(selected)].slice(0, MAX_CONCURRENT).sort((a, b) => a - b);
+  const open = currentEntries(db, key);
+  let changed = false;
+
+  open.forEach((e) => {
+    if (!sel.includes(e.actN)) {
+      e.end = date;
+      changed = true;
+    }
+  });
+  sel.forEach((n) => {
+    if (!open.some((e) => e.actN === n && e.end === null)) {
+      startEntry(db, key, n, date, by);
+      changed = true;
+    }
+  });
+
+  db.updated[key] = { by, at: date };
+  recordHistory(db, { key, acts: sel, by, at: date });
+  return changed;
+}
+
 export function startEntry(db, pid, actN, dateStr, by) {
   db.logs[pid] = db.logs[pid] || [];
   db.logs[pid].push({ no: ++db.seq, actN, start: dateStr, end: null, ideal: durFor(pid, activityByN(actN)), by });
@@ -293,9 +349,25 @@ export function startEntry(db, pid, actN, dateStr, by) {
 
 // Every save is appended here, so "show me what was keyed in on 3 Aug" is an
 // exact answer rather than a guess reconstructed from the logs.
-export function recordHistory(db, { key, actN, by, at }) {
+export function recordHistory(db, { key, actN, acts, by, at }) {
   db.history = db.history || [];
-  db.history.push({ at, key, actN, by });
+  const row = { at, key, acts: acts || (actN != null ? [actN] : []), by };
+  // A day holds one report per unit. Saving the nursery twice — a correction
+  // an hour later — rewrites that day's row instead of stacking a second one.
+  const i = db.history.findIndex((h) => h.key === key && h.at === at);
+  if (i >= 0) db.history[i] = row;
+  else db.history.push(row);
+  // A daily report across three nurseries is ~56 rows; keep about a year of
+  // them so the device's storage does not creep upwards forever.
+  const CAP = 20000;
+  if (db.history.length > CAP) db.history = db.history.slice(-CAP);
+}
+
+// Activity numbers a history row covers, tolerating rows written before a
+// plot could run two activities at once.
+export function historyActs(h) {
+  if (Array.isArray(h.acts)) return h.acts;
+  return h.actN != null ? [h.actN] : [];
 }
 export function historyOn(db, dateStr) {
   return (db.history || []).filter((h) => h.at === dateStr);
@@ -397,10 +469,7 @@ export function seedSample() {
 const CULLING_ACTS = new Set([1, 2, 3, 11]);
 export function cullingScopePlots() {
   const db = loadDB();
-  const inScope = (key) => {
-    const c = currentEntry(db, key);
-    return !!c && CULLING_ACTS.has(c.actN);
-  };
+  const inScope = (key) => currentEntries(db, key).some((e) => CULLING_ACTS.has(e.actN));
   const set = new Set();
   Object.keys(NURSERIES).forEach((nk) =>
     plotsOf(nk).forEach((pid) => {

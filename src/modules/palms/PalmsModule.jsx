@@ -13,11 +13,12 @@ import {
   activityByN,
   areaMapUrl,
   addDays,
+  historyActs,
   historyOn,
   keyLabel,
   areasOf,
   combinedLabel,
-  currentEntry,
+  currentEntries,
   diffDays,
   effActivityName,
   effEstEnd,
@@ -203,19 +204,15 @@ function DashTab({ db, t, stateLabel, refresh, flash, openDetail, replaceDB }) {
 
   const stageCounts = {};
   ACTIVITIES.forEach((a) => (stageCounts[a.n] = 0));
+  // A unit running two activities at once counts under both stages.
   plots.forEach((p) => {
-    if (isMulti(p)) {
-      MULTI[p].areas.forEach((a) => {
-        const cur = currentEntry(db, `${p}#${a}`);
-        if (cur) stageCounts[cur.actN]++;
-      });
-    } else {
-      const cur = currentEntry(db, p);
-      if (cur) stageCounts[cur.actN]++;
-    }
+    const keys = isMulti(p) ? MULTI[p].areas.map((a) => `${p}#${a}`) : [p];
+    keys.forEach((k) => currentEntries(db, k).forEach((e) => stageCounts[e.actN]++));
   });
   const inProc = plots.filter((p) =>
-    isMulti(p) ? MULTI[p].areas.some((a) => currentEntry(db, `${p}#${a}`)) : currentEntry(db, p)
+    isMulti(p)
+      ? MULTI[p].areas.some((a) => currentEntries(db, `${p}#${a}`).length)
+      : currentEntries(db, p).length
   ).length;
 
   function toggleState(s) {
@@ -465,7 +462,11 @@ function DashTab({ db, t, stateLabel, refresh, flash, openDetail, replaceDB }) {
                           <tr key={`${h.key}-${i}`} className="border-t border-slate-100">
                             <td className="px-3 py-2 font-black text-slate-800">{keyLabel(h.key)}</td>
                             <td className="px-3 py-2 font-semibold text-slate-600">
-                              {activityByN(h.actN) ? activityByN(h.actN).name : '—'}
+                              {historyActs(h)
+                                .map((n) => activityByN(n))
+                                .filter(Boolean)
+                                .map((a) => a.name)
+                                .join(' + ') || '—'}
                             </td>
                             <td className="px-3 py-2 font-semibold text-slate-500">{h.by || '—'}</td>
                           </tr>

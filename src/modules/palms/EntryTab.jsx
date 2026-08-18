@@ -1,35 +1,38 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { areaIndexAt, bbox, loadCachedMaps } from './plotMaps.js';
 import {
   ACTIVITIES,
+  MAX_CONCURRENT,
   MULTI,
   NURSERIES,
   aKey,
   plotPhoto,
   activityByN,
+  applyDailySelection,
   computeStatus,
-  currentEntry,
+  currentEntries,
   diffDays,
-  durFor,
   effStatus,
   isMulti,
-  keyLabel,
   plotsOf,
-  recordHistory,
+  prettyD,
   saveDB,
-  startEntry,
   tickedToday,
   todayStr,
 } from './data.js';
 
 // Update Status — the plots of a nursery are drawn as a train, one carriage
-// per plot. Tapping a carriage opens a sheet where the Field Conductor picks
-// the current activity. Built for phones: everything in the sheet fits one
-// screen, so picking an activity never needs a scroll.
+// per plot, each carriage showing what that plot is on right now. Nothing has
+// to be opened to read the day's picture.
 //
-// The Field Conductor may change a status whenever they like. Changing one
-// that was already keyed in today only asks them to confirm — there is no
-// supervisor approval step.
+// The day is keyed in as one report, not plot by plot. Every plot starts the
+// day carrying yesterday's activities; the Field Conductor only opens the
+// plots that changed, then presses save once for the whole nursery. Plots that
+// did not change are still recorded as reported for the day.
+//
+// A plot may run two activities at once — culling still going while the soil
+// crew starts angkat tanah. Whatever is left out of the selection is recorded
+// as finished, so "angkat tanah is done" needs no extra step.
 
 const DOT = {
   ontrack: 'bg-emerald-500',
@@ -60,6 +63,10 @@ function Track() {
     </div>
   );
 }
+
+// Height of the label strip under every carriage. Fixed so the rails of a row
+// stay in line whether a plot shows two activities or none.
+const LABEL_H = 'h-[30px]';
 
 // Cartoon locomotive at the head of the train. Decorative; only the smoke
 // moves.
@@ -101,6 +108,7 @@ function Locomotive() {
           <rect x="92" y="64" width="12" height="4" rx="2" fill="#94a3b8" />
         </svg>
       </div>
+      <div className={LABEL_H} />
       <Track />
     </div>
   );
@@ -111,20 +119,63 @@ export function keysOfPlot(pid) {
   return isMulti(pid) ? MULTI[pid].areas.map((a) => aKey(pid, a)) : [pid];
 }
 
+/* ---------- the day's draft ----------
+   A plain map of storage key -> activity numbers, seeded from whatever is
+   running. Nothing touches the log until the whole nursery is saved. */
+function savedActs(db, key) {
+  return currentEntries(db, key)
+    .map((e) => e.actN)
+    .sort((a, b) => a - b);
+}
+function seedDraft(db, keys) {
+  const d = {};
+  keys.forEach((k) => (d[k] = savedActs(db, k)));
+  return d;
+}
+function sameSel(a, b) {
+  return a.length === b.length && a.every((x, i) => x === b[i]);
+}
+
 export default function EntryTab({ db, t, staffName, refresh, flash }) {
   const [nursery, setNursery] = useState('BNN');
   const [open, setOpen] = useState(null); // plot id shown in the sheet
+  const [confirming, setConfirming] = useState(false);
 
   const plots = plotsOf(nursery);
-  const allKeys = plots.flatMap(keysOfPlot);
+  const allKeys = useMemo(() => plots.flatMap(keysOfPlot), [nursery]);
+
+  const [draft, setDraft] = useState(() => seedDraft(db, allKeys));
+  // Switching nursery starts a fresh draft for that nursery's plots.
+  useEffect(() => {
+    setDraft(seedDraft(db, allKeys));
+    setConfirming(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nursery]);
+
+  const setActs = (key, acts) => setDraft((d) => ({ ...d, [key]: acts }));
+
+  const dirtyKeys = allKeys.filter((k) => !sameSel(draft[k] || [], savedActs(db, k)));
   const doneToday = allKeys.filter((k) => tickedToday(db, k)).length;
+  const today = todayStr();
+
+  function saveAll() {
+    allKeys.forEach((k) => applyDailySelection(db, k, draft[k] || [], staffName || 'FC', today));
+    saveDB(db);
+    refresh();
+    setDraft(seedDraft(db, allKeys));
+    setConfirming(false);
+    flash(t('pm.savedAll', { n: plots.length }));
+  }
 
   return (
     <>
-      {/* Header: nursery picker + how many plots are done today */}
+      {/* Header: the date being keyed in, the nursery, and today's progress */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
-        <div>
+        <div className="min-w-0">
           <h2 className="font-black text-slate-800 text-[15px]">{t('pm.tabEntry')}</h2>
+          <div className="text-[11px] font-black text-emerald-700">
+            {t('pm.forDate', { date: prettyD(today) })}
+          </div>
           <div className="text-[11px] font-bold text-slate-400">
             {t('pm.progress', { done: doneToday, total: allKeys.length })}
           </div>
@@ -156,23 +207,26 @@ export default function EntryTab({ db, t, staffName, refresh, flash }) {
       </div>
       <div className="text-center text-[11px] font-semibold text-slate-400 -mt-1">{t('pm.railHint')}</div>
 
-      {/* The train: a locomotive pulling one carriage per plot. Carriages wrap
-          onto the next length of track, so the page still scrolls downwards. */}
+      {/* The train: a locomotive pulling one carriage per plot, each carriage
+          carrying the activities that plot is on. Carriages wrap onto the next
+          length of track. */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] px-2 py-4 sm:px-4 overflow-hidden">
-        <div className="grid grid-cols-4 sm:grid-cols-6 gap-y-3">
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-y-3">
           <Locomotive />
           {plots.map((pid) => {
             const st = effStatus(db, pid);
             const keys = keysOfPlot(pid);
+            const changed = keys.some((k) => !sameSel(draft[k] || [], savedActs(db, k)));
             const done = keys.every((k) => tickedToday(db, k));
+            // What the plot will be on once the day is saved — the draft, not
+            // the log, so an edit shows on the train straight away.
+            const acts = [...new Set(keys.flatMap((k) => draft[k] || []))]
+              .sort((a, b) => a - b)
+              .map((n) => activityByN(n))
+              .filter(Boolean);
             const c = CAR[st.state];
             return (
-              <button
-                key={pid}
-                onClick={() => setOpen(pid)}
-                title={pid}
-                className="cursor-pointer group"
-              >
+              <button key={pid} onClick={() => setOpen(pid)} title={pid} className="cursor-pointer group">
                 <div className="h-[78px] flex flex-col items-center justify-end">
                   <div className="relative w-[92%] max-w-[86px]">
                     {/* roof */}
@@ -195,13 +249,30 @@ export default function EntryTab({ db, t, staffName, refresh, flash }) {
                         </span>
                       ))}
                     </div>
-                    {/* done / multi-area badge */}
-                    {(done || isMulti(pid)) && (
+                    {/* edited-today / done / multi-area badge */}
+                    {(changed || done || isMulti(pid)) && (
                       <span className="absolute -top-2 -right-1 text-[10px] leading-none bg-white rounded-full px-1.5 py-1 shadow-sm border border-slate-200">
-                        {done ? '✅' : `${MULTI[pid].areas.length}⬦`}
+                        {changed ? '✏️' : done ? '✅' : `${MULTI[pid].areas.length}⬦`}
                       </span>
                     )}
                   </div>
+                </div>
+                {/* What this plot is on — readable without opening anything */}
+                <div className={`${LABEL_H} px-0.5 flex flex-col items-center justify-start leading-[1.15]`}>
+                  {acts.length === 0 ? (
+                    <span className="text-[9px] font-bold text-slate-300">—</span>
+                  ) : (
+                    acts.map((a) => (
+                      <span
+                        key={a.n}
+                        className={`block w-full truncate text-[9px] sm:text-[10px] font-black ${
+                          changed ? 'text-amber-600' : 'text-slate-500'
+                        }`}
+                      >
+                        {a.mShort}
+                      </span>
+                    ))
+                  )}
                 </div>
                 <Track />
               </button>
@@ -210,14 +281,54 @@ export default function EntryTab({ db, t, staffName, refresh, flash }) {
         </div>
       </div>
 
+      {/* One save for the whole nursery */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] px-4 py-3">
+        {confirming ? (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+            <p className="text-[12px] font-bold text-amber-900 mb-2.5">
+              {t('pm.confirmSaveAll', {
+                n: plots.length,
+                c: dirtyKeys.length,
+                date: prettyD(today),
+              })}
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setConfirming(false)}
+                className="flex-1 bg-white border border-slate-300 text-slate-600 font-black text-[11px] uppercase tracking-widest rounded-xl py-2.5 cursor-pointer"
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                onClick={saveAll}
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[11px] uppercase tracking-widest rounded-xl py-2.5 cursor-pointer"
+              >
+                {t('pm.yesSave')}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <button
+              onClick={() => setConfirming(true)}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[12px] uppercase tracking-widest rounded-xl py-3 transition-colors cursor-pointer"
+            >
+              {t('pm.saveAll', { n: plots.length })}
+            </button>
+            <p className="text-[10px] font-semibold text-slate-400 text-center mt-2">
+              {dirtyKeys.length > 0 ? t('pm.changedCount', { n: dirtyKeys.length }) : t('pm.noChangeOk')}
+            </p>
+          </>
+        )}
+      </div>
+
       {open && (
         <PlotSheet
           db={db}
           pid={open}
           t={t}
-          staffName={staffName}
-          refresh={refresh}
-          flash={flash}
+          draft={draft}
+          setActs={setActs}
           onClose={() => setOpen(null)}
         />
       )}
@@ -226,31 +337,16 @@ export default function EntryTab({ db, t, staffName, refresh, flash }) {
 }
 
 /* ================= PLOT SHEET ================= */
-// One plot at a time. Multi-area plots get an area selector; picking an area
-// swaps in a fresh editor (keyed) so the selection never leaks between areas.
-function PlotSheet({ db, pid, t, staffName, refresh, flash, onClose }) {
+// One plot at a time. Multi-area plots open on their map so the area is picked
+// off the picture. Choices land in the day's draft; nothing is written to the
+// log until the nursery is saved.
+function PlotSheet({ db, pid, t, draft, setActs, onClose }) {
   const multi = isMulti(pid);
   const areas = multi ? MULTI[pid].areas : [null];
 
-  // A plot split into areas opens on its map, so the Field Conductor picks
-  // the area off the picture rather than from a list of letters. The area
-  // still waiting is the one preselected.
-  const firstTodo = areas.find((a) => a && !tickedToday(db, aKey(pid, a))) || areas[0];
-  const [area, setArea] = useState(firstTodo);
+  const [area, setArea] = useState(areas[0]);
   const [step, setStep] = useState(multi ? 'map' : 'pick');
   const key = area ? aKey(pid, area) : pid;
-
-  // After saving an area, show the map again with the area that is still
-  // outstanding preselected. Once every area is done, close the sheet.
-  function afterSave() {
-    const next = areas.find((a) => a && a !== area && !tickedToday(db, aKey(pid, a)));
-    if (next) {
-      setArea(next);
-      setStep('map');
-    } else {
-      onClose();
-    }
-  }
 
   if (multi && step === 'map') {
     return (
@@ -259,6 +355,7 @@ function PlotSheet({ db, pid, t, staffName, refresh, flash, onClose }) {
         pid={pid}
         areas={areas}
         t={t}
+        draft={draft}
         onPick={(a) => {
           setArea(a);
           setStep('pick');
@@ -268,9 +365,11 @@ function PlotSheet({ db, pid, t, staffName, refresh, flash, onClose }) {
     );
   }
 
-  const cur = currentEntry(db, key);
+  const sel = draft[key] || [];
+  const open = currentEntries(db, key);
   const st = computeStatus(db, key);
-  const dayN = cur ? diffDays(cur.start, todayStr()) + 1 : null;
+  // How long the longest-running activity has been going, for context.
+  const dayN = open.length ? Math.max(...open.map((e) => diffDays(e.start, todayStr()) + 1)) : null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
@@ -286,13 +385,18 @@ function PlotSheet({ db, pid, t, staffName, refresh, flash, onClose }) {
             <div className="font-black text-slate-800 text-xl leading-tight">{pid}</div>
           </div>
           <div className="flex-1 min-w-0 border-l border-slate-200 pl-3">
-            {cur ? (
+            {open.length ? (
               <>
                 <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">
                   {t('pm.currentLabel')}
                 </div>
                 <div className="font-black text-slate-800 text-[13px] leading-tight truncate">
-                  {activityByN(cur.actN).name}
+                  {open
+                    .map((e) => activityByN(e.actN))
+                    .filter(Boolean)
+                    .sort((a, b) => a.n - b.n)
+                    .map((a) => a.mShort)
+                    .join(' + ')}
                 </div>
                 <div className="text-[10px] font-bold text-slate-500 leading-tight">
                   {t('pm.dayN', { n: dayN })}
@@ -323,31 +427,27 @@ function PlotSheet({ db, pid, t, staffName, refresh, flash, onClose }) {
           </button>
         </div>
 
-        <AreaEditor
+        <ActivityPicker
           key={key}
-          db={db}
-          storeKey={key}
+          sel={sel}
           t={t}
-          staffName={staffName}
-          refresh={refresh}
-          flash={flash}
-          onSaved={afterSave}
+          onChange={(acts) => setActs(key, acts)}
+          onDone={() => (multi ? setStep('map') : onClose())}
         />
       </div>
     </div>
   );
 }
 
-// Step one for a multi-area plot: the map itself. Nothing is preselected —
-// an area only turns green once its status has been keyed in today, so green
-// always means done rather than "we picked this for you".
+// Step one for a multi-area plot: the map itself. Each area carries the
+// activities picked for it, so the split reads without tapping through.
 //
 // Where Settings has drawn the dividing lines, the plot's real outline from
 // the main portal is shown and a tap is placed against those lines. Plots
 // still on the older left-to-right bands fall back to the shipped photo.
 const AREA_TINT = ['rgba(16,185,129,.28)', 'rgba(245,158,11,.28)', 'rgba(56,189,248,.28)', 'rgba(217,70,239,.28)', 'rgba(244,63,94,.28)'];
 
-function AreaMapStep({ db, pid, areas, t, onPick, onClose }) {
+function AreaMapStep({ db, pid, areas, t, draft, onPick, onClose }) {
   const cfg = MULTI[pid];
   const maps = useMemo(() => loadCachedMaps(), []);
   const drawn = cfg.dividers && cfg.dividers.length === areas.length - 1;
@@ -355,6 +455,14 @@ function AreaMapStep({ db, pid, areas, t, onPick, onClose }) {
   const own = plotPhoto(pid); // a close-up of this plot beats the nursery map
   const mapUrl = own || (pm && maps.nurseries ? maps.nurseries[pm.nursery] : null);
   const useDrawn = drawn && !!mapUrl;
+
+  // The short activity names picked for an area, for its label on the map.
+  const actLabel = (a) =>
+    (draft[aKey(pid, a)] || [])
+      .map((n) => activityByN(n))
+      .filter(Boolean)
+      .map((x) => x.mShort)
+      .join(' + ');
 
   const view = useMemo(() => {
     if (own || !pm) return { x: 0, y: 0, w: 100, h: 100 };
@@ -452,7 +560,7 @@ function AreaMapStep({ db, pid, areas, t, onPick, onClose }) {
                   </defs>
                 )}
                 {cells.map((c) => {
-                  const done = tickedToday(db, aKey(pid, areas[c.a]));
+                  const has = (draft[aKey(pid, areas[c.a])] || []).length > 0;
                   return (
                     <rect
                       key={`${c.i}-${c.j}`}
@@ -460,7 +568,7 @@ function AreaMapStep({ db, pid, areas, t, onPick, onClose }) {
                       y={view.y + (c.j / 24) * view.h}
                       width={view.w / 24}
                       height={view.h / 24}
-                      fill={done ? 'rgba(16,185,129,.45)' : AREA_TINT[c.a % AREA_TINT.length]}
+                      fill={has ? 'rgba(16,185,129,.45)' : AREA_TINT[c.a % AREA_TINT.length]}
                       clipPath={!own && pm ? `url(#clip-${pid})` : undefined}
                     />
                   );
@@ -486,7 +594,7 @@ function AreaMapStep({ db, pid, areas, t, onPick, onClose }) {
                 ))}
               </svg>
               {areas.map((a, i) => {
-                const done = tickedToday(db, aKey(pid, a));
+                const label = actLabel(a);
                 const lx = i === 0 ? view.x : dividerXAtLocal(cfg.dividers, i - 1, view.y + view.h / 2);
                 const rx =
                   i === areas.length - 1 ? view.x + view.w : dividerXAtLocal(cfg.dividers, i, view.y + view.h / 2);
@@ -494,13 +602,13 @@ function AreaMapStep({ db, pid, areas, t, onPick, onClose }) {
                 return (
                   <span
                     key={a}
-                    className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full px-2.5 py-1 text-[13px] font-black shadow-sm pointer-events-none ${
-                      done ? 'bg-emerald-600 text-white' : 'bg-white/90 text-slate-800'
+                    className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full px-2.5 py-1 text-[12px] font-black shadow-sm pointer-events-none max-w-[46%] truncate ${
+                      label ? 'bg-emerald-600 text-white' : 'bg-white/90 text-slate-800'
                     }`}
                     style={{ left: `${((mid - view.x) / view.w) * 100}%`, top: '50%' }}
                   >
                     {a}
-                    {done && ' ✓'}
+                    {label && ` · ${label}`}
                   </span>
                 );
               })}
@@ -509,7 +617,7 @@ function AreaMapStep({ db, pid, areas, t, onPick, onClose }) {
             <div className="relative rounded-xl overflow-hidden border border-slate-200">
               <img src={plotPhoto(pid) || ''} alt={`Peta kawasan ${pid}`} className="w-full block" />
               {areas.map((a) => {
-                const done = tickedToday(db, aKey(pid, a));
+                const label = actLabel(a);
                 const [l, r] = (cfg.band || {})[a] || [0, 100];
                 return (
                   <button
@@ -519,18 +627,18 @@ function AreaMapStep({ db, pid, areas, t, onPick, onClose }) {
                     aria-label={t('pm.area', { a })}
                     style={{ left: `${l}%`, width: `${r - l}%` }}
                     className={`absolute inset-y-0 grid place-items-center cursor-pointer transition-colors ${
-                      done
+                      label
                         ? 'bg-emerald-500/30 ring-2 ring-inset ring-emerald-400'
                         : 'bg-transparent hover:bg-white/20'
                     }`}
                   >
                     <span
-                      className={`rounded-full px-2.5 py-1 text-[13px] font-black whitespace-nowrap shadow-sm ${
-                        done ? 'bg-emerald-600 text-white' : 'bg-white/90 text-slate-800'
+                      className={`rounded-full px-2.5 py-1 text-[12px] font-black shadow-sm max-w-full truncate ${
+                        label ? 'bg-emerald-600 text-white' : 'bg-white/90 text-slate-800'
                       }`}
                     >
                       {a}
-                      {done && ' ✓'}
+                      {label && ` · ${label}`}
                     </span>
                   </button>
                 );
@@ -568,60 +676,36 @@ function nurseryKeyOf(pid) {
 }
 
 /* ================= ACTIVITY PICKER FOR ONE UNIT ================= */
-function AreaEditor({ db, storeKey, t, staffName, refresh, flash, onSaved }) {
-  const cur = currentEntry(db, storeKey);
-  const [sel, setSel] = useState(cur ? cur.actN : null);
-  const [confirming, setConfirming] = useState(false);
-
-  const alreadyToday = tickedToday(db, storeKey);
-
-  function commit() {
-    const today = todayStr();
-    const c = currentEntry(db, storeKey);
-    if (!c) {
-      startEntry(db, storeKey, sel, today, staffName || 'FC');
-    } else if (sel > c.actN) {
-      c.end = today;
-      startEntry(db, storeKey, sel, today, staffName || 'FC');
-    } else if (sel < c.actN) {
-      c.actN = sel;
-      c.ideal = durFor(storeKey, activityByN(sel));
+// Up to two activities at once. Tapping a chosen one turns it off — that is
+// how "this finished today" is said. Choosing a third replaces the one picked
+// longest ago rather than refusing the tap.
+function ActivityPicker({ sel, t, onChange, onDone }) {
+  function toggle(n) {
+    if (sel.includes(n)) {
+      onChange(sel.filter((x) => x !== n));
+    } else if (sel.length < MAX_CONCURRENT) {
+      onChange([...sel, n]);
+    } else {
+      onChange([...sel.slice(1), n]);
     }
-    db.updated[storeKey] = { by: staffName || 'FC', at: today };
-    recordHistory(db, { key: storeKey, actN: sel, by: staffName || 'FC', at: today });
-    saveDB(db);
-    refresh();
-    flash(t('pm.savedPlot', { k: keyLabel(storeKey) }));
-    setConfirming(false);
-    onSaved();
-  }
-
-  function save() {
-    if (sel == null) return;
-    // Changing something already keyed in today only needs a confirmation.
-    if (alreadyToday) {
-      setConfirming(true);
-      return;
-    }
-    commit();
   }
 
   return (
     <>
       <div className="px-4 py-2.5 overflow-y-auto flex-1">
         <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
-          {t('pm.pickActivity')}
+          {t('pm.pickActivityMax', { n: MAX_CONCURRENT })}
         </div>
         {/* Phones get two columns filled downwards — 1–6 left, 7–11 right —
             so every activity is reachable without a scroll. On a laptop
             there is room for the original single full-width list. */}
         <div className="grid grid-rows-6 grid-flow-col gap-1 sm:grid-rows-none sm:grid-flow-row sm:grid-cols-1 sm:gap-1.5">
           {ACTIVITIES.map((a) => {
-            const on = sel === a.n;
+            const on = sel.includes(a.n);
             return (
               <button
                 key={a.n}
-                onClick={() => setSel(a.n)}
+                onClick={() => toggle(a.n)}
                 className={`w-full flex items-center gap-1.5 sm:gap-2.5 rounded-lg px-2 sm:px-3 py-2 sm:py-2.5 border-2 text-left transition-colors cursor-pointer ${
                   on ? 'bg-emerald-50 border-emerald-500' : 'bg-white border-slate-200 hover:border-emerald-300'
                 }`}
@@ -631,7 +715,7 @@ function AreaEditor({ db, storeKey, t, staffName, refresh, flash, onSaved }) {
                     on ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500'
                   }`}
                 >
-                  {a.n}
+                  {on ? '✓' : a.n}
                 </span>
                 <span
                   className={`flex-1 min-w-0 text-[12px] sm:text-[13px] leading-tight font-black ${
@@ -654,33 +738,13 @@ function AreaEditor({ db, storeKey, t, staffName, refresh, flash, onSaved }) {
       </div>
 
       <div className="px-4 py-3 border-t border-slate-100">
-        {confirming ? (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
-            <p className="text-[12px] font-bold text-amber-900 mb-2.5">{t('pm.confirmChange')}</p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setConfirming(false)}
-                className="flex-1 bg-white border border-slate-300 text-slate-600 font-black text-[11px] uppercase tracking-widest rounded-xl py-2.5 cursor-pointer"
-              >
-                {t('common.cancel')}
-              </button>
-              <button
-                onClick={commit}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[11px] uppercase tracking-widest rounded-xl py-2.5 cursor-pointer"
-              >
-                {t('pm.yesChange')}
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button
-            onClick={save}
-            disabled={sel == null}
-            className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-black text-[12px] uppercase tracking-widest rounded-xl py-3 transition-colors cursor-pointer"
-          >
-            {alreadyToday ? t('pm.changeStatus') : t('pm.save')}
-          </button>
-        )}
+        <p className="text-[10px] font-semibold text-slate-400 text-center mb-2">{t('pm.autoDoneNote')}</p>
+        <button
+          onClick={onDone}
+          className="w-full bg-slate-800 hover:bg-slate-900 text-white font-black text-[12px] uppercase tracking-widest rounded-xl py-3 transition-colors cursor-pointer"
+        >
+          {t('common.ok')}
+        </button>
       </div>
     </>
   );
