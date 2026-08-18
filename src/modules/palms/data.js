@@ -1,3 +1,5 @@
+import { loadSettings } from './settings.js';
+
 // PALMS — Plot Activity Log Monitoring System, data layer.
 // Ported from the standalone NurseryPALMS app. Data stays offline on the
 // device in localStorage under the SAME key the standalone app used, so
@@ -29,37 +31,30 @@ export const ACTIVITIES = [
 
 const STORE_KEY = 'palms_status_v8';
 
-/* ---------- multi-area plots (only B1, B4 & U8) ----------
-   The map photos live in maps.js and are imported only where shown (the
-   area-map modal) so other modules that read this data stay lightweight. */
-// `band` is where each area sits across the width of its map photo, as
-// [left%, right%]. The areas run left to right on all three maps, so a
-// vertical band is enough to make the picture itself tappable.
-export const MULTI = {
-  U8: {
-    areas: ['A', 'B', 'C'],
-    weights: { A: 33, B: 33, C: 33 },
-    band: { A: [0, 35], B: [35, 61], C: [61, 100] },
-    cap: 'U8 mempunyai 3 kawasan (A, B, C) — setiap kawasan 33%. Mana-mana 2 kawasan = 70% plot.',
-  },
-  B1: {
-    areas: ['A', 'B'],
-    weights: { A: 30, B: 70 },
-    band: { A: [0, 51], B: [51, 100] },
-    cap: 'B1 mempunyai 2 kawasan (A, B). Kawasan B = 70% plot, kawasan A = 30%.',
-  },
-  B4: {
-    areas: ['A', 'B'],
-    weights: { A: 30, B: 70 },
-    band: { A: [0, 23], B: [23, 100] },
-    cap: 'B4 mempunyai 2 kawasan (A, B). Kawasan B = 70% plot, kawasan A = 30%.',
-  },
-};
+/* ---------- plot layout & thresholds, from settings ----------
+   MULTI and ATTENTION are filled from the saved settings at load and
+   rewritten in place when they change, so every screen reading them picks
+   the change up on its next render. */
+export const MULTI = {};
+export const ATTENTION = {};
+let PHOTOS = {};
 
-// Area-map photo for a multi-area plot. They are static files under
-// public/maps so they cache in the browser and stay out of the JS bundle.
+export function applySettings(s) {
+  Object.keys(MULTI).forEach((k) => delete MULTI[k]);
+  Object.entries(s.multi || {}).forEach(([k, v]) => {
+    MULTI[k] = v;
+  });
+  Object.keys(ATTENTION).forEach((k) => delete ATTENTION[k]);
+  Object.entries(s.attention || {}).forEach(([k, v]) => {
+    ATTENTION[k] = Number(v);
+  });
+  PHOTOS = s.photos || {};
+}
+applySettings(loadSettings());
+
+// An uploaded photo wins; otherwise the one shipped with the app.
 export function areaMapUrl(pid) {
-  return './maps/' + pid.toLowerCase() + '.jpeg';
+  return PHOTOS[pid] || './maps/' + pid.toLowerCase() + '.jpeg';
 }
 
 export function isMulti(pid) {
@@ -159,7 +154,6 @@ export function isLocked(db, pid) {
   return !!currentEntry(db, pid) && tickedToday(db, pid) && !db.unlocked[pid];
 }
 
-// status: "perlu perhatian" only for Membesar(<30d) & Pengambilan(<7d)
 export function computeStatus(db, pid) {
   const cur = currentEntry(db, pid);
   if (!cur) return { state: 'none' };
@@ -167,9 +161,11 @@ export function computeStatus(db, pid) {
   const due = addDays(cur.start, cur.ideal);
   const left = diffDays(todayStr(), due);
   if (left < 0) return { state: 'overdue', act, due, left, start: cur.start, key: pid };
-  let soon = false;
-  if (cur.actN === 10 && left < 30) soon = true;
-  if (cur.actN === 11 && left < 7) soon = true;
+  // "Needs attention" is configured in Settings: an activity listed there
+  // warns once fewer than that many days remain. Anything unlisted is only
+  // ever on schedule or overdue.
+  const warnAt = ATTENTION[cur.actN];
+  const soon = warnAt != null && left < warnAt;
   return { state: soon ? 'soon' : 'ontrack', act, due, left, start: cur.start, key: pid };
 }
 export function estEndDate(db, pid) {
@@ -360,7 +356,8 @@ export function seedSample() {
         const key = a ? aKey(pid, a) : pid;
         // Cycle the activities so all eleven are covered, and bias the
         // "needs attention" mood onto the two stages that can show it.
-        const actN = a ? MULTI_PLAN[pid][a] : (n % 11) + 1;
+        const planned = a && MULTI_PLAN[pid] ? MULTI_PLAN[pid][a] : null;
+        const actN = planned || (n % 11) + 1;
         let mood = moods[n % 3];
         if (mood === 'soon' && actN < 10) mood = 'ontrack';
         if (actN >= 10 && n % 4 === 0) mood = 'soon';
