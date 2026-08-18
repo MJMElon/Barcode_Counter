@@ -53,9 +53,9 @@ export default function MotionTab({ db, t }) {
       onChange={(e) => onPick(Number(e.target.value))}
       className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-2 text-[12px] font-bold text-slate-800 outline-none focus:border-emerald-500"
     >
+      {/* The short label, so the whole option is readable inside a phone's
+          half-width select rather than cut off mid-word. */}
       {ACTIVITIES.map((a) => (
-        {/* The short label, so the whole option is readable inside a phone's
-            half-width select rather than cut off mid-word. */}
         <option key={a.n} value={a.n}>
           {a.n}. {a.mShort}
         </option>
