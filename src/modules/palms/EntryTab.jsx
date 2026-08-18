@@ -5,7 +5,7 @@ import {
   MULTI,
   NURSERIES,
   aKey,
-  areaMapUrl,
+  plotPhoto,
   activityByN,
   computeStatus,
   currentEntry,
@@ -352,11 +352,12 @@ function AreaMapStep({ db, pid, areas, t, onPick, onClose }) {
   const maps = useMemo(() => loadCachedMaps(), []);
   const drawn = cfg.dividers && cfg.dividers.length === areas.length - 1;
   const pm = maps && maps.plots ? maps.plots[pid] : null;
-  const mapUrl = pm && maps.nurseries ? maps.nurseries[pm.nursery] : null;
+  const own = plotPhoto(pid); // a close-up of this plot beats the nursery map
+  const mapUrl = own || (pm && maps.nurseries ? maps.nurseries[pm.nursery] : null);
   const useDrawn = drawn && !!mapUrl;
 
   const view = useMemo(() => {
-    if (!pm) return { x: 0, y: 0, w: 100, h: 100 };
+    if (own || !pm) return { x: 0, y: 0, w: 100, h: 100 };
     const b = bbox(pm.poly);
     const pad = Math.max(b.w, b.h) * 0.12;
     return {
@@ -365,7 +366,7 @@ function AreaMapStep({ db, pid, areas, t, onPick, onClose }) {
       w: Math.min(100, b.w + pad * 2),
       h: Math.min(100, b.h + pad * 2),
     };
-  }, [pm]);
+  }, [pm, own]);
 
   const [aspect, setAspect] = useState(1.6);
   const wrapRef = useRef(null);
@@ -443,11 +444,13 @@ function AreaMapStep({ db, pid, areas, t, onPick, onClose }) {
                 preserveAspectRatio="none"
                 className="absolute inset-0 w-full h-full pointer-events-none"
               >
-                <defs>
-                  <clipPath id={`clip-${pid}`}>
-                    <polygon points={pm.poly.map((p) => `${p.x},${p.y}`).join(' ')} />
-                  </clipPath>
-                </defs>
+                {!own && pm && (
+                  <defs>
+                    <clipPath id={`clip-${pid}`}>
+                      <polygon points={pm.poly.map((p) => `${p.x},${p.y}`).join(' ')} />
+                    </clipPath>
+                  </defs>
+                )}
                 {cells.map((c) => {
                   const done = tickedToday(db, aKey(pid, areas[c.a]));
                   return (
@@ -458,16 +461,18 @@ function AreaMapStep({ db, pid, areas, t, onPick, onClose }) {
                       width={view.w / 24}
                       height={view.h / 24}
                       fill={done ? 'rgba(16,185,129,.45)' : AREA_TINT[c.a % AREA_TINT.length]}
-                      clipPath={`url(#clip-${pid})`}
+                      clipPath={!own && pm ? `url(#clip-${pid})` : undefined}
                     />
                   );
                 })}
-                <polygon
-                  points={pm.poly.map((p) => `${p.x},${p.y}`).join(' ')}
-                  fill="none"
-                  stroke="#0f172a"
-                  strokeWidth={view.w * 0.006}
-                />
+                {!own && pm && (
+                  <polygon
+                    points={pm.poly.map((p) => `${p.x},${p.y}`).join(' ')}
+                    fill="none"
+                    stroke="#0f172a"
+                    strokeWidth={view.w * 0.006}
+                  />
+                )}
                 {cfg.dividers.map((line, i) => (
                   <polyline
                     key={i}
@@ -502,7 +507,7 @@ function AreaMapStep({ db, pid, areas, t, onPick, onClose }) {
             </div>
           ) : (
             <div className="relative rounded-xl overflow-hidden border border-slate-200">
-              <img src={areaMapUrl(pid)} alt={`Peta kawasan ${pid}`} className="w-full block" />
+              <img src={plotPhoto(pid) || ''} alt={`Peta kawasan ${pid}`} className="w-full block" />
               {areas.map((a) => {
                 const done = tickedToday(db, aKey(pid, a));
                 const [l, r] = (cfg.band || {})[a] || [0, 100];

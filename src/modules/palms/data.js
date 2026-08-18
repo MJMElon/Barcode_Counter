@@ -52,9 +52,21 @@ export function applySettings(s) {
 }
 applySettings(loadSettings());
 
-// An uploaded photo wins; otherwise the one shipped with the app.
+// A photo of this plot on its own, if there is one. A sharp close-up beats a
+// crop out of the whole-nursery map every time, so it wins when present.
+// Returns null when the plot has neither an upload nor a shipped picture, so
+// callers can fall back to the nursery map.
+const SHIPPED_PHOTOS = new Set(['B1', 'B4', 'U8']);
+
+export function plotPhoto(pid) {
+  if (PHOTOS[pid]) return PHOTOS[pid];
+  if (SHIPPED_PHOTOS.has(pid)) return './maps/' + pid.toLowerCase() + '.jpeg';
+  return null;
+}
+
+// Older name, kept for the legacy band rendering.
 export function areaMapUrl(pid) {
-  return PHOTOS[pid] || './maps/' + pid.toLowerCase() + '.jpeg';
+  return plotPhoto(pid) || '';
 }
 
 export function isMulti(pid) {

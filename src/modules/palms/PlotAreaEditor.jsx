@@ -9,14 +9,18 @@ const AREA_TINT = ['rgba(16,185,129,.30)', 'rgba(245,158,11,.30)', 'rgba(56,189,
 // boundaries are rarely straight, so a percentage box could never describe
 // them. Each area's share is then measured off the drawing rather than typed
 // in: the plot's outline is sampled and the samples counted per side.
-export default function PlotAreaEditor({ mapUrl, poly, areas, dividers, onChange, t }) {
+// `photoUrl` is a picture of this plot alone — when there is one the whole
+// frame is the plot, so no outline or cropping is involved. Otherwise the
+// nursery map is cropped to `poly`.
+export default function PlotAreaEditor({ photoUrl, mapUrl, poly, areas, dividers, onChange, t }) {
+  const ownPhoto = !!photoUrl;
   const wrapRef = useRef(null);
   const [drawing, setDrawing] = useState(null); // points of the line in progress
   const [imgAspect, setImgAspect] = useState(1.6);
 
   // Zoom the nursery map onto this plot, with a little breathing room.
   const view = useMemo(() => {
-    if (!poly) return { x: 0, y: 0, w: 100, h: 100 };
+    if (ownPhoto || !poly) return { x: 0, y: 0, w: 100, h: 100 };
     const b = bbox(poly);
     const pad = Math.max(b.w, b.h) * 0.12;
     return {
@@ -25,7 +29,7 @@ export default function PlotAreaEditor({ mapUrl, poly, areas, dividers, onChange
       w: Math.min(100, b.w + pad * 2),
       h: Math.min(100, b.h + pad * 2),
     };
-  }, [poly]);
+  }, [poly, ownPhoto]);
 
   // Pointer position as a percentage of the whole map image.
   function toImagePct(e) {
@@ -63,7 +67,7 @@ export default function PlotAreaEditor({ mapUrl, poly, areas, dividers, onChange
   }
 
   const ready = (dividers || []).length === areas.length - 1;
-  const weights = ready ? weightsFromDividers(areas, dividers, poly) : null;
+  const weights = ready ? weightsFromDividers(areas, dividers, ownPhoto ? null : poly) : null;
 
   // Tint each area so the split is visible, by testing a grid of cells.
   const cells = useMemo(() => {
@@ -94,7 +98,7 @@ export default function PlotAreaEditor({ mapUrl, poly, areas, dividers, onChange
       >
         {/* the nursery map, scaled so this plot fills the frame */}
         <img
-          src={mapUrl}
+          src={photoUrl || mapUrl}
           alt=""
           draggable="false"
           onLoad={(e) => setImgAspect(e.target.naturalWidth / e.target.naturalHeight || 1.6)}
@@ -121,10 +125,10 @@ export default function PlotAreaEditor({ mapUrl, poly, areas, dividers, onChange
               width={view.w / 26}
               height={view.h / 26}
               fill={AREA_TINT[c.a % AREA_TINT.length]}
-              clipPath={poly ? 'url(#plotclip)' : undefined}
+              clipPath={!ownPhoto && poly ? 'url(#plotclip)' : undefined}
             />
           ))}
-          {poly && (
+          {!ownPhoto && poly && (
             <>
               <defs>
                 <clipPath id="plotclip">

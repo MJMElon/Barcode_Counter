@@ -6,10 +6,10 @@ import {
   NURSERIES,
   activityByN,
   applySettings,
-  areaMapUrl,
+  plotPhoto,
   plotsOf,
 } from './data.js';
-import { AREA_LETTERS, defaultSettings, loadSettings, saveSettings } from './settings.js';
+import { AREA_LETTERS, defaultSettings, loadSettings, readImageScaled, saveSettings } from './settings.js';
 
 // Settings — the two things that used to need a code change: how a plot is
 // divided into areas, and when a plot starts needing attention.
@@ -44,6 +44,8 @@ export default function SettingsTab({ t, flash }) {
   const [count, setCount] = useState(cfg ? cfg.areas.length : 1);
   const [dividers, setDividers] = useState(() => (cfg && cfg.dividers ? cfg.dividers : []));
   const [cap, setCap] = useState(cfg ? cfg.cap : '');
+  const [photo, setPhoto] = useState(() => settings.photos[plot] || null);
+  const [busy, setBusy] = useState(false);
 
   function selectPlot(p) {
     const c = settings.multi[p];
@@ -51,6 +53,40 @@ export default function SettingsTab({ t, flash }) {
     setCount(c ? c.areas.length : 1);
     setDividers(c && c.dividers ? c.dividers : []);
     setCap(c ? c.cap : '');
+    setPhoto(settings.photos[p] || null);
+  }
+
+  // A close-up of one plot is far sharper than a crop out of the whole-nursery
+  // map, so an upload takes over once there is one.
+  async function pickPhoto(e) {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    setBusy(true);
+    try {
+      const dataUrl = await readImageScaled(f, 1600, 0.85);
+      const next = { ...settings, photos: { ...settings.photos, [plot]: dataUrl } };
+      if (!saveSettings(next)) {
+        flash(t('set.saveFull'));
+      } else {
+        applySettings(next);
+        setSettings(next);
+        setPhoto(dataUrl);
+        flash(t('set.photoSaved', { p: plot }));
+      }
+    } catch (err) {
+      flash(t('set.photoErr'));
+    }
+    setBusy(false);
+  }
+
+  function clearPhoto() {
+    const next = { ...settings, photos: { ...settings.photos } };
+    delete next.photos[plot];
+    saveSettings(next);
+    applySettings(next);
+    setSettings(next);
+    setPhoto(null);
+    flash(t('set.photoCleared', { p: plot }));
   }
 
   const areas = AREA_LETTERS.slice(0, count);
@@ -58,8 +94,11 @@ export default function SettingsTab({ t, flash }) {
   const poly = plotMap ? plotMap.poly : null;
   const nurseryOfSel = plotMap ? plotMap.nursery : allPlots.find((x) => x.plot === plot).nursery;
   const mapUrl = maps && maps.nurseries ? maps.nurseries[nurseryOfSel] : null;
+  const ownPhoto = photo || plotPhoto(plot);
   const ready = count < 2 || dividers.length === count - 1;
-  const weights = ready && count > 1 ? weightsFromDividers(areas, dividers, poly) : null;
+  // With a photo of the plot alone the whole frame is the plot, so the shares
+  // are measured over the picture rather than inside the outline.
+  const weights = ready && count > 1 ? weightsFromDividers(areas, dividers, ownPhoto ? null : poly) : null;
 
   function changeCount(n) {
     setCount(n);
@@ -185,11 +224,30 @@ export default function SettingsTab({ t, flash }) {
             </div>
           )}
 
+          <div className="flex items-center gap-2 flex-wrap">
+            <label className="bg-slate-100 hover:bg-emerald-100 text-slate-600 hover:text-emerald-700 text-[11px] font-black uppercase tracking-wider rounded-lg px-3 py-2 cursor-pointer">
+              {busy ? t('set.reading') : photo ? t('set.replacePhoto') : t('set.uploadPhoto')}
+              <input type="file" accept="image/*" onChange={pickPhoto} hidden />
+            </label>
+            {photo && (
+              <button
+                onClick={clearPhoto}
+                className="text-[11px] font-bold text-slate-400 hover:text-rose-500 cursor-pointer"
+              >
+                {t('set.usePortalMap')}
+              </button>
+            )}
+            <span className="text-[11px] font-semibold text-slate-400">
+              {ownPhoto ? t('set.srcPhoto') : mapUrl ? t('set.srcMap') : ''}
+            </span>
+          </div>
+
           {count > 1 && (
             <>
-              {mapUrl ? (
+              {ownPhoto || mapUrl ? (
                 <PlotAreaEditor
-                  key={`${plot}-${count}`}
+                  key={`${plot}-${count}-${ownPhoto ? 'p' : 'm'}`}
+                  photoUrl={ownPhoto}
                   mapUrl={mapUrl}
                   poly={poly}
                   areas={areas}
