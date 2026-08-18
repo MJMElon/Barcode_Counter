@@ -95,6 +95,12 @@ export default function SettingsTab({ t, flash }) {
   const nurseryOfSel = plotMap ? plotMap.nursery : allPlots.find((x) => x.plot === plot).nursery;
   const mapUrl = maps && maps.nurseries ? maps.nurseries[nurseryOfSel] : null;
   const ownPhoto = photo || plotPhoto(plot);
+  const photoCount = Object.keys(settings.photos || {}).length;
+  const photoMb = (
+    Object.values(settings.photos || {}).reduce((n, d) => n + d.length, 0) /
+    1024 /
+    1024
+  ).toFixed(1);
   const ready = count < 2 || dividers.length === count - 1;
   // With a photo of the plot alone the whole frame is the plot, so the shares
   // are measured over the picture rather than inside the outline.
@@ -241,6 +247,14 @@ export default function SettingsTab({ t, flash }) {
               {ownPhoto ? t('set.srcPhoto') : mapUrl ? t('set.srcMap') : ''}
             </span>
           </div>
+
+          {/* Photos live in browser storage, which is small — worth showing
+              before an upload fails for want of room. */}
+          {photoCount > 0 && (
+            <div className="text-[11px] font-semibold text-slate-400">
+              {t('set.storage', { n: photoCount, mb: photoMb })}
+            </div>
+          )}
 
           {count > 1 && (
             <>
