@@ -75,14 +75,16 @@ const TAB_ICON = {
       <path d="M12 9.5v4l2.5 2M9 2.5h6M19 6l1.5-1.5" />
     </svg>
   ),
-  set: (
-    <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"
-      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="3.2" />
-      <path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 9 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 4.6 9a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z" />
-    </svg>
-  ),
 };
+
+// The status badge carries its own number, so the table does not need a
+// separate days column. On schedule says nothing more — a plot running to plan
+// has no figure worth reading.
+function badgeLabel(t, st) {
+  if (st.state === 'overdue') return t('pm.badgeOverdue', { n: Math.abs(st.left) });
+  if (st.state === 'soon') return t('pm.badgeSoon', { n: st.left });
+  return t(`pm.state.${st.state}`);
+}
 
 const STATE_BADGE = {
   ontrack: 'bg-teal-50 text-teal-700 border-teal-200',
@@ -125,7 +127,17 @@ export default function PalmsModule() {
 
   return (
     <div className="min-h-screen bg-slate-100 fade-enter">
-      <TopNav title="PALMS" subtitle="FC Portal" user={staffName} back="/dashboard" />
+      {/* Settings lives on the cog in the bar, not in the tab row: it is a
+          place you set up once and rarely return to, and the tab row is for
+          the three screens the Field Conductor works in daily. */}
+      <TopNav
+        title="PALMS"
+        subtitle="FC Portal"
+        user={staffName}
+        back="/dashboard"
+        onSettings={() => setTab(tab === 'set' ? 'entry' : 'set')}
+        settingsOn={tab === 'set'}
+      />
 
       {/* Tabs */}
       <div className="bg-white border-b border-slate-200">
@@ -135,7 +147,6 @@ export default function PalmsModule() {
             ['dash', t('pm.tabDash')],
             ['cull', t('cull.title')],
             ['motion', t('ms.title')],
-            ['set', t('set.title')],
           ].map(([id, label]) => (
             <button
               key={id}
@@ -363,7 +374,7 @@ function DashTab({ db, t, stateLabel, refresh, flash, openDetail, replaceDB }) {
                 <th className="px-3 py-2.5">Plot</th>
                 <th className="px-3 py-2.5">{t('pm.colActivity')}</th>
                 <th className="px-3 py-2.5">Status</th>
-                <th className="px-3 py-2.5">{t('pm.colDays')}</th>
+                <th className="px-3 py-2.5">{t('pm.colStart')}</th>
                 <th className="px-3 py-2.5">{t('pm.colEst')}</th>
               </tr>
             </thead>
@@ -378,29 +389,6 @@ function DashTab({ db, t, stateLabel, refresh, flash, openDetail, replaceDB }) {
                 rows.map((p) => {
                   const st = effStatus(db, p);
                   const ee = effEstEnd(db, p);
-                  // The number counts down to the END OF THE CURRENT ACTIVITY,
-                  // so its date is shown beside it. The last column is a
-                  // different date — when the whole cycle finishes, activities
-                  // still to come included — and the two were being read as
-                  // though they were the same thing.
-                  let days = <span className="text-slate-300">—</span>;
-                  if (st.state !== 'none')
-                    days = (
-                      <div className="leading-tight">
-                        <span
-                          className={`font-black tabular-nums ${
-                            st.state === 'overdue'
-                              ? 'text-rose-600'
-                              : st.state === 'soon'
-                                ? 'text-amber-600'
-                                : 'text-emerald-600'
-                          }`}
-                        >
-                          {Math.abs(st.left)}
-                        </span>
-                        <div className="text-[10px] font-bold text-slate-400">{prettyD(st.due)}</div>
-                      </div>
-                    );
                   return (
                     <tr key={p} className="border-t border-slate-100 hover:bg-slate-50/60 transition-colors">
                       <td className="px-3 py-2.5">
@@ -411,7 +399,7 @@ function DashTab({ db, t, stateLabel, refresh, flash, openDetail, replaceDB }) {
                           {p}
                         </button>
                         {isMulti(p) && (
-                          <span className="ml-1.5 text-[9px] font-black uppercase tracking-wider bg-sky-50 text-sky-700 border border-sky-200 rounded-full px-2 py-0.5">
+                          <span className="ml-1.5 text-[9px] font-black uppercase tracking-wider bg-sky-50 text-sky-700 border border-sky-200 rounded-full px-2 py-0.5 whitespace-nowrap">
                             {t('pm.multiTag', { n: areasOf(p).length })}
                           </span>
                         )}
@@ -419,13 +407,17 @@ function DashTab({ db, t, stateLabel, refresh, flash, openDetail, replaceDB }) {
                       <td className="px-3 py-2.5 font-semibold text-slate-600">{effActivityName(db, p)}</td>
                       <td className="px-3 py-2.5">
                         <span
-                          className={`inline-block rounded-full px-2.5 py-1 text-[11px] font-black border ${STATE_BADGE[st.state]}`}
+                          className={`inline-block rounded-full px-2.5 py-1 text-[11px] font-black border whitespace-nowrap ${STATE_BADGE[st.state]}`}
                         >
-                          {stateLabel(st.state)}
+                          {badgeLabel(t, st)}
                         </span>
                       </td>
-                      <td className="px-3 py-2.5">{days}</td>
-                      <td className="px-3 py-2.5 font-semibold text-slate-600">{ee ? prettyD(ee) : '—'}</td>
+                      <td className="px-3 py-2.5 font-semibold text-slate-600 whitespace-nowrap">
+                        {st.start ? prettyD(st.start) : '—'}
+                      </td>
+                      <td className="px-3 py-2.5 font-semibold text-slate-600 whitespace-nowrap">
+                        {ee ? prettyD(ee) : '—'}
+                      </td>
                     </tr>
                   );
                 })

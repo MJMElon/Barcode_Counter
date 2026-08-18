@@ -17,14 +17,37 @@ function BackArrow() {
   );
 }
 
+// A cog. Settings is a place you visit rarely and leave again, so it sits in
+// the bar beside the staff name rather than taking a slot in the tab row.
+function CogIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="3.2" />
+      <path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 9 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 4.6 9a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z" />
+    </svg>
+  );
+}
+
 // Shared top navigation bar.
 // - `title`: heading text
 // - `back`: optional route for a Back link (otherwise the brand block shows)
 // - `portal`: show a link out to the main MJM portal. Used on the dashboard,
 //   which has nowhere to go "back" to inside this app
 // - `user`: optional staff name shown top-right, to the left of the language button
+// - `onSettings`: show a cog beside the staff name; `settingsOn` marks it as
+//   the page currently open
 // - `theme`: 'light' (default) or 'dark' to match a dark page background
-export default function TopNav({ title, subtitle, back, portal, user, theme = 'light' }) {
+export default function TopNav({
+  title,
+  subtitle,
+  back,
+  portal,
+  user,
+  onSettings,
+  settingsOn,
+  theme = 'light',
+}) {
   const { signOut } = useAuth();
   const { t } = useLang();
   const navigate = useNavigate();
@@ -124,6 +147,20 @@ export default function TopNav({ title, subtitle, back, portal, user, theme = 'l
           <span className={`hidden sm:inline text-[11px] font-bold ${userCls} truncate`}>
             {t('dash.welcome', { name: user })}
           </span>
+        )}
+        {onSettings && (
+          <button
+            onClick={onSettings}
+            title={t('set.title')}
+            aria-label={t('set.title')}
+            className={`grid place-items-center rounded-full w-9 h-9 border transition-colors cursor-pointer shrink-0 ${
+              settingsOn
+                ? 'bg-emerald-600 border-emerald-600 text-white'
+                : `${backCls} ${dark ? 'border-[#1f2a38]' : 'border-slate-200'}`
+            }`}
+          >
+            <CogIcon />
+          </button>
         )}
         <LangToggle dark={dark} />
         {/* Icon only on phones — the words cost ~55px the title needs more. */}
