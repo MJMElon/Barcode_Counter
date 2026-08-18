@@ -151,6 +151,12 @@ export function prettyD(s) {
   if (!s) return '—';
   return parseD(s).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
+// Wall-clock of a save, stored as plain "HH:MM" — enough to tell a Field
+// Conductor when today's report went in, and readable straight from storage.
+export function nowClock() {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
 
 /* ---------- state derivation ----------
    A plot can have more than one activity running at once — culling may still
@@ -319,7 +325,9 @@ export function entryUnits(nk) {
 // that was running yesterday and is not chosen today gets closed with today's
 // date. That is how "angkat tanah is done" gets recorded without anyone having
 // to say so.
-export function applyDailySelection(db, key, selected, by, date) {
+// `ts` is the clock time of the save, kept so a second save on the same day
+// can say when the first one was.
+export function applyDailySelection(db, key, selected, by, date, ts) {
   const sel = [...new Set(selected)].slice(0, MAX_CONCURRENT).sort((a, b) => a - b);
   const open = currentEntries(db, key);
   let changed = false;
@@ -337,7 +345,7 @@ export function applyDailySelection(db, key, selected, by, date) {
     }
   });
 
-  db.updated[key] = { by, at: date };
+  db.updated[key] = { by, at: date, ts: ts || nowClock() };
   recordHistory(db, { key, acts: sel, by, at: date });
   return changed;
 }
@@ -453,7 +461,7 @@ export function seedSample() {
         // only the FIRST area is done, which is what makes the area map
         // worth opening: one green, the rest still to do.
         const doneToday = a ? ai === 0 : n % 3 === 0;
-        db.updated[key] = { by: 'Contoh', at: doneToday ? today : yest };
+        db.updated[key] = { by: 'Contoh', at: doneToday ? today : yest, ts: '07:30' };
         if (doneToday) recordHistory(db, { key, actN, by: 'Contoh', at: today });
         n++;
       });

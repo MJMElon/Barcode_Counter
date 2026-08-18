@@ -14,6 +14,7 @@ import {
   diffDays,
   effStatus,
   isMulti,
+  nowClock,
   plotsOf,
   prettyD,
   saveDB,
@@ -64,16 +65,18 @@ function Track() {
   );
 }
 
-// Height of the label strip under every carriage. Fixed so the rails of a row
-// stay in line whether a plot shows two activities or none.
-const LABEL_H = 'h-[30px]';
+// Height of the label strip under every carriage, and of the carriage itself.
+// Fixed so the rails of a row stay in line whether a plot shows two activities
+// or none. A laptop has room for a much larger train than a phone.
+const LABEL_H = 'h-[32px] sm:h-[42px]';
+const CAR_H = 'h-[78px] sm:h-[118px]';
 
 // Cartoon locomotive at the head of the train. Decorative; only the smoke
 // moves.
 function Locomotive() {
   return (
     <div className="select-none">
-      <div className="h-[78px] flex items-end">
+      <div className={`${CAR_H} flex items-end`}>
         <svg viewBox="0 0 104 78" className="w-full h-full" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
           {/* smoke — three puffs leaving the funnel on a stagger */}
           {[0, 0.8, 1.6].map((d, i) => (
@@ -158,8 +161,20 @@ export default function EntryTab({ db, t, staffName, refresh, flash }) {
   const doneToday = allKeys.filter((k) => tickedToday(db, k)).length;
   const today = todayStr();
 
+  // When the nursery was last put in today. Saving a fresh day goes straight
+  // through; a second save is an amendment, and that is the one worth asking
+  // about.
+  const savedAt = allKeys
+    .map((k) => db.updated[k])
+    .filter((u) => u && u.at === today)
+    .map((u) => u.ts || '')
+    .sort()
+    .pop();
+  const alreadySaved = doneToday > 0;
+
   function saveAll() {
-    allKeys.forEach((k) => applyDailySelection(db, k, draft[k] || [], staffName || 'FC', today));
+    const ts = nowClock();
+    allKeys.forEach((k) => applyDailySelection(db, k, draft[k] || [], staffName || 'FC', today, ts));
     saveDB(db);
     refresh();
     setDraft(seedDraft(db, allKeys));
@@ -227,45 +242,50 @@ export default function EntryTab({ db, t, staffName, refresh, flash }) {
             const c = CAR[st.state];
             return (
               <button key={pid} onClick={() => setOpen(pid)} title={pid} className="cursor-pointer group">
-                <div className="h-[78px] flex flex-col items-center justify-end">
-                  <div className="relative w-[92%] max-w-[86px]">
+                <div className={`${CAR_H} flex flex-col items-center justify-end`}>
+                  <div className="relative w-[92%] max-w-[86px] sm:max-w-[150px]">
                     {/* roof */}
-                    <div className={`w-full h-[10px] rounded-t-lg ${c.roof}`} />
+                    <div className={`w-full h-[10px] sm:h-[16px] rounded-t-lg sm:rounded-t-xl ${c.roof}`} />
                     {/* body + window carrying the plot number */}
                     <div
-                      className={`w-[92%] mx-auto h-[42px] rounded-md ${c.body} flex items-center justify-center transition-transform group-hover:-translate-y-0.5`}
+                      className={`w-[92%] mx-auto h-[42px] sm:h-[66px] rounded-md sm:rounded-lg ${c.body} flex items-center justify-center transition-transform group-hover:-translate-y-0.5`}
                     >
-                      <span className="w-[78%] h-[27px] rounded bg-sky-50 border border-white/70 grid place-items-center">
-                        <span className="font-black text-slate-800 text-[14px] leading-none tracking-wide">
+                      <span className="w-[78%] h-[27px] sm:h-[42px] rounded sm:rounded-md bg-sky-50 border border-white/70 grid place-items-center">
+                        <span className="font-black text-slate-800 text-[14px] sm:text-[22px] leading-none tracking-wide">
                           {pid}
                         </span>
                       </span>
                     </div>
                     {/* wheels */}
-                    <div className="w-[92%] mx-auto flex justify-around -mt-[3px]">
+                    <div className="w-[92%] mx-auto flex justify-around -mt-[3px] sm:-mt-[5px]">
                       {[0, 1].map((i) => (
-                        <span key={i} className="w-4 h-4 rounded-full bg-slate-500 grid place-items-center">
-                          <span className="w-1.5 h-1.5 rounded-full bg-slate-200" />
+                        <span
+                          key={i}
+                          className="w-4 h-4 sm:w-6 sm:h-6 rounded-full bg-slate-500 grid place-items-center"
+                        >
+                          <span className="w-1.5 h-1.5 sm:w-2.5 sm:h-2.5 rounded-full bg-slate-200" />
                         </span>
                       ))}
                     </div>
                     {/* edited-today / done / multi-area badge */}
                     {(changed || done || isMulti(pid)) && (
-                      <span className="absolute -top-2 -right-1 text-[10px] leading-none bg-white rounded-full px-1.5 py-1 shadow-sm border border-slate-200">
+                      <span className="absolute -top-2 -right-1 text-[10px] sm:text-[13px] leading-none bg-white rounded-full px-1.5 py-1 shadow-sm border border-slate-200">
                         {changed ? '✏️' : done ? '✅' : `${MULTI[pid].areas.length}⬦`}
                       </span>
                     )}
                   </div>
                 </div>
-                {/* What this plot is on — readable without opening anything */}
-                <div className={`${LABEL_H} px-0.5 flex flex-col items-center justify-start leading-[1.15]`}>
+                {/* What this plot is on — readable without opening anything.
+                    Centred in the strip so a single activity sits under the
+                    wheels rather than clinging to them. */}
+                <div className={`${LABEL_H} px-0.5 flex flex-col items-center justify-center leading-[1.15]`}>
                   {acts.length === 0 ? (
-                    <span className="text-[9px] font-bold text-slate-300">—</span>
+                    <span className="text-[10px] sm:text-[14px] font-bold text-slate-300">—</span>
                   ) : (
                     acts.map((a) => (
                       <span
                         key={a.n}
-                        className={`block w-full truncate text-[9px] sm:text-[10px] font-black ${
+                        className={`block w-full truncate text-[10px] sm:text-[14px] font-black ${
                           changed ? 'text-amber-600' : 'text-slate-500'
                         }`}
                       >
@@ -286,11 +306,7 @@ export default function EntryTab({ db, t, staffName, refresh, flash }) {
         {confirming ? (
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
             <p className="text-[12px] font-bold text-amber-900 mb-2.5">
-              {t('pm.confirmSaveAll', {
-                n: plots.length,
-                c: dirtyKeys.length,
-                date: prettyD(today),
-              })}
+              {t('pm.confirmAmend', { date: prettyD(today), time: savedAt || '—' })}
             </p>
             <div className="flex gap-2">
               <button
@@ -310,13 +326,17 @@ export default function EntryTab({ db, t, staffName, refresh, flash }) {
         ) : (
           <>
             <button
-              onClick={() => setConfirming(true)}
+              onClick={() => (alreadySaved ? setConfirming(true) : saveAll())}
               className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[12px] uppercase tracking-widest rounded-xl py-3 transition-colors cursor-pointer"
             >
               {t('pm.saveAll', { n: plots.length })}
             </button>
             <p className="text-[10px] font-semibold text-slate-400 text-center mt-2">
-              {dirtyKeys.length > 0 ? t('pm.changedCount', { n: dirtyKeys.length }) : t('pm.noChangeOk')}
+              {alreadySaved
+                ? t('pm.savedAtNote', { date: prettyD(today), time: savedAt || '—' })
+                : dirtyKeys.length > 0
+                  ? t('pm.changedCount', { n: dirtyKeys.length })
+                  : t('pm.noChangeOk')}
             </p>
           </>
         )}
@@ -676,13 +696,19 @@ function nurseryKeyOf(pid) {
 }
 
 /* ================= ACTIVITY PICKER FOR ONE UNIT ================= */
-// Up to two activities at once. Tapping a chosen one turns it off — that is
-// how "this finished today" is said. Choosing a third replaces the one picked
-// longest ago rather than refusing the tap.
+// Up to two activities at once.
+//
+// Tapping the only activity a plot has does nothing — a plot on Transplanting
+// should stay on Transplanting if the Field Conductor taps it again by
+// accident. Moving it means tapping the activity it moved to.
+//
+// With two running, tapping one does turn it off: that is how "angkat tanah
+// finished today" gets said. Choosing a third replaces the one picked longest
+// ago rather than refusing the tap.
 function ActivityPicker({ sel, t, onChange, onDone }) {
   function toggle(n) {
     if (sel.includes(n)) {
-      onChange(sel.filter((x) => x !== n));
+      if (sel.length > 1) onChange(sel.filter((x) => x !== n));
     } else if (sel.length < MAX_CONCURRENT) {
       onChange([...sel, n]);
     } else {
@@ -739,12 +765,25 @@ function ActivityPicker({ sel, t, onChange, onDone }) {
 
       <div className="px-4 py-3 border-t border-slate-100">
         <p className="text-[10px] font-semibold text-slate-400 text-center mb-2">{t('pm.autoDoneNote')}</p>
-        <button
-          onClick={onDone}
-          className="w-full bg-slate-800 hover:bg-slate-900 text-white font-black text-[12px] uppercase tracking-widest rounded-xl py-3 transition-colors cursor-pointer"
-        >
-          {t('common.ok')}
-        </button>
+        <div className="flex gap-2">
+          {/* The only way to empty a plot, now that tapping its single
+              activity leaves it alone. Deliberate, so it is never an
+              accidental tap. */}
+          {sel.length === 1 && (
+            <button
+              onClick={() => onChange([])}
+              className="shrink-0 bg-white border border-slate-300 text-slate-500 hover:text-rose-600 hover:border-rose-300 font-black text-[11px] uppercase tracking-widest rounded-xl px-3 py-3 cursor-pointer"
+            >
+              {t('pm.clearActivity')}
+            </button>
+          )}
+          <button
+            onClick={onDone}
+            className="flex-1 bg-slate-800 hover:bg-slate-900 text-white font-black text-[12px] uppercase tracking-widest rounded-xl py-3 transition-colors cursor-pointer"
+          >
+            {t('common.ok')}
+          </button>
+        </div>
       </div>
     </>
   );
