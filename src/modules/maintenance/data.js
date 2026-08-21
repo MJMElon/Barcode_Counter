@@ -105,15 +105,19 @@ export async function saveRecord({ id, plot, workTypeKey, date, qty, chemical, r
  * A missing schedule is not an error — the office simply has not planned that
  * month yet — so it comes back as null and the timeline says as much.
  */
-export async function loadSchedule(nurseryKey, monthLabel) {
+export async function loadSchedules(nurseryKeys, monthLabel) {
+  const keys = (nurseryKeys || []).filter(Boolean);
+  if (!keys.length) return [];
   const { data, error } = await supabase
     .from('nops_maint_state')
-    .select('payload')
-    .eq('nursery', nurseryKey)
-    .eq('month', monthLabel)
-    .maybeSingle();
-  if (error && !isMissingTable(error)) throw error;
-  return (data && data.payload) || null;
+    .select('nursery, payload')
+    .in('nursery', keys)
+    .eq('month', monthLabel);
+  if (error) {
+    if (isMissingTable(error)) return [];
+    throw error;
+  }
+  return (data || []).filter((r) => r.payload);
 }
 
 export async function loadPlotBatches() {

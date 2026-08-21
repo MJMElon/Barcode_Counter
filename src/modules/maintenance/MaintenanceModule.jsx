@@ -11,7 +11,7 @@ import {
   deleteRecord,
   loadMaintenanceData,
   loadPlotBatches,
-  loadSchedule,
+  loadSchedules,
   saveRecord,
   toCsv,
   todayStr,
@@ -23,10 +23,10 @@ import WorkSheet from './WorkSheet.jsx';
 import {
   WEEKS,
   isDone as isJobDone,
+  mergeWeekTasks,
   monthLabelOf,
   weekDates,
   weekOfDate,
-  weekTasks,
 } from './schedule.js';
 
 /* The office files its schedule under BNN / UNN1 / UNN2; shared_plots writes
@@ -51,7 +51,7 @@ export default function MaintenanceModule() {
   const [query, setQuery] = useState('');
   const [editing, setEditing] = useState(null); // { record? } — open sheet
   const [toast, setToast] = useState(null);
-  const [schedule, setSchedule] = useState(null);   // the office's plan, or null
+  const [schedule, setSchedule] = useState([]);     // one row per nursery that has a plan
   const [batchMap, setBatchMap] = useState(new Map());
   const [sheet, setSheet] = useState(null);         // { week, workType }
   const [saving, setSaving] = useState(false);
@@ -111,20 +111,29 @@ export default function MaintenanceModule() {
   const month = monthLabelOf(today);
   const currentWeek = weekOfDate(today);
 
-  // The timeline needs one nursery. The filter picks it; with only one to
-  // choose from there is nothing to pick, so use that.
-  const timelineNursery = nursery || (nurseryOptions.length === 1 ? nurseryOptions[0] : '');
+  // Which nurseries the timeline covers: the one the filter names, or every
+  // one this person can see. "All nurseries" used to be a dead end asking
+  // them to choose first — the week's work is the same question either way.
+  const timelineNurseries = useMemo(
+    () => (nursery ? [nursery] : nurseryOptions),
+    [nursery, nurseryOptions]
+  );
+  const nurseriesSig = timelineNurseries.join('|');
 
-  // The office's schedule for that nursery and this month, and what is
+  // The office's schedules for those nurseries this month, and what is
   // standing in each plot. Both are read once and re-read after a save.
   useEffect(() => {
     let live = true;
-    if (!timelineNursery) { setSchedule(null); return undefined; }
-    loadSchedule(nurseryKey(timelineNursery), month)
-      .then((p) => { if (live) setSchedule(p); })
-      .catch(() => { if (live) setSchedule(null); });
+    const names = nurseriesSig ? nurseriesSig.split('|') : [];
+    if (!names.length) { setSchedule([]); return undefined; }
+    // The office files under BNN / UNN1; shared_plots says "UNN 1". Ask for
+    // both spellings and keep whichever comes back.
+    const keys = [...new Set(names.flatMap((n) => [n, nurseryKey(n)]))];
+    loadSchedules(keys, month)
+      .then((rows) => { if (live) setSchedule(rows); })
+      .catch(() => { if (live) setSchedule([]); });
     return () => { live = false; };
-  }, [timelineNursery, month]);
+  }, [nurseriesSig, month]);
 
   useEffect(() => {
     let live = true;
@@ -136,7 +145,7 @@ export default function MaintenanceModule() {
 
   // Every week's jobs, and how many of each are already recorded.
   const tasksByWeek = useMemo(
-    () => WEEKS.reduce((acc, w) => { acc[w] = weekTasks(schedule, w); return acc; }, {}),
+    () => WEEKS.reduce((acc, w) => { acc[w] = mergeWeekTasks(schedule, w); return acc; }, {}),
     [schedule]
   );
   const counts = useMemo(() => WEEKS.reduce((acc, w) => {
@@ -154,7 +163,7 @@ export default function MaintenanceModule() {
 
   async function handleSheetSave({ task, batches, remark }) {
     const plot = visiblePlots.find((p) => p.plot_name === task.plot)
-      || { plot_name: task.plot, nursery_name: timelineNursery };
+      || { plot_name: task.plot, nursery_name: task.nursery || nursery || null };
     setSaving(true);
     try {
       await saveRecord({
@@ -296,13 +305,13 @@ export default function MaintenanceModule() {
               <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-4 text-[13px] font-bold text-amber-800">
                 {t('mt.noPermRecord')}
               </div>
-            ) : !timelineNursery ? (
+            ) : !timelineNurseries.length ? (
               <div className="bg-white border border-slate-200 rounded-2xl px-4 py-5 text-center text-[13px] font-bold text-slate-400">
-                {t('mt.pickNursery')}
+                {t('mt.noPlots')}
               </div>
-            ) : !schedule ? (
+            ) : !schedule.length ? (
               <div className="bg-white border border-slate-200 rounded-2xl px-4 py-5 text-center text-[13px] font-bold text-slate-400">
-                {t('mt.noSchedule', { nursery: timelineNursery, month })}
+                {t('mt.noSchedule', { nursery: timelineNurseries.join(', '), month })}
               </div>
             ) : (
               <Timeline

@@ -154,6 +154,24 @@ function plotCmp(a, b) {
   return pa.localeCompare(pb) || (na - nb) || String(a).localeCompare(String(b));
 }
 
+/**
+ * The same week across several nurseries, as one list per job.
+ * A Field Conductor looking at "All nurseries" wants the week's work, not a
+ * nursery to choose first — and plot names carry their nursery in the prefix
+ * (B, U, N), so the merged list still reads unambiguously.
+ */
+export function mergeWeekTasks(entries, week) {
+  const out = { pd: [], manuring: [], weeding: [], interrow: [] };
+  (entries || []).forEach((e) => {
+    const t = weekTasks(e && e.payload, week);
+    Object.keys(out).forEach((k) => {
+      t[k].forEach((task) => out[k].push({ ...task, nursery: e && e.nursery }));
+    });
+  });
+  Object.keys(out).forEach((k) => out[k].sort((a, b) => plotCmp(a.plot, b.plot)));
+  return out;
+}
+
 /** How many plots each job covers in a week — the badge on the timeline. */
 export function weekCounts(payload, week) {
   const tasks = weekTasks(payload, week);
