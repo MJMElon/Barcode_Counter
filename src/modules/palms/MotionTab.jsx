@@ -36,6 +36,10 @@ function Cell({ v, label, tone }) {
   );
 }
 
+// Culling Duration measures one fixed run and nothing else.
+const CULL_FROM = FIRST_ACT; // Saringan Anak Bibit
+const CULL_TO = 9; // Transplanting
+
 // '2026-08' -> 'Aug 2026'. Built from a fixed day so the month never slips
 // across a timezone boundary.
 function monthLabel(m) {
@@ -54,19 +58,28 @@ export default function MotionTab({ db, t, nurseryKeys }) {
   // "All nurseries" means all the ones this user may see, not every nursery
   // in the database.
   const scope = nursery === 'all' ? nurseryKeys : nursery;
+  // Culling Duration is a fixed measurement — Saringan Anak Bibit through to
+  // Transplanting — so it ignores the run picker entirely rather than starting
+  // it on the right answer and letting it drift.
+  const runFrom = view === 'pay' ? CULL_FROM : from;
+  const runTo = view === 'pay' ? CULL_TO : to;
+
   const rows = useMemo(() => perActivityStats(db, scope, month), [db, scope, month]);
-  const span = useMemo(() => spanStats(db, scope, from, to, month), [db, scope, from, to, month]);
+  const span = useMemo(
+    () => spanStats(db, scope, runFrom, runTo, month),
+    [db, scope, runFrom, runTo, month]
+  );
   const plotRows = useMemo(
-    () => (view === 'plot' ? perUnitStats(db, scope, from, to, month) : []),
-    [view, db, scope, from, to, month]
+    () => (view === 'plot' ? perUnitStats(db, scope, runFrom, runTo, month) : []),
+    [view, db, scope, runFrom, runTo, month]
   );
   const runs = useMemo(
-    () => (view === 'pay' ? incentiveRuns(db, scope, from, to, month) : []),
-    [view, db, scope, from, to, month]
+    () => (view === 'pay' ? incentiveRuns(db, scope, runFrom, runTo, month) : []),
+    [view, db, scope, runFrom, runTo, month]
   );
   const months = useMemo(() => monthsWithData(db, scope), [db, scope]);
   const units = useMemo(() => unitsOf(db, scope).length, [db, scope]);
-  const ideal = idealSpan(from, to);
+  const ideal = idealSpan(runFrom, runTo);
   const measured = rows.reduce((s, r) => s + (r.stats ? r.stats.n : 0), 0);
 
   // Keep the run pointing forwards: choosing an end before the start pulls the
@@ -140,16 +153,7 @@ export default function MotionTab({ db, t, nurseryKeys }) {
         ].map(([id, label]) => (
           <button
             key={id}
-            onClick={() => {
-              // The incentive is a rule about one run — Saringan Anak Bibit
-              // through to Transplanting — so opening it lands on that run
-              // rather than on whatever was last being studied.
-              if (id === 'pay' && view !== 'pay') {
-                setFrom(FIRST_ACT);
-                setTo(9);
-              }
-              setView(id);
-            }}
+            onClick={() => setView(id)}
             className={`flex-1 rounded-xl px-2 py-2.5 text-[11px] sm:text-[12px] font-black uppercase tracking-wider transition-colors cursor-pointer ${
               view === id
                 ? 'bg-emerald-600 text-white'
@@ -164,27 +168,32 @@ export default function MotionTab({ db, t, nurseryKeys }) {
       {/* A run of activities — the whole cycle by default */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
         <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100">
-          <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-wide">{t('ms.spanTitle')}</h3>
+          <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-wide">
+            {view === 'pay' ? t('ms.cullRun') : t('ms.spanTitle')}
+          </h3>
         </div>
         <div className="px-4 sm:px-6 py-3 sm:py-4">
-          <div className="grid grid-cols-2 gap-2">
-            <label className="min-w-0">
-              <span className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
-                {t('ms.from')}
-              </span>
-              {select(from, pickFrom)}
-            </label>
-            <label className="min-w-0">
-              <span className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
-                {t('ms.to')}
-              </span>
-              {select(to, pickTo)}
-            </label>
-          </div>
+          {/* Culling Duration is one fixed run, so there is nothing to pick. */}
+          {view !== 'pay' && (
+            <div className="grid grid-cols-2 gap-2">
+              <label className="min-w-0">
+                <span className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
+                  {t('ms.from')}
+                </span>
+                {select(from, pickFrom)}
+              </label>
+              <label className="min-w-0">
+                <span className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
+                  {t('ms.to')}
+                </span>
+                {select(to, pickTo)}
+              </label>
+            </div>
+          )}
 
           {span ? (
             <>
-              <div className="grid grid-cols-3 gap-2 mt-3">
+              <div className={`grid grid-cols-3 gap-2 ${view === 'pay' ? '' : 'mt-3'}`}>
                 {[
                   ['ms.fastest', span.min, 'text-emerald-600'],
                   ['ms.average', { days: span.avg }, 'text-slate-800'],

@@ -624,7 +624,16 @@ function DashTab({ db, t, nurseryKeys, stateLabel, refresh, flash, openDetail, r
 
 /* ================= PLOT DETAIL (log) MODAL ================= */
 function LogTable({ db, k, t }) {
-  const logs = (db.logs[k] || []).slice().reverse();
+  // The stored `no` is a counter across the whole database, so B1 area A once
+  // opened at 363 while area B beside it opened at 4 — two logs of the same
+  // length reading as though one were far older. Each unit is numbered from 1
+  // in the order its own entries happened; `no` stays the ordering key and the
+  // row key, it is just not what the reader sees.
+  const logs = (db.logs[k] || [])
+    .slice()
+    .sort((a, b) => a.no - b.no)
+    .map((e, i) => ({ ...e, seq: i + 1 }))
+    .reverse();
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-[12px] min-w-[560px]">
@@ -656,7 +665,7 @@ function LogTable({ db, k, t }) {
               const varc = ongoing ? null : e.ideal - spent;
               return (
                 <tr key={e.no} className={`border-t border-slate-100 ${ongoing ? 'bg-emerald-50/50' : ''}`}>
-                  <td className="px-2 py-2 font-black tabular-nums text-slate-500">{e.no}</td>
+                  <td className="px-2 py-2 font-black tabular-nums text-slate-500">{e.seq}</td>
                   <td className="px-2 py-2 font-bold text-slate-700">{act.name}</td>
                   <td className="px-2 py-2 text-slate-600">{prettyD(e.start)}</td>
                   <td className="px-2 py-2 text-slate-600">{ongoing ? '—' : prettyD(e.end)}</td>

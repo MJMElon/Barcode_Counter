@@ -111,6 +111,7 @@ const en = {
   // motion study
   'ms.title': 'Motion Study',
   'ms.spanTitle': 'A run of activities',
+  'ms.cullRun': 'Saringan Anak Bibit → Transplanting',
   'ms.from': 'From',
   'ms.to': 'Until',
   'ms.fastest': 'Fastest',
@@ -617,6 +618,7 @@ const ms = {
   // motion study
   'ms.title': 'Motion Study',
   'ms.spanTitle': 'Beberapa aktiviti',
+  'ms.cullRun': 'Saringan Anak Bibit → Transplanting',
   'ms.from': 'Dari',
   'ms.to': 'Hingga',
   'ms.fastest': 'Terpantas',
