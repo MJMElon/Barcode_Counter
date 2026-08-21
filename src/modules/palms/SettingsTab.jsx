@@ -13,7 +13,23 @@ import { AREA_LETTERS, defaultSettings, loadSettings, readImageScaled, saveSetti
 
 // Settings — the two things that used to need a code change: how a plot is
 // divided into areas, and when a plot starts needing attention.
+//
+// Both used to be on screen at once, which made a page you visit to change one
+// thing look like a page you have to read. You pick what you are here to set
+// up first, and only that opens.
+
+function BackArrow() {
+  return (
+    <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="3"
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M19 12H5" />
+      <path d="m12 19-7-7 7-7" />
+    </svg>
+  );
+}
+
 export default function SettingsTab({ t, flash }) {
+  const [section, setSection] = useState(null); // null = the menu
   const [settings, setSettings] = useState(() => loadSettings());
   const allPlots = useMemo(
     () => Object.keys(NURSERIES).flatMap((nk) => plotsOf(nk).map((p) => ({ plot: p, nursery: nk }))),
@@ -166,18 +182,6 @@ export default function SettingsTab({ t, flash }) {
     commitRules(rules.filter((_, idx) => idx !== i));
   }
 
-  /* ---- smallest area that earns the incentive ---- */
-  function commitMinArea(v) {
-    const n = v === '' ? '' : Math.max(0, Math.min(100, Number(v)));
-    const next = { ...settings, minArea: n === '' ? 0 : n };
-    if (!saveSettings(next)) {
-      flash(t('set.saveFull'));
-      return;
-    }
-    applySettings(next);
-    setSettings(next);
-  }
-
   function resetAll() {
     const d = defaultSettings();
     saveSettings(d);
@@ -187,16 +191,54 @@ export default function SettingsTab({ t, flash }) {
     flash(t('set.reset'));
   }
 
-  const splitPlots = Object.keys(settings.multi);
+  const MENU = [
+    ['areas', t('set.areasTitle'), t('set.areasLead')],
+    ['attn', t('set.attnTitle'), t('set.attnLead')],
+  ];
+
+  if (!section) {
+    return (
+      <>
+        {MENU.map(([id, title, lead]) => (
+          <button
+            key={id}
+            onClick={() => setSection(id)}
+            className="w-full text-left bg-white rounded-2xl border-2 border-slate-200 hover:border-emerald-400 shadow-[0_4px_16px_rgba(0,0,0,.06)] px-4 sm:px-6 py-4 sm:py-5 transition-all hover:-translate-y-0.5 cursor-pointer flex items-center gap-3"
+          >
+            <span className="flex-1 min-w-0">
+              <span className="block text-[13px] font-black text-slate-800">{title}</span>
+              <span className="block text-[11px] font-semibold text-slate-400 mt-0.5">{lead}</span>
+            </span>
+            <span className="shrink-0 text-slate-300 text-xl font-black">›</span>
+          </button>
+        ))}
+        <div className="text-center pt-1">
+          <button
+            onClick={resetAll}
+            className="text-[11px] font-bold text-slate-400 hover:text-rose-500 cursor-pointer"
+          >
+            {t('set.resetAll')}
+          </button>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
+      <button
+        onClick={() => setSection(null)}
+        className="flex items-center gap-2 text-[11px] font-black text-slate-500 hover:text-emerald-700 uppercase tracking-wider cursor-pointer"
+      >
+        <span className="grid place-items-center w-8 h-8 rounded-lg bg-white border border-slate-200">
+          <BackArrow />
+        </span>
+        {MENU.find(([id]) => id === section)[1]}
+      </button>
+
       {/* ---------------- plot areas ---------------- */}
+      {section === 'areas' && (
       <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-100">
-          <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-wide">{t('set.areasTitle')}</h3>
-          <p className="text-[11px] font-semibold text-slate-400 mt-0.5">{t('set.areasLead')}</p>
-        </div>
 
         <div className="px-4 py-3 space-y-3">
           <div className="flex items-end gap-2 flex-wrap">
@@ -268,9 +310,11 @@ export default function SettingsTab({ t, flash }) {
             </div>
           )}
 
-          {count > 1 && (
-            <>
-              {ownPhoto || mapUrl ? (
+          {/* The map is the point of this screen, so it shows for every plot
+              — a plot with one area still wants looking at before it is split.
+              The editor itself knows there is nothing to draw. */}
+          <>
+            {ownPhoto || mapUrl ? (
                 <PlotAreaEditor
                   key={`${plot}-${count}-${ownPhoto ? 'p' : 'm'}`}
                   photoUrl={ownPhoto}
@@ -312,8 +356,7 @@ export default function SettingsTab({ t, flash }) {
                   className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-semibold outline-none focus:border-emerald-500"
                 />
               </div>
-            </>
-          )}
+          </>
 
           <button
             onClick={savePlot}
@@ -322,50 +365,13 @@ export default function SettingsTab({ t, flash }) {
             {count <= 1 ? t('set.saveSingle', { p: plot }) : t('set.savePlot', { p: plot })}
           </button>
 
-          {splitPlots.length > 0 && (
-            <div className="text-[11px] font-bold text-slate-400">
-              {t('set.currentlySplit')}{' '}
-              {splitPlots.map((p) => (
-                <button
-                  key={p}
-                  onClick={() => selectPlot(p)}
-                  className="text-emerald-600 hover:underline cursor-pointer mr-1.5"
-                >
-                  {p}({settings.multi[p].areas.length})
-                </button>
-              ))}
-            </div>
-          )}
         </div>
       </div>
-
-      {/* ---------------- incentive: smallest area that counts ----------------
-          Sits under the area editor because it is a rule about the shares set
-          just above it. */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-100">
-          <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-wide">{t('set.minAreaTitle')}</h3>
-          <p className="text-[11px] font-semibold text-slate-400 mt-0.5">{t('set.minAreaLead')}</p>
-        </div>
-        <div className="px-4 py-3 flex items-center gap-2">
-          <input
-            type="number"
-            min="0"
-            max="100"
-            value={settings.minArea}
-            onChange={(e) => commitMinArea(e.target.value)}
-            className="w-24 bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-800 outline-none focus:border-emerald-500 tabular-nums"
-          />
-          <span className="text-[12px] font-bold text-slate-500">{t('set.minAreaUnit')}</span>
-        </div>
-      </div>
+      )}
 
       {/* ---------------- needs attention ---------------- */}
+      {section === 'attn' && (
       <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-100">
-          <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-wide">{t('set.attnTitle')}</h3>
-          <p className="text-[11px] font-semibold text-slate-400 mt-0.5">{t('set.attnLead')}</p>
-        </div>
         <div className="px-4 py-3 space-y-2">
           {rules.length === 0 && (
             <div className="text-[12px] font-semibold text-slate-400">{t('set.attnEmpty')}</div>
@@ -419,12 +425,7 @@ export default function SettingsTab({ t, flash }) {
           </div>
         </div>
       </div>
-
-      <div className="text-center">
-        <button onClick={resetAll} className="text-[11px] font-bold text-slate-400 hover:text-rose-500 cursor-pointer">
-          {t('set.resetAll')}
-        </button>
-      </div>
+      )}
     </>
   );
 }
