@@ -346,13 +346,17 @@ function DashTab({ db, t, nurseryKeys, stateLabel, refresh, flash, openDetail, r
         </select>
       </div>
 
-      {/* Stat cards. Needs attention is not one of them — it is a status like
-          any other, and the Plot Status table below has a status picker that
-          reaches all three without spending a card on one of them. */}
+      {/* Stat cards — one per status, in the order a plot deteriorates
+          through them, so the row reads worst to best left to right. Each is
+          the filter for that status; the stage flow below filters
+          independently and the two stack. */}
       <div className="flex gap-2.5 flex-wrap">
         {statCard(t('pm.totalPlots'), counts.total, 'text-slate-800', fState == null, () => setFState(null))}
         {statCard(stateLabel('overdue'), counts.overdue, 'text-rose-600', fState === 'overdue', () =>
           toggleState('overdue')
+        )}
+        {statCard(stateLabel('soon'), counts.soon, 'text-amber-600', fState === 'soon', () =>
+          toggleState('soon')
         )}
         {statCard(stateLabel('ontrack'), counts.ontrack, 'text-emerald-600', fState === 'ontrack', () =>
           toggleState('ontrack')
@@ -427,25 +431,9 @@ function DashTab({ db, t, nurseryKeys, stateLabel, refresh, flash, openDetail, r
 
       {/* Status table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
-        <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 flex items-center justify-between gap-2 flex-wrap">
+        <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 flex items-center justify-between gap-2">
           <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-wide">{t('pm.statusTitle')}</h3>
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-bold text-slate-400">{t('pm.shown', { n: rows.length })}</span>
-            {/* Narrow the list by status without losing the stage above it —
-                "Membesar plots that need attention" needs both at once. */}
-            <select
-              value={fState || ''}
-              onChange={(e) => setFState(e.target.value || null)}
-              className="bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-[12px] font-bold text-slate-800 outline-none focus:border-emerald-500"
-            >
-              <option value="">{t('pm.allStatus')}</option>
-              {['overdue', 'soon', 'ontrack'].map((k) => (
-                <option key={k} value={k}>
-                  {stateLabel(k)}
-                </option>
-              ))}
-            </select>
-          </div>
+          <span className="text-[11px] font-bold text-slate-400">{t('pm.shown', { n: rows.length })}</span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[640px]">
