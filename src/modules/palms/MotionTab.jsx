@@ -375,30 +375,27 @@ export default function MotionTab({ db, t, nurseryKeys, staffName }) {
               have to open to see what is in it. Names only — the figures for
               whichever one is picked are in the three cards below, and
               repeating them on every tile said the same thing twice. */}
+          {/* Wrapped rather than squeezed into one scrolling line: eleven
+              names readable at 12px need more width than a row has, and two
+              tidy rows beat one row of tiny type you have to scroll. */}
           {view === 'act' && (
-            <div className="-mx-4 sm:-mx-6 overflow-x-auto px-4 sm:px-6">
-              <div className="flex gap-2 min-w-[760px]">
-                {ACTIVITIES.map((a) => {
-                  const on = act === a.n;
-                  return (
-                    <button
-                      key={a.n}
-                      onClick={() => setAct(a.n)}
-                      className={`flex-1 px-1.5 py-3 text-center rounded-xl border-2 transition-all cursor-pointer hover:-translate-y-0.5 ${
-                        on
-                          ? 'bg-emerald-50 border-emerald-500 text-emerald-700'
-                          : 'bg-slate-50 border-slate-200 text-slate-500 hover:border-emerald-400 hover:bg-white'
-                      }`}
-                    >
-                      {/* 9px, the same as the Monitoring Board's stage flow:
-                          eleven names at 10px no longer fit a laptop row. */}
-                      <div className="text-[9px] font-black uppercase tracking-wide leading-tight">
-                        {a.short}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
+              {ACTIVITIES.map((a) => {
+                const on = act === a.n;
+                return (
+                  <button
+                    key={a.n}
+                    onClick={() => setAct(a.n)}
+                    className={`px-2 py-3 text-center rounded-xl border-2 transition-all cursor-pointer hover:-translate-y-0.5 ${
+                      on
+                        ? 'bg-emerald-50 border-emerald-500 text-emerald-700'
+                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-emerald-400 hover:bg-white'
+                    }`}
+                  >
+                    <div className="text-[12px] font-black leading-tight">{a.short}</div>
+                  </button>
+                );
+              })}
             </div>
           )}
           {view === 'plot' && (

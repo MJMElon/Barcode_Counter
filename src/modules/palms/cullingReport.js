@@ -3,7 +3,7 @@ import { prettyD } from './data.js';
 
 // The Culling Incentive report — the paper trail behind the speed incentive.
 //
-// Two tables, because two questions get asked of it. The first is the month's
+// Two tables, because two questions get asked of it. The first is the period's
 // work: every plot that ran culling through to transplanting, whether it beat
 // the target or not. The second is the payout: only the runs that earned. A
 // payout list nobody can check against the runs that missed is a list nobody
@@ -179,7 +179,7 @@ export function buildCullingReport(runs, scope) {
 
   // ── 1. The month's culling ──
   y += 6;
-  y = sectionTitle(doc, 'Culling this period', y);
+  y = sectionTitle(doc, `Culling workdone in ${scope.month}`, y);
   y = drawTable(doc, runs, y, {
     withResult: true,
     empty: 'No plot finished culling in this period.',
@@ -191,7 +191,7 @@ export function buildCullingReport(runs, scope) {
     doc.addPage();
     y = 24;
   }
-  y = sectionTitle(doc, 'Earned the incentive', y);
+  y = sectionTitle(doc, 'Plots Eligible for the Incentive', y);
   y = drawTable(doc, earned, y, {
     withResult: false,
     empty: 'No run earned the incentive in this period.',

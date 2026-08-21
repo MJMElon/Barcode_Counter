@@ -152,12 +152,17 @@ export default function SettingsTab({ t, flash }) {
     flash(t('set.savedPlot', { p: plot }));
   }
 
-  /* ---- needs attention ---- */
-  const rules = Object.entries(settings.attention).map(([n, d]) => ({ n: Number(n), d }));
+  /* ---- needs attention ----
+     Edited as a draft and written on Save. Every keystroke used to be a write
+     to storage, so a half-typed "1" on the way to "14" was a live rule for as
+     long as it took to type the second digit. */
+  const rulesOf = (attn) => Object.entries(attn).map(([n, d]) => ({ n: Number(n), d }));
+  const [rules, setRules] = useState(() => rulesOf(settings.attention));
+  const dirty = JSON.stringify(rules) !== JSON.stringify(rulesOf(settings.attention));
 
-  function commitRules(list) {
+  function saveRules() {
     const attention = {};
-    list.forEach((r) => {
+    rules.forEach((r) => {
       if (r.n && r.d !== '' && Number(r.d) > 0) attention[r.n] = Number(r.d);
     });
     const next = { ...settings, attention };
@@ -167,19 +172,21 @@ export default function SettingsTab({ t, flash }) {
     }
     applySettings(next);
     setSettings(next);
+    setRules(rulesOf(attention));
+    flash(t('set.rulesSaved'));
   }
 
   function setRule(i, field, v) {
-    const list = rules.map((r, idx) => (idx === i ? { ...r, [field]: v } : r));
-    commitRules(list);
+    setRules((list) => list.map((r, idx) => (idx === i ? { ...r, [field]: v } : r)));
   }
   function addRule() {
-    const unused = ACTIVITIES.find((a) => settings.attention[a.n] == null);
+    const used = new Set(rules.map((r) => r.n));
+    const unused = ACTIVITIES.find((a) => !used.has(a.n));
     if (!unused) return;
-    commitRules([...rules, { n: unused.n, d: 7 }]);
+    setRules((list) => [...list, { n: unused.n, d: 7 }]);
   }
   function removeRule(i) {
-    commitRules(rules.filter((_, idx) => idx !== i));
+    setRules((list) => list.filter((_, idx) => idx !== i));
   }
 
   function resetAll() {
@@ -187,6 +194,7 @@ export default function SettingsTab({ t, flash }) {
     saveSettings(d);
     applySettings(d);
     setSettings(d);
+    setRules(rulesOf(d.attention));
     selectPlot(plot);
     flash(t('set.reset'));
   }
@@ -405,12 +413,19 @@ export default function SettingsTab({ t, flash }) {
               </button>
             </div>
           ))}
-          <div className="flex items-center gap-2 pt-1">
+          <div className="flex items-center gap-2 pt-1 flex-wrap">
             <button
               onClick={addRule}
               className="bg-slate-100 hover:bg-emerald-100 text-slate-600 hover:text-emerald-700 text-[11px] font-black uppercase tracking-wider rounded-lg px-3 py-2 cursor-pointer"
             >
               + {t('set.addRule')}
+            </button>
+            <button
+              onClick={saveRules}
+              disabled={!dirty}
+              className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white text-[11px] font-black uppercase tracking-wider rounded-lg px-4 py-2 cursor-pointer"
+            >
+              {dirty ? t('set.saveRules') : t('set.rulesSaved')}
             </button>
             <span className="text-[11px] font-semibold text-slate-400">
               {t('set.attnNote', {
