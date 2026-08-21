@@ -3,18 +3,36 @@ import TopNav from '../../components/TopNav.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useLang } from '../../context/LanguageContext.jsx';
 import {
+  BATCH_SETUP_NEEDED,
   SETUP_NEEDED,
   WORK_TYPES,
   allowedNurseries,
   canMaintain,
   deleteRecord,
   loadMaintenanceData,
+  loadPlotBatches,
+  loadSchedule,
   saveRecord,
   toCsv,
   todayStr,
   workTypeByKey,
   workTypeLabel,
 } from './data.js';
+import Timeline from './Timeline.jsx';
+import WorkSheet from './WorkSheet.jsx';
+import {
+  WEEKS,
+  isDone as isJobDone,
+  monthLabelOf,
+  weekDates,
+  weekOfDate,
+  weekTasks,
+} from './schedule.js';
+
+/* The office files its schedule under BNN / UNN1 / UNN2; shared_plots writes
+   the same nurseries as "BNN" / "UNN 1" / "UNN 2". Compare on letters and
+   digits alone so one is found from the other. */
+const nurseryKey = (name) => String(name || '').replace(/[^a-z0-9]/gi, '').toUpperCase();
 
 // Maintenance work recorded in the field by a Field Conductor: which job, on
 // which plot, on which day. Plots come from shared_plots (Seedling Stock
@@ -33,6 +51,10 @@ export default function MaintenanceModule() {
   const [query, setQuery] = useState('');
   const [editing, setEditing] = useState(null); // { record? } — open sheet
   const [toast, setToast] = useState(null);
+  const [schedule, setSchedule] = useState(null);   // the office's plan, or null
+  const [batchMap, setBatchMap] = useState(new Map());
+  const [sheet, setSheet] = useState(null);         // { week, workType }
+  const [saving, setSaving] = useState(false);
 
   const allowed = allowedNurseries(permissions);
   const mayRecord = canMaintain(permissions, 'record');
@@ -86,6 +108,77 @@ export default function MaintenanceModule() {
   }, [records, allowed, nursery, query]);
 
   const today = todayStr();
+  const month = monthLabelOf(today);
+  const currentWeek = weekOfDate(today);
+
+  // The timeline needs one nursery. The filter picks it; with only one to
+  // choose from there is nothing to pick, so use that.
+  const timelineNursery = nursery || (nurseryOptions.length === 1 ? nurseryOptions[0] : '');
+
+  // The office's schedule for that nursery and this month, and what is
+  // standing in each plot. Both are read once and re-read after a save.
+  useEffect(() => {
+    let live = true;
+    if (!timelineNursery) { setSchedule(null); return undefined; }
+    loadSchedule(nurseryKey(timelineNursery), month)
+      .then((p) => { if (live) setSchedule(p); })
+      .catch(() => { if (live) setSchedule(null); });
+    return () => { live = false; };
+  }, [timelineNursery, month]);
+
+  useEffect(() => {
+    let live = true;
+    loadPlotBatches()
+      .then((m) => { if (live) setBatchMap(m); })
+      .catch(() => { if (live) setBatchMap(new Map()); });
+    return () => { live = false; };
+  }, [records.length]);
+
+  // Every week's jobs, and how many of each are already recorded.
+  const tasksByWeek = useMemo(
+    () => WEEKS.reduce((acc, w) => { acc[w] = weekTasks(schedule, w); return acc; }, {}),
+    [schedule]
+  );
+  const counts = useMemo(() => WEEKS.reduce((acc, w) => {
+    acc[w] = WORK_TYPES.reduce((c, wt) => { c[wt.key] = tasksByWeek[w][wt.key].length; return c; }, {});
+    return acc;
+  }, {}), [tasksByWeek]);
+  const doneCounts = useMemo(() => WEEKS.reduce((acc, w) => {
+    acc[w] = WORK_TYPES.reduce((c, wt) => {
+      c[wt.key] = tasksByWeek[w][wt.key].filter((x) =>
+        isJobDone(records, { workTypeKey: wt.key, plot: x.plot, week: w, month })).length;
+      return c;
+    }, {});
+    return acc;
+  }, {}), [tasksByWeek, records, month]);
+
+  async function handleSheetSave({ task, batches, remark }) {
+    const plot = visiblePlots.find((p) => p.plot_name === task.plot)
+      || { plot_name: task.plot, nursery_name: timelineNursery };
+    setSaving(true);
+    try {
+      await saveRecord({
+        plot,
+        workTypeKey: sheet.workType.key,
+        // Today, always: the record says the job was done, and it is being
+        // written now.
+        date: today,
+        chemical: task.chemical,
+        remark,
+        batches,
+        weekNo: sheet.week,
+        scheduleMonth: month,
+        reportedBy: staffName,
+      });
+      flash(t('mt.savedToast', { work: workTypeLabel(sheet.workType, lang), plot: task.plot }));
+      reload();
+    } catch (e) {
+      // The job saved; only the batch/week columns were missing.
+      if (e && e.message === BATCH_SETUP_NEEDED) { flash(t('mt.batchSetupNeeded')); reload(); }
+      else flash(t('mt.saveErr', { msg: (e && e.message) || String(e) }));
+    }
+    setSaving(false);
+  }
 
   async function handleSave(form) {
     const plot = visiblePlots.find((p) => p.plot_name === form.plotName);
@@ -185,10 +278,56 @@ export default function MaintenanceModule() {
             {t('mt.setupNeeded')}
           </div>
         )}
+
+        {/* The month's schedule, as four blocks of seven days. Tap a job to
+            record it against the plots the office asked for. */}
+        {mayRecord && !setup && (
+          <>
+            <div className="flex items-baseline justify-between pt-1">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                {t('mt.schedule')}
+              </span>
+              <span className="text-[11px] font-black text-slate-500">{month}</span>
+            </div>
+            {!timelineNursery ? (
+              <div className="bg-white border border-slate-200 rounded-2xl px-4 py-5 text-center text-[13px] font-bold text-slate-400">
+                {t('mt.pickNursery')}
+              </div>
+            ) : !schedule ? (
+              <div className="bg-white border border-slate-200 rounded-2xl px-4 py-5 text-center text-[13px] font-bold text-slate-400">
+                {t('mt.noSchedule', { nursery: timelineNursery, month })}
+              </div>
+            ) : (
+              <Timeline
+                month={month}
+                currentWeek={currentWeek}
+                counts={counts}
+                doneCounts={doneCounts}
+                onOpen={(week, workType) => setSheet({ week, workType })}
+              />
+            )}
+          </>
+        )}
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm font-bold">
             {t('mt.loadErr', { msg: error })}
           </div>
+        )}
+
+        {sheet && (
+          <WorkSheet
+            workType={sheet.workType}
+            week={sheet.week}
+            weekDates={weekDates(sheet.week, month)}
+            month={month}
+            tasks={tasksByWeek[sheet.week][sheet.workType.key]}
+            batchMap={batchMap}
+            today={today}
+            saving={saving}
+            isDone={(plot) => isJobDone(records, { workTypeKey: sheet.workType.key, plot, week: sheet.week, month })}
+            onSave={handleSheetSave}
+            onClose={() => setSheet(null)}
+          />
         )}
 
         <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest pt-1">

@@ -3,6 +3,7 @@
 
 import { supabase } from '../../lib/supabase.js';
 import { sortRecords, workTypeByKey } from './helpers.js';
+import { batchesByPlot } from './plotBatches.js';
 
 export {
   WORK_TYPES,
@@ -18,6 +19,15 @@ export {
 /** Raised when the table has not been created yet, so the UI can say which
     SQL to run instead of showing a raw PostgREST error. */
 export const SETUP_NEEDED = 'SETUP_NEEDED';
+
+/** Raised when the batch/week columns have not been added yet. */
+export const BATCH_SETUP_NEEDED = 'BATCH_SETUP_NEEDED';
+
+function isMissingColumn(error) {
+  return /column .* does not exist|Could not find the '.*' column/i.test(
+    String((error && error.message) || '')
+  );
+}
 
 function isMissingTable(error) {
   const m = String((error && error.message) || '');
@@ -47,7 +57,8 @@ export async function loadMaintenanceData() {
 }
 
 /** Create or update one record. `id` present = update. */
-export async function saveRecord({ id, plot, workTypeKey, date, qty, chemical, remark, reportedBy }) {
+export async function saveRecord({ id, plot, workTypeKey, date, qty, chemical, remark, reportedBy,
+                                   batches, weekNo, scheduleMonth }) {
   const wt = workTypeByKey(workTypeKey);
   const row = {
     work_date: date,
@@ -63,11 +74,61 @@ export async function saveRecord({ id, plot, workTypeKey, date, qty, chemical, r
     reported_by: reportedBy || null,
     updated_at: new Date().toISOString(),
   };
-  const q = id
-    ? supabase.from('nops_maint_field_records').update(row).eq('id', id)
-    : supabase.from('nops_maint_field_records').insert(row);
-  const { error } = await q;
+  // Which batches were standing in the plot, and which slot of the schedule
+  // the job answers. Sent only when there is something to say, so a record
+  // made the old way still saves against a table without these columns.
+  const extra = {};
+  if (batches && batches.length) extra.batch_name = batches.join(', ');
+  if (weekNo) extra.week_no = weekNo;
+  if (scheduleMonth) extra.schedule_month = scheduleMonth;
+
+  const run = (payload) => (id
+    ? supabase.from('nops_maint_field_records').update(payload).eq('id', id)
+    : supabase.from('nops_maint_field_records').insert(payload));
+
+  let { error } = await run({ ...row, ...extra });
+  // The columns are added by shared/add_maint_field_batch.sql. Until someone
+  // runs it, save the job itself rather than losing a morning's work — and
+  // say so, so the SQL actually gets run.
+  if (error && Object.keys(extra).length && isMissingColumn(error)) {
+    const retry = await run(row);
+    if (retry.error) throw retry.error;
+    throw new Error(BATCH_SETUP_NEEDED);
+  }
   if (error) throw error;
+}
+
+/**
+ * The office's schedule for a nursery and month, and the batches currently
+ * standing in each plot. Both feed the week timeline.
+ *
+ * A missing schedule is not an error — the office simply has not planned that
+ * month yet — so it comes back as null and the timeline says as much.
+ */
+export async function loadSchedule(nurseryKey, monthLabel) {
+  const { data, error } = await supabase
+    .from('nops_maint_state')
+    .select('payload')
+    .eq('nursery', nurseryKey)
+    .eq('month', monthLabel)
+    .maybeSingle();
+  if (error && !isMissingTable(error)) throw error;
+  return (data && data.payload) || null;
+}
+
+export async function loadPlotBatches() {
+  const [logsRes, dosRes] = await Promise.all([
+    supabase.from('shared_inventory_logs')
+      .select('transaction_type, plot_name, batch_name, quantity_change, remark')
+      .in('transaction_type', ['Seeds_Received', 'Planted', 'Transplanted',
+        'Transplanted_Premium', 'Transplanted_DoubleTone', 'Damaged_Seeds',
+        '1st_Culling', '2nd_Culling', '3rd_Culling', 'Cull3_Transfer']),
+    supabase.from('shared_do_records')
+      .select('status, remark, plot_1, qty_1, batch_1, plot_2, qty_2, batch_2, plot_3, qty_3, batch_3, plot_4, qty_4, batch_4, plot_5, qty_5, batch_5')
+      .then((r) => r, () => ({ data: [] })),
+  ]);
+  if (logsRes.error) throw logsRes.error;
+  return batchesByPlot(logsRes.data || [], (dosRes && dosRes.data) || []);
 }
 
 export async function deleteRecord(id) {
