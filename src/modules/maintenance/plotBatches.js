@@ -71,9 +71,16 @@ export function batchesByPlot(logs, dos) {
     }
   }
 
+  // Same rule as the movement report: a batch whose balance works out to zero
+  // has been culled, sold or moved on and is not offered. A NEGATIVE balance
+  // is kept — the report shows those too, and hiding them here would mean the
+  // field could not record work on a plot the office can see stock in.
+  // Ordered by batch number, so the list reads against the report row for row.
   const out = new Map();
   bal.forEach((m, pk) => {
-    const list = [...m.values()].filter((b) => b.qty > 0).sort((a, b) => b.qty - a.qty);
+    const list = [...m.values()]
+      .filter((b) => b.qty !== 0)
+      .sort((a, b) => (parseInt(batchKey(a.batch), 10) || 0) - (parseInt(batchKey(b.batch), 10) || 0));
     if (list.length) out.set(pk, list);
   });
   return out;

@@ -133,7 +133,11 @@ export default function WorkSheet({
                         checked={batches.includes(b.batch)}
                         onChange={() => toggleBatch(b.batch)} />
                       <span className="font-black text-slate-800 text-[14px] flex-1 min-w-0">{b.batch}</span>
-                      <span className="text-[12px] font-bold text-slate-400 shrink-0 tabular-nums">
+                      {/* A negative balance is the office's own figure — the
+                          movement report shows it too. Marked so it reads as
+                          a number to query, not as stock standing there. */}
+                      <span className={`text-[12px] font-bold shrink-0 tabular-nums ${
+                        b.qty < 0 ? 'text-amber-600' : 'text-slate-400'}`}>
                         {b.qty.toLocaleString()}
                       </span>
                     </label>
