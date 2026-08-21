@@ -386,13 +386,17 @@ export default function MotionTab({ db, t, nurseryKeys, staffName }) {
                   <button
                     key={a.n}
                     onClick={() => setAct(a.n)}
-                    className={`px-2 py-3 text-center rounded-xl border-2 transition-all cursor-pointer hover:-translate-y-0.5 ${
+                    // A fixed height, not one that follows the label: the grid
+                    // already makes every tile the same width, and without
+                    // this the row holding "Saringan Anak Bibit" on two lines
+                    // stood taller than the row below it.
+                    className={`px-2 min-h-[56px] flex items-center justify-center text-center rounded-xl border-2 transition-all cursor-pointer hover:-translate-y-0.5 ${
                       on
                         ? 'bg-emerald-50 border-emerald-500 text-emerald-700'
                         : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-emerald-400 hover:bg-white'
                     }`}
                   >
-                    <div className="text-[12px] font-black leading-tight">{a.short}</div>
+                    <span className="text-[12px] font-black leading-tight">{a.short}</span>
                   </button>
                 );
               })}
