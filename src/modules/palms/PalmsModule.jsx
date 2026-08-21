@@ -15,9 +15,6 @@ import {
   activityByN,
   areaMapUrl,
   addDays,
-  historyActs,
-  historyOn,
-  keyLabel,
   areasOf,
   combinedLabel,
   currentEntries,
@@ -31,7 +28,6 @@ import {
   plotsOf,
   prettyD,
   saveDB,
-  todayStr,
 } from './data.js';
 
 // PALMS — Plot Activity Log Monitoring System, ported from the standalone
@@ -210,7 +206,7 @@ export default function PalmsModule() {
         ) : tab === 'cull' ? (
           <CullingTab t={t} staffName={staffName} flash={flash} nurseryKeys={nurseryKeys} />
         ) : tab === 'motion' ? (
-          <MotionTab db={db} t={t} nurseryKeys={nurseryKeys} />
+          <MotionTab db={db} t={t} nurseryKeys={nurseryKeys} staffName={staffName} />
         ) : tab === 'set' && maySetUp ? (
           <SettingsTab t={t} flash={flash} />
         ) : (
@@ -253,7 +249,6 @@ function DashTab({ db, t, nurseryKeys, stateLabel, refresh, flash, openDetail, r
   // single filter meant picking a stage OR a status.
   const [fAct, setFAct] = useState(null); // activity number, or null
   const [fState, setFState] = useState(null); // 'ontrack' | 'soon' | 'overdue', or null
-  const [onDate, setOnDate] = useState(''); // '' = no date filter
 
   const plots = useMemo(() => {
     const ks = fNursery === 'all' ? nurseryKeys : [fNursery];
@@ -521,77 +516,6 @@ function DashTab({ db, t, nurseryKeys, stateLabel, refresh, flash, openDetail, r
               )}
             </tbody>
           </table>
-        </div>
-      </div>
-
-      {/* What was keyed in on a given day */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
-        <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 flex items-center justify-between gap-2 flex-wrap">
-          <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-wide">{t('pm.byDateTitle')}</h3>
-          <div className="flex items-center gap-2">
-            <input
-              type="date"
-              value={onDate}
-              max={todayStr()}
-              onChange={(e) => setOnDate(e.target.value)}
-              className="bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-800 outline-none focus:border-emerald-500"
-            />
-            {onDate && (
-              <button
-                onClick={() => setOnDate('')}
-                className="text-[11px] font-black text-slate-400 hover:text-slate-600 cursor-pointer"
-              >
-                ✕
-              </button>
-            )}
-          </div>
-        </div>
-        <div className="px-4 sm:px-6 py-3 sm:py-4">
-          {!onDate ? (
-            <div className="text-[12px] font-semibold text-slate-400">{t('pm.byDateHint')}</div>
-          ) : (
-            (() => {
-              // Only the plots the nursery filter is already showing.
-              const visible = new Set(plots);
-              const rows = historyOn(db, onDate).filter((h) => visible.has(h.key.split('#')[0]));
-              if (!rows.length) {
-                return <div className="text-[12px] font-semibold text-slate-400">{t('pm.byDateEmpty')}</div>;
-              }
-              return (
-                <>
-                  <div className="text-[11px] font-bold text-slate-400 mb-2">
-                    {t('pm.byDateCount', { n: rows.length, date: prettyD(onDate) })}
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm min-w-[380px]">
-                      <thead>
-                        <tr className="bg-slate-50 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                          <th className="px-3 sm:px-5 py-2 sm:py-3">Plot</th>
-                          <th className="px-3 sm:px-5 py-2 sm:py-3">{t('pm.colActivity')}</th>
-                          <th className="px-3 sm:px-5 py-2 sm:py-3">{t('pm.colBy')}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {rows.map((h, i) => (
-                          <tr key={`${h.key}-${i}`} className="border-t border-slate-100">
-                            <td className="px-3 sm:px-5 py-2 sm:py-3 font-black text-slate-800">{keyLabel(h.key)}</td>
-                            <td className="px-3 sm:px-5 py-2 sm:py-3 font-semibold text-slate-600">
-                              {historyActs(h)
-                                .map((n) => activityByN(n))
-                                .filter(Boolean)
-                                .map((a) => a.name)
-                                .join(' + ') || '—'}
-                            </td>
-                            <td className="px-3 sm:px-5 py-2 sm:py-3 font-semibold text-slate-500">{h.by || '—'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
-              );
-            })()
-          )}
         </div>
       </div>
 

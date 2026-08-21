@@ -429,11 +429,24 @@ function seedUnit(db, key, actN, mood, by) {
   const past = [];
   let cursor = endCursor;
   for (let c = 0; c < 2; c++) {
+    // Roughly a third of the past cycles were worked hard through the early
+    // stages, so the Culling Duration report has runs on both sides of the
+    // 15-day incentive to look at. The ideal for Saringan Anak Bibit through
+    // to Transplanting is 23 days, so a qualifying run is a genuinely fast
+    // one and the sample would otherwise never produce a single green row.
+    const fast = randInt(0, 2) === 0;
+    // Halving the ideals for stages 1-9 lands the run at 14 days; one stage
+    // gets a spare day so the fast cycles are not all identical, which still
+    // leaves them inside 15.
+    const bonusOn = randInt(1, 9);
     for (let n = 11; n >= 1; n--) {
       const ideal = durFor(key, activityByN(n));
       // Spread the durations either side of the ideal so shortest and longest
       // are actually different figures.
-      const spent = Math.max(1, ideal + randInt(-Math.ceil(ideal * 0.3), Math.ceil(ideal * 0.4)));
+      const spent =
+        fast && n <= 9
+          ? Math.max(1, Math.round(ideal * 0.5)) + (n === bonusOn ? 1 : 0)
+          : Math.max(1, ideal + randInt(-Math.ceil(ideal * 0.3), Math.ceil(ideal * 0.4)));
       const start = addDays(cursor, -spent);
       past.unshift({ actN: n, start, end: cursor, ideal });
       cursor = start;

@@ -220,7 +220,10 @@ export default function EntryTab({ db, t, staffName, refresh, flash, nurseryKeys
       <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
         <div className="min-w-0">
           <h2 className="font-black text-slate-800 text-[15px]">{t('pm.tabEntry')}</h2>
-          <div className="text-[11px] font-black text-emerald-700">
+          {/* The date the day is being keyed in against — the one fact on
+              this screen a Field Conductor filling in last night's round
+              needs to read at a glance. */}
+          <div className="text-[15px] sm:text-[18px] font-black text-emerald-700 leading-tight">
             {t('pm.forDate', { date: prettyD(today) })}
           </div>
           <div className="text-[11px] font-bold text-slate-400">

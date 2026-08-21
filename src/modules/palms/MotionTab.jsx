@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { ACTIVITIES, INCENTIVE, NURSERIES, prettyD } from './data.js';
+import { ACTIVITIES, INCENTIVE, NURSERIES, activityByN, prettyD, todayStr } from './data.js';
+import { buildCullingReport, cullingReportFileName } from './cullingReport.js';
 import {
   FIRST_ACT,
   LAST_ACT,
@@ -47,22 +48,23 @@ function monthLabel(m) {
   return new Date(y, mo - 1, 15).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
 }
 
-export default function MotionTab({ db, t, nurseryKeys }) {
+export default function MotionTab({ db, t, nurseryKeys, staffName }) {
   const [nursery, setNursery] = useState('all');
   const [from, setFrom] = useState(FIRST_ACT);
   const [to, setTo] = useState(LAST_ACT);
   // 'act' = by activity, 'plot' = by plot, 'pay' = who earned the incentive
   const [view, setView] = useState('act');
   const [month, setMonth] = useState(''); // '' = every month
+  const [act, setAct] = useState(FIRST_ACT); // the activity the 'act' view is on
 
   // "All nurseries" means all the ones this user may see, not every nursery
   // in the database.
   const scope = nursery === 'all' ? nurseryKeys : nursery;
-  // Culling Duration is a fixed measurement — Saringan Anak Bibit through to
-  // Transplanting — so it ignores the run picker entirely rather than starting
-  // it on the right answer and letting it drift.
-  const runFrom = view === 'pay' ? CULL_FROM : from;
-  const runTo = view === 'pay' ? CULL_TO : to;
+  // Each view measures its own thing, and none of them share a picker: By
+  // activity is one activity, Culling Duration is the fixed Saringan ->
+  // Transplanting run, By plot is whatever run is picked for it.
+  const runFrom = view === 'pay' ? CULL_FROM : view === 'act' ? act : from;
+  const runTo = view === 'pay' ? CULL_TO : view === 'act' ? act : to;
 
   const rows = useMemo(() => perActivityStats(db, scope, month), [db, scope, month]);
   const span = useMemo(
@@ -92,6 +94,21 @@ export default function MotionTab({ db, t, nurseryKeys }) {
     setTo(n);
     if (n < from) setFrom(n);
   };
+
+  // The paper trail behind a payout: the same rows on screen, on letterhead,
+  // with the rules printed underneath so a reader can check them.
+  function makeReport() {
+    const scope = {
+      nursery: nursery === 'all' ? t('pm.allNurseries') : NURSERIES[nursery].label,
+      month: month ? monthLabel(month) : t('ms.allMonths'),
+      targetDays: TARGET_DAYS,
+      minAreaPct: INCENTIVE.minAreaPct,
+      runLabel: `${activityByN(CULL_FROM).name} - ${activityByN(CULL_TO).name}`,
+      printedOn: todayStr(),
+      by: staffName,
+    };
+    buildCullingReport(runs, scope).save(cullingReportFileName(scope));
+  }
 
   const select = (value, onPick) => (
     <select
@@ -169,12 +186,26 @@ export default function MotionTab({ db, t, nurseryKeys }) {
       <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
         <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100">
           <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-wide">
-            {view === 'pay' ? t('ms.cullRun') : t('ms.spanTitle')}
+            {view === 'pay'
+              ? t('ms.cullRun')
+              : view === 'act'
+                ? t('ms.oneActivity')
+                : t('ms.spanTitle')}
           </h3>
         </div>
         <div className="px-4 sm:px-6 py-3 sm:py-4">
-          {/* Culling Duration is one fixed run, so there is nothing to pick. */}
-          {view !== 'pay' && (
+          {/* By activity picks one activity — a from/until pair asked a
+              question it does not have. Culling Duration is one fixed run, so
+              it picks nothing at all. */}
+          {view === 'act' && (
+            <label className="block min-w-0">
+              <span className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
+                {t('pm.colActivity')}
+              </span>
+              {select(act, setAct)}
+            </label>
+          )}
+          {view === 'plot' && (
             <div className="grid grid-cols-2 gap-2">
               <label className="min-w-0">
                 <span className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
@@ -228,9 +259,17 @@ export default function MotionTab({ db, t, nurseryKeys }) {
             <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-wide">
               {t('ms.incentiveTitle', { d: TARGET_DAYS })}
             </h3>
-            <span className="text-[11px] font-black text-emerald-700">
-              {t('ms.qualifiedCount', { n: runs.filter((r) => r.qualified).length, total: runs.length })}
-            </span>
+            <div className="flex items-center gap-3">
+              <span className="text-[11px] font-black text-emerald-700">
+                {t('ms.qualifiedCount', { n: runs.filter((r) => r.qualified).length, total: runs.length })}
+              </span>
+              <button
+                onClick={makeReport}
+                className="bg-slate-800 hover:bg-slate-900 text-white text-[11px] font-black uppercase tracking-wider rounded-xl px-3 py-2 cursor-pointer"
+              >
+                {t('ms.report')}
+              </button>
+            </div>
           </div>
           {runs.length === 0 ? (
             <p className="px-4 sm:px-6 py-6 text-[12px] font-semibold text-slate-400">{t('ms.spanEmpty')}</p>
