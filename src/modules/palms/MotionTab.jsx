@@ -1,6 +1,14 @@
 import { useMemo, useState } from 'react';
 import { ACTIVITIES, NURSERIES } from './data.js';
-import { FIRST_ACT, LAST_ACT, idealSpan, perActivityStats, spanStats, unitsOf } from './motion.js';
+import {
+  FIRST_ACT,
+  LAST_ACT,
+  idealSpan,
+  perActivityStats,
+  perUnitStats,
+  spanStats,
+  unitsOf,
+} from './motion.js';
 
 // Motion Study — what the work actually costs in days, taken from the logs of
 // all 52 plots rather than from the ideal-day table.
@@ -29,12 +37,17 @@ export default function MotionTab({ db, t, nurseryKeys }) {
   const [nursery, setNursery] = useState('all');
   const [from, setFrom] = useState(FIRST_ACT);
   const [to, setTo] = useState(LAST_ACT);
+  const [view, setView] = useState('act'); // 'act' = by activity, 'plot' = by plot
 
   // "All nurseries" means all the ones this user may see, not every nursery
   // in the database.
   const scope = nursery === 'all' ? nurseryKeys : nursery;
   const rows = useMemo(() => perActivityStats(db, scope), [db, scope]);
   const span = useMemo(() => spanStats(db, scope, from, to), [db, scope, from, to]);
+  const plotRows = useMemo(
+    () => (view === 'plot' ? perUnitStats(db, scope, from, to) : []),
+    [view, db, scope, from, to]
+  );
   const units = useMemo(() => unitsOf(db, scope).length, [db, scope]);
   const ideal = idealSpan(from, to);
   const measured = rows.reduce((s, r) => s + (r.stats ? r.stats.n : 0), 0);
@@ -88,6 +101,27 @@ export default function MotionTab({ db, t, nurseryKeys }) {
         </select>
       </div>
 
+      {/* Which way the study is cut. By activity answers "how long does
+          culling take"; by plot answers "which plots are slow". */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] p-1.5 flex gap-1.5">
+        {[
+          ['act', t('ms.byActivity')],
+          ['plot', t('ms.byPlot')],
+        ].map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => setView(id)}
+            className={`flex-1 rounded-xl px-3 py-2.5 text-[12px] font-black uppercase tracking-wider transition-colors cursor-pointer ${
+              view === id
+                ? 'bg-emerald-600 text-white'
+                : 'bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-700'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {/* A run of activities — the whole cycle by default */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-100">
@@ -137,7 +171,45 @@ export default function MotionTab({ db, t, nurseryKeys }) {
         </div>
       </div>
 
-      {/* Each activity on its own */}
+      {/* By plot: the same run, split by plot, slowest first */}
+      {view === 'plot' && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-2 flex-wrap">
+            <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-wide">{t('ms.perPlotTitle')}</h3>
+            <span className="text-[11px] font-bold text-slate-400">{t('ms.slowestFirst')}</span>
+          </div>
+          {plotRows.length === 0 ? (
+            <p className="px-4 py-6 text-[12px] font-semibold text-slate-400">{t('ms.spanEmpty')}</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                  <th className="px-2 py-2.5">Plot</th>
+                  <th className="px-2 py-2.5">{t('ms.min')}</th>
+                  <th className="px-2 py-2.5">{t('ms.max')}</th>
+                  <th className="px-2 py-2.5">{t('ms.avg')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {plotRows.map(({ key, label, stats }) => (
+                  <tr key={key} className="border-t border-slate-100">
+                    <td className="px-2 py-2 align-top">
+                      <div className="font-black text-slate-700 text-[12px] leading-tight">{label}</div>
+                      <div className="text-[9px] font-bold text-slate-400">{t('ms.cycles', { n: stats.n })}</div>
+                    </td>
+                    <Cell v={stats.min.days} tone="text-emerald-600" />
+                    <Cell v={stats.max.days} tone="text-rose-600" />
+                    <Cell v={stats.avg} tone="text-slate-800" />
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {/* By activity: each activity on its own, across every plot */}
+      {view === 'act' && (
       <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-2 flex-wrap">
           <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-wide">{t('ms.perActTitle')}</h3>
@@ -176,6 +248,7 @@ export default function MotionTab({ db, t, nurseryKeys }) {
           </tbody>
         </table>
       </div>
+      )}
 
       <p className="text-[10px] font-semibold text-slate-400 text-center px-2">{t('ms.foot')}</p>
     </>

@@ -78,13 +78,23 @@ const TAB_ICON = {
   ),
 };
 
-// The status badge carries its own number, so the table does not need a
-// separate days column. On schedule says nothing more — a plot running to plan
-// has no figure worth reading.
-function badgeLabel(t, st) {
-  if (st.state === 'overdue') return t('pm.badgeOverdue', { n: Math.abs(st.left) });
-  if (st.state === 'soon') return t('pm.badgeSoon', { n: st.left });
-  return t(`pm.state.${st.state}`);
+// A funnel, shown on anything that filters the board. Without it a stat card
+// is a rectangle with a number in it and nothing suggests it can be tapped.
+function FunnelIcon({ on }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={`w-3.5 h-3.5 shrink-0 ${on ? 'text-emerald-600' : 'text-slate-300'}`}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M3 4.5h18l-7 8v6.5l-4 2v-8.5z" />
+    </svg>
+  );
 }
 
 const STATE_BADGE = {
@@ -92,6 +102,14 @@ const STATE_BADGE = {
   soon: 'bg-amber-50 text-amber-700 border-amber-200',
   overdue: 'bg-rose-50 text-rose-700 border-rose-200',
   none: 'bg-slate-100 text-slate-400 border-slate-200',
+};
+
+// The days figure takes the badge's colour, so the number and the word beside
+// it never disagree.
+const DAYS_TONE = {
+  ontrack: 'text-emerald-600',
+  soon: 'text-amber-600',
+  overdue: 'text-rose-600',
 };
 
 export default function PalmsModule() {
@@ -270,15 +288,30 @@ function DashTab({ db, t, nurseryKeys, stateLabel, refresh, flash, openDetail, r
     return parseInt(a.replace(/\D/g, ''), 10) - parseInt(b.replace(/\D/g, ''), 10);
   });
 
+  // A card is a filter, but it was only a rectangle with a number in it and
+  // nothing said so. It carries a funnel now, lifts on hover, and turns into a
+  // chip that says how to switch the filter off once it is on.
   const statCard = (label, value, tone, active, onClick) => (
     <button
       onClick={onClick}
-      className={`flex-1 min-w-[120px] bg-white rounded-2xl border p-3.5 text-left transition-all cursor-pointer ${
-        active ? 'border-emerald-500 shadow-[0_4px_16px_rgba(16,185,129,.15)]' : 'border-slate-200 hover:border-slate-300'
+      className={`flex-1 min-w-[120px] bg-white rounded-2xl border-2 p-3.5 text-left transition-all cursor-pointer hover:-translate-y-0.5 hover:shadow-[0_6px_18px_rgba(0,0,0,.09)] ${
+        active
+          ? 'border-emerald-500 shadow-[0_4px_16px_rgba(16,185,129,.15)]'
+          : 'border-slate-200 hover:border-emerald-400'
       }`}
     >
-      <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{label}</div>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{label}</span>
+        <FunnelIcon on={active} />
+      </div>
       <div className={`text-2xl font-black mt-1 tabular-nums ${tone}`}>{value}</div>
+      <div
+        className={`text-[9px] font-black uppercase tracking-wider mt-0.5 ${
+          active ? 'text-emerald-600' : 'text-slate-300'
+        }`}
+      >
+        {active ? t('pm.tapClear') : t('pm.tapFilter')}
+      </div>
     </button>
   );
 
@@ -328,11 +361,16 @@ function DashTab({ db, t, nurseryKeys, stateLabel, refresh, flash, openDetail, r
       {/* Stage pipeline */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-2 flex-wrap">
-          <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-wide">{t('pm.pipeTitle')}</h3>
+          <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
+            {t('pm.pipeTitle')}
+            <FunnelIcon />
+          </h3>
           <span className="text-[11px] font-bold text-slate-400">{t('pm.inProcess', { n: inProc })}</span>
         </div>
-        <div className="overflow-x-auto">
-          <div className="flex min-w-[720px]">
+        {/* Each stage is its own bordered tile rather than a slice of a strip:
+            a strip reads as a chart, tiles read as buttons. */}
+        <div className="overflow-x-auto px-3 py-3">
+          <div className="flex gap-2 min-w-[760px]">
             {ACTIVITIES.map((a) => {
               const n = stageCounts[a.n];
               const active = filter.kind === 'activity' && filter.val === a.n;
@@ -340,14 +378,20 @@ function DashTab({ db, t, nurseryKeys, stateLabel, refresh, flash, openDetail, r
                 <button
                   key={a.n}
                   onClick={() => toggleActivity(a.n)}
-                  className={`flex-1 px-1.5 py-3 text-center border-r border-slate-100 last:border-0 transition-colors cursor-pointer ${
-                    active ? 'bg-emerald-50' : 'hover:bg-slate-50'
+                  className={`flex-1 px-1.5 py-2.5 text-center rounded-xl border-2 transition-all cursor-pointer hover:-translate-y-0.5 ${
+                    active
+                      ? 'bg-emerald-50 border-emerald-500'
+                      : 'bg-slate-50 border-slate-200 hover:border-emerald-400 hover:bg-white'
                   }`}
                 >
                   <div className="text-[9px] font-black text-slate-500 uppercase tracking-wide leading-tight min-h-[24px]">
                     {a.short}
                   </div>
-                  <div className={`text-lg font-black tabular-nums ${n === 0 ? 'text-slate-300' : 'text-slate-800'}`}>
+                  <div
+                    className={`text-lg font-black tabular-nums ${
+                      active ? 'text-emerald-700' : n === 0 ? 'text-slate-300' : 'text-slate-800'
+                    }`}
+                  >
                     {n}
                   </div>
                 </button>
@@ -385,7 +429,7 @@ function DashTab({ db, t, nurseryKeys, stateLabel, refresh, flash, openDetail, r
                 <th className="px-3 py-2.5">Plot</th>
                 <th className="px-3 py-2.5">{t('pm.colActivity')}</th>
                 <th className="px-3 py-2.5">Status</th>
-                <th className="px-3 py-2.5">{t('pm.colStart')}</th>
+                <th className="px-3 py-2.5">{t('pm.colDays')}</th>
                 <th className="px-3 py-2.5">{t('pm.colEst')}</th>
               </tr>
             </thead>
@@ -420,11 +464,28 @@ function DashTab({ db, t, nurseryKeys, stateLabel, refresh, flash, openDetail, r
                         <span
                           className={`inline-block rounded-full px-2.5 py-1 text-[11px] font-black border whitespace-nowrap ${STATE_BADGE[st.state]}`}
                         >
-                          {badgeLabel(t, st)}
+                          {stateLabel(st.state)}
                         </span>
                       </td>
-                      <td className="px-3 py-2.5 font-semibold text-slate-600 whitespace-nowrap">
-                        {st.start ? prettyD(st.start) : '—'}
+                      {/* Days left, or days late once past due — coloured to
+                          match the badge, with the date it is counting to
+                          underneath so the figure has a landing point. That
+                          date is the end of THIS activity; the last column is
+                          the end of the whole cycle. */}
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        {st.state === 'none' ? (
+                          <span className="text-slate-300">—</span>
+                        ) : (
+                          <div className="leading-tight">
+                            <span className={`font-black tabular-nums text-[15px] ${DAYS_TONE[st.state]}`}>
+                              {Math.abs(st.left)}
+                            </span>
+                            <span className="text-[10px] font-bold text-slate-400 ml-1">
+                              {st.state === 'overdue' ? t('pm.dLate') : t('pm.dLeft')}
+                            </span>
+                            <div className="text-[10px] font-bold text-slate-400">{prettyD(st.due)}</div>
+                          </div>
+                        )}
                       </td>
                       <td className="px-3 py-2.5 font-semibold text-slate-600 whitespace-nowrap">
                         {ee ? prettyD(ee) : '—'}

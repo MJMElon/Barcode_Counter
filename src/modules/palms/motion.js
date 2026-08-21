@@ -105,13 +105,12 @@ export function perActivityStats(db, nurseryKey) {
 // Days a run of activities took inside one cycle — first activity's start to
 // last activity's end. Measuring the span is what keeps two activities that
 // ran on the same days from being counted twice.
-export function spanStats(db, nurseryKey, fromN, toN) {
+function spanSamples(db, nurseryKey, fromN, toN) {
   const lo = Math.min(fromN, toN);
   const hi = Math.max(fromN, toN);
-  const units = unitsOf(db, nurseryKey);
   const samples = [];
 
-  units.forEach((key) => {
+  unitsOf(db, nurseryKey).forEach((key) => {
     cyclesOf(db.logs[key]).forEach((cycle) => {
       const starts = cycle.entries.filter((e) => e.actN === lo).map((e) => e.start);
       const ends = cycle.entries.filter((e) => e.actN === hi && e.end).map((e) => e.end);
@@ -123,7 +122,23 @@ export function spanStats(db, nurseryKey, fromN, toN) {
     });
   });
 
-  return summarise(samples);
+  return samples;
+}
+
+export function spanStats(db, nurseryKey, fromN, toN) {
+  return summarise(spanSamples(db, nurseryKey, fromN, toN));
+}
+
+// The same run, but split by plot rather than pooled: which plots take longest
+// over it. Slowest first, because that is the list worth acting on.
+export function perUnitStats(db, nurseryKey, fromN, toN) {
+  const by = {};
+  spanSamples(db, nurseryKey, fromN, toN).forEach((s) => {
+    (by[s.key] = by[s.key] || []).push(s);
+  });
+  return Object.keys(by)
+    .map((key) => ({ key, label: keyLabel(key), stats: summarise(by[key]) }))
+    .sort((a, b) => b.stats.avg - a.stats.avg);
 }
 
 // The ideal the span is being judged against, for comparison.

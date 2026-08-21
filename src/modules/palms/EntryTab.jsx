@@ -65,17 +65,19 @@ function Track() {
   );
 }
 
-// Height of the label strip under every carriage, and of the carriage itself.
-// Fixed so the rails of a row stay in line whether a plot shows two activities
-// or none. A laptop has room for a much larger train than a phone.
-const LABEL_H = 'h-[32px] sm:h-[42px]';
+// The carriage is a fixed height; the label strip below it has a floor but may
+// grow, because a plot split into three areas needs three lines. Every cell in
+// a grid row stretches to the tallest of them and the rail is pinned to the
+// bottom, so the track still runs level however many lines a row carries.
+const LABEL_H = 'min-h-[32px] sm:min-h-[42px]';
 const CAR_H = 'h-[78px] sm:h-[118px]';
+const CELL = 'flex flex-col h-full';
 
 // Cartoon locomotive at the head of the train. Decorative; only the smoke
 // moves.
 function Locomotive() {
   return (
-    <div className="select-none">
+    <div className={`select-none ${CELL}`}>
       <div className={`${CAR_H} flex items-end`}>
         <svg viewBox="0 0 104 78" className="w-full h-full" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
           {/* smoke — three puffs leaving the funnel on a stagger */}
@@ -111,7 +113,7 @@ function Locomotive() {
           <rect x="92" y="64" width="12" height="4" rx="2" fill="#94a3b8" />
         </svg>
       </div>
-      <div className={LABEL_H} />
+      <div className={`${LABEL_H} flex-1`} />
       <Track />
     </div>
   );
@@ -137,6 +139,26 @@ function seedDraft(db, keys) {
 }
 function sameSel(a, b) {
   return a.length === b.length && a.every((x, i) => x === b[i]);
+}
+
+const shortNames = (acts) =>
+  acts
+    .slice()
+    .sort((a, b) => a - b)
+    .map((n) => activityByN(n))
+    .filter(Boolean)
+    .map((a) => a.mShort);
+
+// The lines printed under a carriage. A whole plot gets one line per activity;
+// a plot split into areas gets one line per area, prefixed with the area
+// letter, so "A: Culling / B: Meracun selingan" reads as two places doing two
+// different things rather than one plot doing both.
+function labelLines(pid, keys, draft) {
+  if (!isMulti(pid)) return shortNames(draft[keys[0]] || []);
+  return MULTI[pid].areas
+    .map((a) => ({ a, names: shortNames(draft[aKey(pid, a)] || []) }))
+    .filter((x) => x.names.length)
+    .map((x) => `${x.a}: ${x.names.join(' + ')}`);
 }
 
 export default function EntryTab({ db, t, staffName, refresh, flash, nurseryKeys }) {
@@ -237,13 +259,14 @@ export default function EntryTab({ db, t, staffName, refresh, flash, nurseryKeys
             const done = keys.every((k) => tickedToday(db, k));
             // What the plot will be on once the day is saved — the draft, not
             // the log, so an edit shows on the train straight away.
-            const acts = [...new Set(keys.flatMap((k) => draft[k] || []))]
-              .sort((a, b) => a - b)
-              .map((n) => activityByN(n))
-              .filter(Boolean);
+            //
+            // A plot split into areas gets one line per area, named: "A:
+            // Culling", "B: Meracun selingan". Merging them into one list read
+            // as though the whole plot were doing both.
+            const lines = labelLines(pid, keys, draft);
             const c = CAR[st.state];
             return (
-              <button key={pid} onClick={() => setOpen(pid)} title={pid} className="cursor-pointer group">
+              <button key={pid} onClick={() => setOpen(pid)} title={pid} className={`cursor-pointer group ${CELL}`}>
                 <div className={`${CAR_H} flex flex-col items-center justify-end`}>
                   <div className="relative w-[92%] max-w-[86px] sm:max-w-[150px]">
                     {/* roof */}
@@ -280,18 +303,26 @@ export default function EntryTab({ db, t, staffName, refresh, flash, nurseryKeys
                 {/* What this plot is on — readable without opening anything.
                     Centred in the strip so a single activity sits under the
                     wheels rather than clinging to them. */}
-                <div className={`${LABEL_H} px-0.5 flex flex-col items-center justify-center leading-[1.15]`}>
-                  {acts.length === 0 ? (
+                <div
+                  className={`${LABEL_H} flex-1 px-0.5 flex flex-col items-center justify-center leading-[1.15]`}
+                >
+                  {lines.length === 0 ? (
                     <span className="text-[10px] sm:text-[14px] font-bold text-slate-300">—</span>
                   ) : (
-                    acts.map((a) => (
+                    lines.map((line, i) => (
                       <span
-                        key={a.n}
-                        className={`block w-full truncate text-[10px] sm:text-[14px] font-black ${
-                          changed ? 'text-amber-600' : 'text-slate-500'
-                        }`}
+                        key={i}
+                        // An area line carries a letter prefix as well as the
+                        // activity — "B: Meracun selingan" is the longest
+                        // label the train has to fit — so it drops a point on
+                        // a phone and wraps rather than being cut off. The
+                        // label strip grows with it and the rail, pinned to
+                        // the bottom of the cell, stays level across the row.
+                        className={`block w-full break-words sm:text-[14px] font-black ${
+                          isMulti(pid) ? 'text-[9px]' : 'text-[10px]'
+                        } ${changed ? 'text-amber-600' : 'text-slate-500'}`}
                       >
-                        {a.mShort}
+                        {line}
                       </span>
                     ))
                   )}
