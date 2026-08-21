@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ACTIVITIES, INCENTIVE, NURSERIES, activityByN, prettyD, todayStr } from './data.js';
+import { ACTIVITIES, INCENTIVE, NURSERIES, prettyD, todayStr } from './data.js';
 import { buildCullingReport, cullingReportFileName } from './cullingReport.js';
 import {
   FIRST_ACT,
@@ -97,7 +97,6 @@ function ReportDialog({ db, t, nurseryKeys, months, initial, staffName, onClose 
       nursery: nursery === 'all' ? t('pm.allNurseries') : NURSERIES[nursery].label,
       month: month ? monthLabel(month) : t('ms.allMonths'),
       targetDays: TARGET_DAYS,
-      runLabel: `${activityByN(CULL_FROM).name} - ${activityByN(CULL_TO).name}`,
       printedOn: todayStr(),
       by: by.trim(),
     };
@@ -372,38 +371,29 @@ export default function MotionTab({ db, t, nurseryKeys, staffName }) {
               question it does not have. Culling Duration is one fixed run, so
               it picks nothing at all. */}
           {/* The eleven activities as tiles, the way the Monitoring Board's
-              stage flow reads: a row of buttons carrying their own figure,
-              rather than a dropdown you have to open to see what is there.
-              Each tile shows that activity's average, so the slow stages are
-              visible before you pick one. */}
+              stage flow reads: a row of buttons rather than a dropdown you
+              have to open to see what is in it. Names only — the figures for
+              whichever one is picked are in the three cards below, and
+              repeating them on every tile said the same thing twice. */}
           {view === 'act' && (
             <div className="-mx-4 sm:-mx-6 overflow-x-auto px-4 sm:px-6">
               <div className="flex gap-2 min-w-[760px]">
                 {ACTIVITIES.map((a) => {
-                  const st = rows.find((r) => r.act.n === a.n).stats;
                   const on = act === a.n;
                   return (
                     <button
                       key={a.n}
                       onClick={() => setAct(a.n)}
-                      className={`flex-1 px-1.5 py-2.5 text-center rounded-xl border-2 transition-all cursor-pointer hover:-translate-y-0.5 ${
+                      className={`flex-1 px-1.5 py-3 text-center rounded-xl border-2 transition-all cursor-pointer hover:-translate-y-0.5 ${
                         on
-                          ? 'bg-emerald-50 border-emerald-500'
-                          : 'bg-slate-50 border-slate-200 hover:border-emerald-400 hover:bg-white'
+                          ? 'bg-emerald-50 border-emerald-500 text-emerald-700'
+                          : 'bg-slate-50 border-slate-200 text-slate-500 hover:border-emerald-400 hover:bg-white'
                       }`}
                     >
-                      <div className="text-[9px] font-black text-slate-500 uppercase tracking-wide leading-tight min-h-[24px]">
+                      {/* 9px, the same as the Monitoring Board's stage flow:
+                          eleven names at 10px no longer fit a laptop row. */}
+                      <div className="text-[9px] font-black uppercase tracking-wide leading-tight">
                         {a.short}
-                      </div>
-                      <div
-                        className={`text-lg font-black tabular-nums ${
-                          on ? 'text-emerald-700' : st ? 'text-slate-800' : 'text-slate-300'
-                        }`}
-                      >
-                        {st ? st.avg : '—'}
-                      </div>
-                      <div className="text-[8px] font-black text-slate-400 uppercase tracking-wider">
-                        {t('ms.days')}
                       </div>
                     </button>
                   );

@@ -3,18 +3,22 @@ import { prettyD } from './data.js';
 
 // The Culling Incentive report — the paper trail behind the speed incentive.
 //
-// Every completed run is listed, not just the ones that earned it: a payout
-// list nobody can check against the runs that missed is a list nobody can
-// argue with, and the near misses are exactly what a supervisor is asked
-// about. Both dates sit on every row for the same reason — a run that started
-// in July and finished in August has to be visibly an August run.
+// Two tables, because two questions get asked of it. The first is the month's
+// work: every plot that ran culling through to transplanting, whether it beat
+// the target or not. The second is the payout: only the runs that earned. A
+// payout list nobody can check against the runs that missed is a list nobody
+// can argue with, so the misses stay on the page — just not on the same table.
 //
-// Letterhead matches the Delivery Order (src/lib/pdf.js) so the two read as
-// documents from the same company.
+// Both dates sit on every row for the same reason: a run that started in July
+// and finished in August has to be visibly an August run.
+//
+// Set in Times, and the letterhead matches the Delivery Order (src/lib/pdf.js)
+// so the two read as documents from the same company.
 
 const CO_NAME = 'MEGA JUTAMAS SDN BHD';
 const CO_BRAND = 'MJM Nursery';
 
+const FONT = 'times';
 const INK = [17, 24, 39];
 const GREY = [85, 85, 85];
 const LIGHT = [229, 231, 235];
@@ -22,29 +26,111 @@ const HEAD_BG = [244, 244, 245];
 const GREEN = [4, 120, 87];
 const RED = [190, 18, 60];
 
-const PAGE_BOTTOM = 276; // last y a row may start on before a new page
+const LEFT = 20;
+const RIGHT = 190;
+const PAGE_BOTTOM = 262; // last y a row may start on before a new page
 
-function tableHead(doc, y) {
+// Every column is centred under its own heading, so a short list of three
+// plots reads as a deliberate block rather than as text pushed to the left of
+// a page-wide table. The column centres are fixed, which is what keeps the
+// tables lined up with each other however many rows each one has.
+const COLS_ALL = [
+  { key: 'no', head: 'No.', x: 27 },
+  { key: 'plot', head: 'Plot', x: 49 },
+  { key: 'start', head: 'Started', x: 81 },
+  { key: 'end', head: 'Finished', x: 115 },
+  { key: 'days', head: 'Days', x: 139 },
+  { key: 'result', head: 'Result', x: 168 },
+];
+const COLS_EARNED = [
+  { key: 'no', head: 'No.', x: 27 },
+  { key: 'plot', head: 'Plot', x: 52 },
+  { key: 'start', head: 'Started', x: 92 },
+  { key: 'end', head: 'Finished', x: 137 },
+  { key: 'days', head: 'Days', x: 175 },
+];
+
+function tableHead(doc, cols, y) {
   doc.setFillColor(...HEAD_BG);
-  doc.rect(20, y, 170, 8.5, 'F');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
+  doc.rect(LEFT, y, RIGHT - LEFT, 8.5, 'F');
+  doc.setFont(FONT, 'bold');
+  doc.setFontSize(9.5);
   doc.setTextColor(...INK);
-  doc.text('#', 23, y + 5.7);
-  doc.text('Plot', 30, y + 5.7);
-  doc.text('Started', 66, y + 5.7);
-  doc.text('Finished', 100, y + 5.7);
-  doc.text('Days', 140, y + 5.7, { align: 'right' });
-  doc.text('Result', 150, y + 5.7);
+  cols.forEach((c) => doc.text(c.head, c.x, y + 5.7, { align: 'center' }));
   doc.setDrawColor(...INK);
   doc.setLineWidth(0.5);
-  doc.line(20, y + 8.5, 190, y + 8.5);
+  doc.line(LEFT, y + 8.5, RIGHT, y + 8.5);
   return y + 14.5;
+}
+
+function sectionTitle(doc, text, y) {
+  doc.setFont(FONT, 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(...INK);
+  doc.text(text, LEFT, y);
+  return y + 6;
+}
+
+// One table. `withResult` is what separates the month's work from the payout:
+// on the payout list every row earned, so a column saying so is noise.
+function drawTable(doc, rows, y, { withResult, empty }) {
+  const cols = withResult ? COLS_ALL : COLS_EARNED;
+  y = tableHead(doc, cols, y);
+  doc.setFont(FONT, 'normal');
+  doc.setFontSize(10);
+
+  if (!rows.length) {
+    doc.setTextColor(...GREY);
+    doc.setFont(FONT, 'italic');
+    doc.text(empty, (LEFT + RIGHT) / 2, y, { align: 'center' });
+    return y + 9;
+  }
+
+  rows.forEach((r, i) => {
+    if (y > PAGE_BOTTOM) {
+      doc.addPage();
+      y = tableHead(doc, cols, 20);
+      doc.setFont(FONT, 'normal');
+      doc.setFontSize(10);
+    }
+    const at = (key) => cols.find((c) => c.key === key).x;
+
+    doc.setTextColor(...INK);
+    doc.setFont(FONT, 'normal');
+    doc.text(String(i + 1), at('no'), y, { align: 'center' });
+    doc.text(r.label, at('plot'), y, { align: 'center' });
+    doc.text(prettyD(r.start), at('start'), y, { align: 'center' });
+    doc.text(prettyD(r.end), at('end'), y, { align: 'center' });
+
+    doc.setFont(FONT, 'bold');
+    doc.setTextColor(...(r.withinTarget ? GREEN : RED));
+    doc.text(String(r.days), at('days'), y, { align: 'center' });
+
+    if (withResult) {
+      // An area that finished in time but is too small to count says so,
+      // rather than silently reading as a miss.
+      const verdict = r.qualified
+        ? 'Earns'
+        : !r.entitled && r.withinTarget
+          ? `Area too small (${r.pct}%)`
+          : '—';
+      doc.setTextColor(...(r.qualified ? GREEN : GREY));
+      doc.setFont(FONT, r.qualified ? 'bold' : 'normal');
+      doc.text(verdict, at('result'), y, { align: 'center' });
+    }
+
+    doc.setDrawColor(...LIGHT);
+    doc.setLineWidth(0.2);
+    doc.line(LEFT, y + 2.5, RIGHT, y + 2.5);
+    y += 7.5;
+  });
+
+  return y;
 }
 
 /**
  * @param runs   rows from incentiveRuns(), fastest first
- * @param scope  { nursery, month, targetDays, runLabel, printedOn, by }
+ * @param scope  { nursery, month, targetDays, printedOn, by }
  */
 export function buildCullingReport(runs, scope) {
   const doc = new jsPDF();
@@ -52,117 +138,82 @@ export function buildCullingReport(runs, scope) {
 
   // ── Letterhead ──
   doc.setTextColor(...INK);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(15);
-  doc.text(CO_NAME, 20, 19);
-  doc.setFontSize(10.5);
+  doc.setFont(FONT, 'bold');
+  doc.setFontSize(16);
+  doc.text(CO_NAME, LEFT, 19);
+  doc.setFontSize(11);
   doc.setTextColor(51, 51, 51);
-  doc.text(CO_BRAND, 20, 25);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(17);
+  doc.text(CO_BRAND, LEFT, 25);
+
+  doc.setFont(FONT, 'bold');
+  doc.setFontSize(18);
   doc.setTextColor(...INK);
-  doc.text('CULLING INCENTIVE', 190, 19, { align: 'right' });
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
+  doc.text('CULLING INCENTIVE', RIGHT, 19, { align: 'right' });
+  doc.setFont(FONT, 'normal');
+  doc.setFontSize(9.5);
   doc.setTextColor(...GREY);
-  doc.text(scope.runLabel, 190, 25.5, { align: 'right' });
-  doc.text('Printed: ' + prettyD(scope.printedOn), 190, 30, { align: 'right' });
+  doc.text('Printed: ' + prettyD(scope.printedOn), RIGHT, 25.5, { align: 'right' });
 
   doc.setDrawColor(...INK);
   doc.setLineWidth(0.8);
-  doc.line(20, 34.5, 190, 34.5);
+  doc.line(LEFT, 30.5, RIGHT, 30.5);
 
   // ── What this report covers ──
   const facts = [
     ['Nursery', scope.nursery],
     ['Period', scope.month],
-    ['Target', `${scope.targetDays} days or fewer`],
+    ['Target', `within ${scope.targetDays} days`],
   ];
-  let y = 44;
+  let y = 40;
   facts.forEach(([k, v]) => {
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
+    doc.setFont(FONT, 'bold');
+    doc.setFontSize(9);
     doc.setTextColor(...GREY);
-    doc.text(k.toUpperCase(), 20, y);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9.5);
+    doc.text(k.toUpperCase(), LEFT, y);
+    doc.setFont(FONT, 'normal');
+    doc.setFontSize(10.5);
     doc.setTextColor(...INK);
-    doc.text(String(v), 70, y);
+    doc.text(String(v), 60, y);
     y += 6;
   });
 
-  // ── Headline ──
-  y += 2;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12);
-  doc.setTextColor(...GREEN);
-  doc.text(`${earned.length} of ${runs.length} runs earned the incentive`, 20, y);
-  y += 8;
-
-  // ── Every run, fastest first ──
-  y = tableHead(doc, y);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-
-  runs.forEach((r, i) => {
-    if (y > PAGE_BOTTOM) {
-      doc.addPage();
-      y = tableHead(doc, 20);
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(9);
-    }
-    doc.setTextColor(...INK);
-    doc.text(String(i + 1), 23, y);
-    doc.text(r.label, 30, y);
-    doc.text(prettyD(r.start), 66, y);
-    doc.text(prettyD(r.end), 100, y);
-
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(...(r.withinTarget ? GREEN : RED));
-    doc.text(String(r.days), 140, y, { align: 'right' });
-
-    // An area that finished in time but is too small to count says so, rather
-    // than silently reading as a miss.
-    const verdict = r.qualified
-      ? 'Earns'
-      : !r.entitled && r.withinTarget
-        ? `Area too small (${r.pct}%)`
-        : '—';
-    doc.setTextColor(...(r.qualified ? GREEN : GREY));
-    doc.setFont('helvetica', r.qualified ? 'bold' : 'normal');
-    doc.text(verdict, 150, y);
-
-    doc.setFont('helvetica', 'normal');
-    doc.setDrawColor(...LIGHT);
-    doc.setLineWidth(0.2);
-    doc.line(20, y + 2.5, 190, y + 2.5);
-    y += 7.5;
+  // ── 1. The month's culling ──
+  y += 6;
+  y = sectionTitle(doc, 'Culling this period', y);
+  y = drawTable(doc, runs, y, {
+    withResult: true,
+    empty: 'No plot finished culling in this period.',
   });
 
-  if (!runs.length) {
-    doc.setTextColor(...GREY);
-    doc.setFont('helvetica', 'italic');
-    doc.text('No run finished in this period.', 23, y);
-    y += 7.5;
+  // ── 2. The payout ──
+  y += 10;
+  if (y > PAGE_BOTTOM - 20) {
+    doc.addPage();
+    y = 24;
   }
+  y = sectionTitle(doc, 'Earned the incentive', y);
+  y = drawTable(doc, earned, y, {
+    withResult: false,
+    empty: 'No run earned the incentive in this period.',
+  });
 
   // ── Who prepared it ──
   // Label, then a gap, then the name on its own line: room for a signature
   // between the two is what makes this a document somebody signs off.
-  y += 12;
+  y += 14;
   if (y > PAGE_BOTTOM) {
     doc.addPage();
     y = 24;
   }
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
+  doc.setFont(FONT, 'bold');
+  doc.setFontSize(9);
   doc.setTextColor(...GREY);
-  doc.text('PREPARED BY', 20, y);
+  doc.text('PREPARED BY', LEFT, y);
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
+  doc.setFont(FONT, 'bold');
+  doc.setFontSize(12);
   doc.setTextColor(...INK);
-  doc.text(scope.by || '—', 20, y + 12);
+  doc.text(scope.by || '—', LEFT, y + 12);
 
   return doc;
 }
