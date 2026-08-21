@@ -197,13 +197,45 @@ export default function MotionTab({ db, t, nurseryKeys, staffName }) {
           {/* By activity picks one activity — a from/until pair asked a
               question it does not have. Culling Duration is one fixed run, so
               it picks nothing at all. */}
+          {/* The eleven activities as tiles, the way the Monitoring Board's
+              stage flow reads: a row of buttons carrying their own figure,
+              rather than a dropdown you have to open to see what is there.
+              Each tile shows that activity's average, so the slow stages are
+              visible before you pick one. */}
           {view === 'act' && (
-            <label className="block min-w-0">
-              <span className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
-                {t('pm.colActivity')}
-              </span>
-              {select(act, setAct)}
-            </label>
+            <div className="-mx-4 sm:-mx-6 overflow-x-auto px-4 sm:px-6">
+              <div className="flex gap-2 min-w-[760px]">
+                {ACTIVITIES.map((a) => {
+                  const st = rows.find((r) => r.act.n === a.n).stats;
+                  const on = act === a.n;
+                  return (
+                    <button
+                      key={a.n}
+                      onClick={() => setAct(a.n)}
+                      className={`flex-1 px-1.5 py-2.5 text-center rounded-xl border-2 transition-all cursor-pointer hover:-translate-y-0.5 ${
+                        on
+                          ? 'bg-emerald-50 border-emerald-500'
+                          : 'bg-slate-50 border-slate-200 hover:border-emerald-400 hover:bg-white'
+                      }`}
+                    >
+                      <div className="text-[9px] font-black text-slate-500 uppercase tracking-wide leading-tight min-h-[24px]">
+                        {a.short}
+                      </div>
+                      <div
+                        className={`text-lg font-black tabular-nums ${
+                          on ? 'text-emerald-700' : st ? 'text-slate-800' : 'text-slate-300'
+                        }`}
+                      >
+                        {st ? st.avg : '—'}
+                      </div>
+                      <div className="text-[8px] font-black text-slate-400 uppercase tracking-wider">
+                        {t('ms.days')}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           )}
           {view === 'plot' && (
             <div className="grid grid-cols-2 gap-2">

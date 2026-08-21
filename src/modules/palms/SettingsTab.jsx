@@ -192,23 +192,20 @@ export default function SettingsTab({ t, flash }) {
   }
 
   const MENU = [
-    ['areas', t('set.areasTitle'), t('set.areasLead')],
-    ['attn', t('set.attnTitle'), t('set.attnLead')],
+    ['areas', t('set.areasTitle')],
+    ['attn', t('set.attnTitle')],
   ];
 
   if (!section) {
     return (
       <>
-        {MENU.map(([id, title, lead]) => (
+        {MENU.map(([id, title]) => (
           <button
             key={id}
             onClick={() => setSection(id)}
             className="w-full text-left bg-white rounded-2xl border-2 border-slate-200 hover:border-emerald-400 shadow-[0_4px_16px_rgba(0,0,0,.06)] px-4 sm:px-6 py-4 sm:py-5 transition-all hover:-translate-y-0.5 cursor-pointer flex items-center gap-3"
           >
-            <span className="flex-1 min-w-0">
-              <span className="block text-[13px] font-black text-slate-800">{title}</span>
-              <span className="block text-[11px] font-semibold text-slate-400 mt-0.5">{lead}</span>
-            </span>
+            <span className="flex-1 min-w-0 text-[13px] font-black text-slate-800">{title}</span>
             <span className="shrink-0 text-slate-300 text-xl font-black">›</span>
           </button>
         ))}

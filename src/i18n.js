@@ -232,8 +232,7 @@ const en = {
 
   // settings
   'set.title': 'Settings',
-  'set.areasTitle': 'Plot areas',
-  'set.areasLead': 'Split a plot into areas by drawing the dividing line on the plot itself. Each area\u2019s share is measured from your drawing.',
+  'set.areasTitle': 'Plot Area Allocation',
   'set.drawHint': 'Drag a line on the plot where the ground divides — {n} more to draw.',
   'set.drawDone': 'Lines drawn. Each area\u2019s share is measured from the drawing.',
   'set.drawNone': 'Choose 2 or more areas to start drawing.',
@@ -264,8 +263,7 @@ const en = {
   'set.mustTotal': 'The shares have to add up to 100%.',
   'set.photoErr': 'That image could not be read.',
   'set.saveFull': 'Could not save — device storage is full. Try a smaller photo.',
-  'set.attnTitle': 'Needs attention',
-  'set.attnLead': 'An activity listed here warns when its days left fall under the number you set. Anything not listed is only ever on schedule or overdue.',
+  'set.attnTitle': 'Early Warning Days',
   'set.attnEmpty': 'No activity warns — plots will only ever be on schedule or overdue.',
   'set.warnUnder': 'warns under',
   'set.daysWord': 'days left',
@@ -755,8 +753,7 @@ const ms = {
 
   // tetapan
   'set.title': 'Tetapan',
-  'set.areasTitle': 'Kawasan plot',
-  'set.areasLead': 'Bahagikan plot dengan melukis garisan pembahagi terus pada plot. Peratus setiap kawasan diukur dari lukisan anda.',
+  'set.areasTitle': 'Pembahagian Kawasan Plot',
   'set.drawHint': 'Lukis garisan pada plot di mana kawasan berpecah — {n} lagi.',
   'set.drawDone': 'Garisan siap dilukis. Peratus setiap kawasan diukur dari lukisan.',
   'set.drawNone': 'Pilih 2 kawasan atau lebih untuk mula melukis.',
@@ -787,8 +784,7 @@ const ms = {
   'set.mustTotal': 'Jumlah peratus mesti 100%.',
   'set.photoErr': 'Gambar itu tidak dapat dibaca.',
   'set.saveFull': 'Gagal simpan — storan peranti penuh. Cuba gambar lebih kecil.',
-  'set.attnTitle': 'Perlu perhatian',
-  'set.attnLead': 'Aktiviti di sini akan beri amaran apabila baki hari kurang daripada nombor yang ditetapkan. Aktiviti lain hanya ikut jadual atau lewat.',
+  'set.attnTitle': 'Hari Amaran Awal',
   'set.attnEmpty': 'Tiada aktiviti beri amaran — plot hanya akan ikut jadual atau lewat.',
   'set.warnUnder': 'amaran bawah',
   'set.daysWord': 'baki hari',
