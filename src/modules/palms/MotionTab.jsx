@@ -23,7 +23,7 @@ import {
 
 function Cell({ v, label, tone }) {
   return (
-    <td className="px-2 py-2 align-top">
+    <td className="px-2 sm:px-4 py-2 sm:py-3 align-top">
       {v == null ? (
         <span className="text-slate-300 font-bold">—</span>
       ) : (
@@ -100,7 +100,7 @@ export default function MotionTab({ db, t, nurseryKeys }) {
     <>
       {/* Header + the two filters: which nursery, and which month the work
           finished in. Only months with a finished measurement are offered. */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-3 flex-wrap">
         <h2 className="font-black text-slate-800 text-[15px]">{t('ms.title')}</h2>
         <div className="flex items-center gap-2 flex-wrap">
           <select
@@ -132,7 +132,7 @@ export default function MotionTab({ db, t, nurseryKeys }) {
 
       {/* Which way the study is cut. By activity answers "how long does
           culling take"; by plot answers "which plots are slow". */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] p-1.5 flex gap-1.5">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] p-1.5 sm:p-2 flex gap-1.5 sm:gap-2">
         {[
           ['act', t('ms.byActivity')],
           ['plot', t('ms.byPlot')],
@@ -163,10 +163,10 @@ export default function MotionTab({ db, t, nurseryKeys }) {
 
       {/* A run of activities — the whole cycle by default */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-100">
+        <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100">
           <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-wide">{t('ms.spanTitle')}</h3>
         </div>
-        <div className="px-4 py-3">
+        <div className="px-4 sm:px-6 py-3 sm:py-4">
           <div className="grid grid-cols-2 gap-2">
             <label className="min-w-0">
               <span className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
@@ -215,7 +215,7 @@ export default function MotionTab({ db, t, nurseryKeys }) {
           trust from the month filter. */}
       {view === 'pay' && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-2 flex-wrap">
+          <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 flex items-center justify-between gap-2 flex-wrap">
             <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-wide">
               {t('ms.incentiveTitle', { d: TARGET_DAYS })}
             </h3>
@@ -224,15 +224,15 @@ export default function MotionTab({ db, t, nurseryKeys }) {
             </span>
           </div>
           {runs.length === 0 ? (
-            <p className="px-4 py-6 text-[12px] font-semibold text-slate-400">{t('ms.spanEmpty')}</p>
+            <p className="px-4 sm:px-6 py-6 text-[12px] font-semibold text-slate-400">{t('ms.spanEmpty')}</p>
           ) : (
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-slate-50 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                  <th className="px-2 py-2.5">Plot</th>
-                  <th className="px-2 py-2.5">{t('ms.started')}</th>
-                  <th className="px-2 py-2.5">{t('ms.finished')}</th>
-                  <th className="px-2 py-2.5">{t('ms.days')}</th>
+                  <th className="px-2 sm:px-4 py-2.5 sm:py-3.5">Plot</th>
+                  <th className="px-2 sm:px-4 py-2.5 sm:py-3.5">{t('ms.started')}</th>
+                  <th className="px-2 sm:px-4 py-2.5 sm:py-3.5">{t('ms.finished')}</th>
+                  <th className="px-2 sm:px-4 py-2.5 sm:py-3.5">{t('ms.days')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -245,7 +245,7 @@ export default function MotionTab({ db, t, nurseryKeys }) {
                         column: it is the column that matters most, and on a
                         phone a fifth column is the one that falls off the
                         edge. */}
-                    <td className="px-2 py-2">
+                    <td className="px-2 sm:px-4 py-2 sm:py-3">
                       <div className="font-black text-slate-700 text-[12px] leading-tight">{r.label}</div>
                       {r.area && (
                         <div
@@ -264,13 +264,13 @@ export default function MotionTab({ db, t, nurseryKeys }) {
                         </span>
                       ) : null}
                     </td>
-                    <td className="px-2 py-2 text-[11px] font-semibold text-slate-500 whitespace-nowrap">
+                    <td className="px-2 sm:px-4 py-2 sm:py-3 text-[11px] font-semibold text-slate-500 whitespace-nowrap">
                       {prettyD(r.start)}
                     </td>
-                    <td className="px-2 py-2 text-[11px] font-semibold text-slate-500 whitespace-nowrap">
+                    <td className="px-2 sm:px-4 py-2 sm:py-3 text-[11px] font-semibold text-slate-500 whitespace-nowrap">
                       {prettyD(r.end)}
                     </td>
-                    <td className="px-2 py-2">
+                    <td className="px-2 sm:px-4 py-2 sm:py-3">
                       <span
                         // Green inside the target, red outside it: the whole
                         // point of the list is which side of 15 days a run
@@ -287,7 +287,7 @@ export default function MotionTab({ db, t, nurseryKeys }) {
               </tbody>
             </table>
           )}
-          <p className="px-4 py-2.5 text-[10px] font-semibold text-slate-400 border-t border-slate-100">
+          <p className="px-4 sm:px-6 py-2.5 sm:py-3.5 text-[10px] font-semibold text-slate-400 border-t border-slate-100">
             {t('ms.incentiveNote', { d: TARGET_DAYS, p: INCENTIVE.minAreaPct })}
           </p>
         </div>
@@ -296,26 +296,26 @@ export default function MotionTab({ db, t, nurseryKeys }) {
       {/* By plot: the same run, split by plot, slowest first */}
       {view === 'plot' && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-2 flex-wrap">
+          <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 flex items-center justify-between gap-2 flex-wrap">
             <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-wide">{t('ms.perPlotTitle')}</h3>
             <span className="text-[11px] font-bold text-slate-400">{t('ms.slowestFirst')}</span>
           </div>
           {plotRows.length === 0 ? (
-            <p className="px-4 py-6 text-[12px] font-semibold text-slate-400">{t('ms.spanEmpty')}</p>
+            <p className="px-4 sm:px-6 py-6 text-[12px] font-semibold text-slate-400">{t('ms.spanEmpty')}</p>
           ) : (
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-slate-50 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                  <th className="px-2 py-2.5">Plot</th>
-                  <th className="px-2 py-2.5">{t('ms.min')}</th>
-                  <th className="px-2 py-2.5">{t('ms.max')}</th>
-                  <th className="px-2 py-2.5">{t('ms.avg')}</th>
+                  <th className="px-2 sm:px-4 py-2.5 sm:py-3.5">Plot</th>
+                  <th className="px-2 sm:px-4 py-2.5 sm:py-3.5">{t('ms.min')}</th>
+                  <th className="px-2 sm:px-4 py-2.5 sm:py-3.5">{t('ms.max')}</th>
+                  <th className="px-2 sm:px-4 py-2.5 sm:py-3.5">{t('ms.avg')}</th>
                 </tr>
               </thead>
               <tbody>
                 {plotRows.map(({ key, label, stats }) => (
                   <tr key={key} className="border-t border-slate-100">
-                    <td className="px-2 py-2 align-top">
+                    <td className="px-2 sm:px-4 py-2 sm:py-3 align-top">
                       <div className="font-black text-slate-700 text-[12px] leading-tight">{label}</div>
                       <div className="text-[9px] font-bold text-slate-400">{t('ms.cycles', { n: stats.n })}</div>
                     </td>
@@ -333,24 +333,24 @@ export default function MotionTab({ db, t, nurseryKeys }) {
       {/* By activity: each activity on its own, across every plot */}
       {view === 'act' && (
       <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-2 flex-wrap">
+        <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 flex items-center justify-between gap-2 flex-wrap">
           <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-wide">{t('ms.perActTitle')}</h3>
           <span className="text-[11px] font-bold text-slate-400">{t('ms.measured', { n: measured, u: units })}</span>
         </div>
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-slate-50 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">
-              <th className="px-2 py-2.5">{t('pm.colActivity')}</th>
-              <th className="px-2 py-2.5">{t('ms.min')}</th>
-              <th className="px-2 py-2.5">{t('ms.max')}</th>
-              <th className="px-2 py-2.5">{t('ms.avg')}</th>
+              <th className="px-2 sm:px-4 py-2.5 sm:py-3.5">{t('pm.colActivity')}</th>
+              <th className="px-2 sm:px-4 py-2.5 sm:py-3.5">{t('ms.min')}</th>
+              <th className="px-2 sm:px-4 py-2.5 sm:py-3.5">{t('ms.max')}</th>
+              <th className="px-2 sm:px-4 py-2.5 sm:py-3.5">{t('ms.avg')}</th>
               <th className="px-2 py-2.5 hidden sm:table-cell">{t('ms.ideal')}</th>
             </tr>
           </thead>
           <tbody>
             {rows.map(({ act, stats }) => (
               <tr key={act.n} className="border-t border-slate-100">
-                <td className="px-2 py-2 align-top">
+                <td className="px-2 sm:px-4 py-2 sm:py-3 align-top">
                   <div className="font-black text-slate-700 text-[12px] leading-tight">
                     <span className="sm:hidden">{act.mShort}</span>
                     <span className="hidden sm:inline">{act.name}</span>
@@ -362,7 +362,7 @@ export default function MotionTab({ db, t, nurseryKeys }) {
                 <Cell v={stats && stats.min.days} label={stats && stats.min.label} tone="text-emerald-600" />
                 <Cell v={stats && stats.max.days} label={stats && stats.max.label} tone="text-rose-600" />
                 <Cell v={stats && stats.avg} tone="text-slate-800" />
-                <td className="px-2 py-2 align-top hidden sm:table-cell">
+                <td className="px-2 sm:px-4 py-2 sm:py-3 align-top hidden sm:table-cell">
                   <div className="font-black tabular-nums text-[13px] text-slate-400">{act.days}</div>
                 </td>
               </tr>

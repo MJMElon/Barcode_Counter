@@ -34,7 +34,7 @@ export default function CullingTab({ t, staffName, flash, nurseryKeys }) {
   return (
     <>
       {/* Header: title + nursery picker, like the entry tab */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2.5 min-w-0">
           <h2 className="font-black text-slate-800 text-[15px]">{t('cull.title')}</h2>
           <span className="text-[10px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2.5 py-1">
@@ -79,10 +79,10 @@ export default function CullingTab({ t, staffName, flash, nurseryKeys }) {
                 <tr className="bg-slate-50 text-[9px] sm:text-[10px] font-black text-slate-500 uppercase tracking-wide sm:tracking-widest">
                   {/* Transplant and Baki stay in the data (the rate needs
                       them) but are deliberately not shown to the user. */}
-                  <th className="px-1.5 sm:px-3 py-2.5 sm:py-3 text-left">Plot</th>
-                  <th className="px-1 sm:px-3 py-2.5 sm:py-3 text-center">Pokok Inang</th>
-                  <th className="px-1 sm:px-3 py-2.5 sm:py-3 text-center">{t('cull.rate')}</th>
-                  <th className="px-1 sm:px-3 py-2.5 sm:py-3 text-center">{t('cull.action')}</th>
+                  <th className="px-1.5 sm:px-5 py-2.5 sm:py-3.5 text-left">Plot</th>
+                  <th className="px-1 sm:px-5 py-2.5 sm:py-3.5 text-center">Pokok Inang</th>
+                  <th className="px-1 sm:px-5 py-2.5 sm:py-3.5 text-center">{t('cull.rate')}</th>
+                  <th className="px-1 sm:px-5 py-2.5 sm:py-3.5 text-center">{t('cull.action')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -90,10 +90,10 @@ export default function CullingTab({ t, staffName, flash, nurseryKeys }) {
                   const { rate, hot, act, sendTo, sent } = derive(row, reqs, today, t);
                   return (
                     <tr key={row.plot} className="border-t border-slate-100 hover:bg-slate-50/60 transition-colors">
-                      <td className="px-1.5 sm:px-3 py-2.5 align-middle font-black text-slate-800 text-[13px] sm:text-sm">
+                      <td className="px-1.5 sm:px-5 py-2.5 sm:py-3.5 align-middle font-black text-slate-800 text-[13px] sm:text-sm">
                         {row.plot}
                       </td>
-                      <td className="px-1 sm:px-3 py-2.5 align-middle text-center">
+                      <td className="px-1 sm:px-5 py-2.5 sm:py-3.5 align-middle text-center">
                         <button
                           onClick={() => setEditing(idx)}
                           className={`w-full sm:w-auto sm:min-w-[92px] rounded-lg sm:rounded-xl px-1.5 sm:px-3 py-1.5 text-[11px] sm:text-[12px] font-black tabular-nums leading-tight transition-colors cursor-pointer ${
@@ -112,7 +112,7 @@ export default function CullingTab({ t, staffName, flash, nurseryKeys }) {
                           )}
                         </button>
                       </td>
-                      <td className="px-1 sm:px-3 py-2.5 align-middle text-center">
+                      <td className="px-1 sm:px-5 py-2.5 sm:py-3.5 align-middle text-center">
                         <span
                           className={`inline-block sm:min-w-[68px] rounded-full px-1.5 sm:px-2.5 py-1 text-[10px] sm:text-[11px] font-black tabular-nums border ${
                             hot
@@ -123,7 +123,7 @@ export default function CullingTab({ t, staffName, flash, nurseryKeys }) {
                           {fmtPct(rate)}
                         </span>
                       </td>
-                      <td className="px-1 sm:px-3 py-2.5 align-middle text-center">
+                      <td className="px-1 sm:px-5 py-2.5 sm:py-3.5 align-middle text-center">
                         {act}
                         {sendTo &&
                           (sent ? (
@@ -161,7 +161,7 @@ export default function CullingTab({ t, staffName, flash, nurseryKeys }) {
       {/* What has been raised for the Site Auditor */}
       {reqs.length > 0 && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-100">
+          <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100">
             <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-wide">{t('cull.reqTitle')}</h3>
           </div>
           {/* Phone: one stacked line per request, so nothing scrolls sideways */}
@@ -185,23 +185,23 @@ export default function CullingTab({ t, staffName, flash, nurseryKeys }) {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-slate-50 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                  <th className="px-3 py-2">{t('cull.reqDate')}</th>
-                  <th className="px-3 py-2">Plot</th>
-                  <th className="px-3 py-2">{t('cull.reqTo')}</th>
-                  <th className="px-3 py-2">{t('cull.reqPurpose')}</th>
-                  <th className="px-3 py-2">{t('cull.reqBy')}</th>
+                  <th className="px-3 sm:px-5 py-2 sm:py-3">{t('cull.reqDate')}</th>
+                  <th className="px-3 sm:px-5 py-2 sm:py-3">Plot</th>
+                  <th className="px-3 sm:px-5 py-2 sm:py-3">{t('cull.reqTo')}</th>
+                  <th className="px-3 sm:px-5 py-2 sm:py-3">{t('cull.reqPurpose')}</th>
+                  <th className="px-3 sm:px-5 py-2 sm:py-3">{t('cull.reqBy')}</th>
                 </tr>
               </thead>
               <tbody>
                 {reqs.slice(0, 12).map((r) => (
                   <tr key={r.id} className="border-t border-slate-100">
-                    <td className="px-3 py-2 font-semibold text-slate-600">{prettyD(r.at)}</td>
-                    <td className="px-3 py-2 font-black text-slate-800">{r.plot}</td>
-                    <td className="px-3 py-2 font-semibold text-slate-600">
+                    <td className="px-3 sm:px-5 py-2 sm:py-3 font-semibold text-slate-600">{prettyD(r.at)}</td>
+                    <td className="px-3 sm:px-5 py-2 sm:py-3 font-black text-slate-800">{r.plot}</td>
+                    <td className="px-3 sm:px-5 py-2 sm:py-3 font-semibold text-slate-600">
                       {r.to === TO_HQ ? t('cull.toHQ') : t('cull.toAuditor')}
                     </td>
-                    <td className="px-3 py-2 font-semibold text-slate-600">{r.purpose}</td>
-                    <td className="px-3 py-2 font-semibold text-slate-500">{r.by || '—'}</td>
+                    <td className="px-3 sm:px-5 py-2 sm:py-3 font-semibold text-slate-600">{r.purpose}</td>
+                    <td className="px-3 sm:px-5 py-2 sm:py-3 font-semibold text-slate-500">{r.by || '—'}</td>
                   </tr>
                 ))}
               </tbody>

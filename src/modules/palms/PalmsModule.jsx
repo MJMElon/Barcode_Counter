@@ -148,6 +148,8 @@ export default function PalmsModule() {
 
   const stateLabel = (s) => t(`pm.state.${s}`);
 
+  const roomy = tab === 'dash' || tab === 'cull' || tab === 'motion';
+
   const [detail, setDetail] = useState(null); // plot id for the log modal
   const [mapPid, setMapPid] = useState(null); // plot id for the area-map modal
 
@@ -192,7 +194,16 @@ export default function PalmsModule() {
         </div>
       </div>
 
-      <div className="max-w-[1000px] mx-auto px-3 sm:px-6 py-4 space-y-3">
+      {/* The board, the calculator and the study are dense pages of tables;
+          on a laptop they get wider side margins and more air between cards.
+          A phone keeps the tighter figures — the room is not there to give. */}
+      <div
+        className={
+          roomy
+            ? 'max-w-[1000px] mx-auto px-3 sm:px-10 lg:px-14 py-4 sm:py-7 space-y-3 sm:space-y-5'
+            : 'max-w-[1000px] mx-auto px-3 sm:px-6 py-4 space-y-3'
+        }
+      >
         {tab === 'entry' ? (
           <EntryTab db={db} t={t} staffName={staffName} refresh={refresh} flash={flash}
             nurseryKeys={nurseryKeys} />
@@ -291,7 +302,7 @@ function DashTab({ db, t, nurseryKeys, stateLabel, refresh, flash, openDetail, r
   const statCard = (label, value, tone, active, onClick) => (
     <button
       onClick={onClick}
-      className={`flex-1 min-w-[120px] bg-white rounded-2xl border-2 p-3.5 text-left transition-all cursor-pointer hover:-translate-y-0.5 hover:shadow-[0_6px_18px_rgba(0,0,0,.09)] ${
+      className={`flex-1 min-w-[120px] bg-white rounded-2xl border-2 p-3.5 sm:p-5 text-left transition-all cursor-pointer hover:-translate-y-0.5 hover:shadow-[0_6px_18px_rgba(0,0,0,.09)] ${
         active
           ? 'border-emerald-500 shadow-[0_4px_16px_rgba(16,185,129,.15)]'
           : 'border-slate-200 hover:border-emerald-400'
@@ -315,7 +326,7 @@ function DashTab({ db, t, nurseryKeys, stateLabel, refresh, flash, openDetail, r
   return (
     <>
       {/* Header + nursery filter */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h2 className="font-black text-slate-800 text-[15px]">{t('pm.tabDash')}</h2>
           <div className="text-[11px] font-semibold text-slate-400">
@@ -355,7 +366,7 @@ function DashTab({ db, t, nurseryKeys, stateLabel, refresh, flash, openDetail, r
 
       {/* Stage pipeline */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-2 flex-wrap">
+        <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 flex items-center justify-between gap-2 flex-wrap">
           <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
             {t('pm.pipeTitle')}
             <FunnelIcon />
@@ -421,7 +432,7 @@ function DashTab({ db, t, nurseryKeys, stateLabel, refresh, flash, openDetail, r
 
       {/* Status table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-2 flex-wrap">
+        <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 flex items-center justify-between gap-2 flex-wrap">
           <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-wide">{t('pm.statusTitle')}</h3>
           <div className="flex items-center gap-2">
             <span className="text-[11px] font-bold text-slate-400">{t('pm.shown', { n: rows.length })}</span>
@@ -445,11 +456,11 @@ function DashTab({ db, t, nurseryKeys, stateLabel, refresh, flash, openDetail, r
           <table className="w-full text-sm min-w-[640px]">
             <thead>
               <tr className="bg-slate-50 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                <th className="px-3 py-2.5">Plot</th>
-                <th className="px-3 py-2.5">{t('pm.colActivity')}</th>
-                <th className="px-3 py-2.5">Status</th>
-                <th className="px-3 py-2.5">{t('pm.colDays')}</th>
-                <th className="px-3 py-2.5">{t('pm.colEst')}</th>
+                <th className="px-3 sm:px-5 py-2.5 sm:py-3.5">Plot</th>
+                <th className="px-3 sm:px-5 py-2.5 sm:py-3.5">{t('pm.colActivity')}</th>
+                <th className="px-3 sm:px-5 py-2.5 sm:py-3.5">Status</th>
+                <th className="px-3 sm:px-5 py-2.5 sm:py-3.5">{t('pm.colDays')}</th>
+                <th className="px-3 sm:px-5 py-2.5 sm:py-3.5">{t('pm.colEst')}</th>
               </tr>
             </thead>
             <tbody>
@@ -471,7 +482,7 @@ function DashTab({ db, t, nurseryKeys, stateLabel, refresh, flash, openDetail, r
                       onClick={() => openDetail(p)}
                       className="border-t border-slate-100 hover:bg-emerald-50/60 transition-colors cursor-pointer"
                     >
-                      <td className="px-3 py-2.5">
+                      <td className="px-3 sm:px-5 py-2.5 sm:py-3.5">
                         <span className="font-black text-emerald-700">{p}</span>
                         {isMulti(p) && (
                           <span className="ml-1.5 text-[9px] font-black uppercase tracking-wider bg-sky-50 text-sky-700 border border-sky-200 rounded-full px-2 py-0.5 whitespace-nowrap">
@@ -479,8 +490,8 @@ function DashTab({ db, t, nurseryKeys, stateLabel, refresh, flash, openDetail, r
                           </span>
                         )}
                       </td>
-                      <td className="px-3 py-2.5 font-semibold text-slate-600">{effActivityName(db, p)}</td>
-                      <td className="px-3 py-2.5">
+                      <td className="px-3 sm:px-5 py-2.5 sm:py-3.5 font-semibold text-slate-600">{effActivityName(db, p)}</td>
+                      <td className="px-3 sm:px-5 py-2.5 sm:py-3.5">
                         <span
                           className={`inline-block rounded-full px-2.5 py-1 text-[11px] font-black border whitespace-nowrap ${STATE_BADGE[st.state]}`}
                         >
@@ -489,7 +500,7 @@ function DashTab({ db, t, nurseryKeys, stateLabel, refresh, flash, openDetail, r
                       </td>
                       {/* Days left, or days late once past due. The colour says
                           which; the badge beside it says it in words. */}
-                      <td className="px-3 py-2.5 whitespace-nowrap">
+                      <td className="px-3 sm:px-5 py-2.5 sm:py-3.5 whitespace-nowrap">
                         {st.state === 'none' ? (
                           <span className="text-slate-300">—</span>
                         ) : (
@@ -501,7 +512,7 @@ function DashTab({ db, t, nurseryKeys, stateLabel, refresh, flash, openDetail, r
                       {/* When the activity now running is due to finish — not
                           the end of the cycle, which is a different date and
                           was being read as this one. */}
-                      <td className="px-3 py-2.5 font-semibold text-slate-600 whitespace-nowrap">
+                      <td className="px-3 sm:px-5 py-2.5 sm:py-3.5 font-semibold text-slate-600 whitespace-nowrap">
                         {st.due ? prettyD(st.due) : '—'}
                       </td>
                     </tr>
@@ -515,7 +526,7 @@ function DashTab({ db, t, nurseryKeys, stateLabel, refresh, flash, openDetail, r
 
       {/* What was keyed in on a given day */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-2 flex-wrap">
+        <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 flex items-center justify-between gap-2 flex-wrap">
           <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-wide">{t('pm.byDateTitle')}</h3>
           <div className="flex items-center gap-2">
             <input
@@ -535,7 +546,7 @@ function DashTab({ db, t, nurseryKeys, stateLabel, refresh, flash, openDetail, r
             )}
           </div>
         </div>
-        <div className="px-4 py-3">
+        <div className="px-4 sm:px-6 py-3 sm:py-4">
           {!onDate ? (
             <div className="text-[12px] font-semibold text-slate-400">{t('pm.byDateHint')}</div>
           ) : (
@@ -555,23 +566,23 @@ function DashTab({ db, t, nurseryKeys, stateLabel, refresh, flash, openDetail, r
                     <table className="w-full text-sm min-w-[380px]">
                       <thead>
                         <tr className="bg-slate-50 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                          <th className="px-3 py-2">Plot</th>
-                          <th className="px-3 py-2">{t('pm.colActivity')}</th>
-                          <th className="px-3 py-2">{t('pm.colBy')}</th>
+                          <th className="px-3 sm:px-5 py-2 sm:py-3">Plot</th>
+                          <th className="px-3 sm:px-5 py-2 sm:py-3">{t('pm.colActivity')}</th>
+                          <th className="px-3 sm:px-5 py-2 sm:py-3">{t('pm.colBy')}</th>
                         </tr>
                       </thead>
                       <tbody>
                         {rows.map((h, i) => (
                           <tr key={`${h.key}-${i}`} className="border-t border-slate-100">
-                            <td className="px-3 py-2 font-black text-slate-800">{keyLabel(h.key)}</td>
-                            <td className="px-3 py-2 font-semibold text-slate-600">
+                            <td className="px-3 sm:px-5 py-2 sm:py-3 font-black text-slate-800">{keyLabel(h.key)}</td>
+                            <td className="px-3 sm:px-5 py-2 sm:py-3 font-semibold text-slate-600">
                               {historyActs(h)
                                 .map((n) => activityByN(n))
                                 .filter(Boolean)
                                 .map((a) => a.name)
                                 .join(' + ') || '—'}
                             </td>
-                            <td className="px-3 py-2 font-semibold text-slate-500">{h.by || '—'}</td>
+                            <td className="px-3 sm:px-5 py-2 sm:py-3 font-semibold text-slate-500">{h.by || '—'}</td>
                           </tr>
                         ))}
                       </tbody>
