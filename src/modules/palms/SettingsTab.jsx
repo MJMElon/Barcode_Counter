@@ -166,6 +166,18 @@ export default function SettingsTab({ t, flash }) {
     commitRules(rules.filter((_, idx) => idx !== i));
   }
 
+  /* ---- smallest area that earns the incentive ---- */
+  function commitMinArea(v) {
+    const n = v === '' ? '' : Math.max(0, Math.min(100, Number(v)));
+    const next = { ...settings, minArea: n === '' ? 0 : n };
+    if (!saveSettings(next)) {
+      flash(t('set.saveFull'));
+      return;
+    }
+    applySettings(next);
+    setSettings(next);
+  }
+
   function resetAll() {
     const d = defaultSettings();
     saveSettings(d);
@@ -324,6 +336,27 @@ export default function SettingsTab({ t, flash }) {
               ))}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* ---------------- incentive: smallest area that counts ----------------
+          Sits under the area editor because it is a rule about the shares set
+          just above it. */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-100">
+          <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-wide">{t('set.minAreaTitle')}</h3>
+          <p className="text-[11px] font-semibold text-slate-400 mt-0.5">{t('set.minAreaLead')}</p>
+        </div>
+        <div className="px-4 py-3 flex items-center gap-2">
+          <input
+            type="number"
+            min="0"
+            max="100"
+            value={settings.minArea}
+            onChange={(e) => commitMinArea(e.target.value)}
+            className="w-24 bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-800 outline-none focus:border-emerald-500 tabular-nums"
+          />
+          <span className="text-[12px] font-bold text-slate-500">{t('set.minAreaUnit')}</span>
         </div>
       </div>
 

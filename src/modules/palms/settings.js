@@ -36,6 +36,11 @@ export const DEFAULT_MULTI = {
 // or overdue.
 export const DEFAULT_ATTENTION = { 10: 30, 11: 7 };
 
+// An area smaller than this share of its plot does not earn the speed
+// incentive: finishing a sliver quickly is not the same achievement as
+// finishing a full plot quickly. A plot that is not split is always entitled.
+export const DEFAULT_MIN_AREA = 25;
+
 export const AREA_LETTERS = ['A', 'B', 'C', 'D', 'E'];
 
 function clone(v) {
@@ -51,12 +56,18 @@ export function loadSettings() {
         multi: s.multi || clone(DEFAULT_MULTI),
         attention: s.attention || { ...DEFAULT_ATTENTION },
         photos: s.photos || {},
+        minArea: s.minArea == null ? DEFAULT_MIN_AREA : Number(s.minArea),
       };
     }
   } catch (e) {
     /* fall through to defaults */
   }
-  return { multi: clone(DEFAULT_MULTI), attention: { ...DEFAULT_ATTENTION }, photos: {} };
+  return {
+    multi: clone(DEFAULT_MULTI),
+    attention: { ...DEFAULT_ATTENTION },
+    photos: {},
+    minArea: DEFAULT_MIN_AREA,
+  };
 }
 
 // Returns false when the browser refuses the write — photos are the usual
@@ -71,7 +82,12 @@ export function saveSettings(s) {
 }
 
 export function defaultSettings() {
-  return { multi: clone(DEFAULT_MULTI), attention: { ...DEFAULT_ATTENTION }, photos: {} };
+  return {
+    multi: clone(DEFAULT_MULTI),
+    attention: { ...DEFAULT_ATTENTION },
+    photos: {},
+    minArea: DEFAULT_MIN_AREA,
+  };
 }
 
 // Evenly spaced areas are the wrong default: an area worth 30% of the plot

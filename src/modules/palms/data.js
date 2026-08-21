@@ -37,6 +37,8 @@ const STORE_KEY = 'palms_status_v8';
    the change up on its next render. */
 export const MULTI = {};
 export const ATTENTION = {};
+// Incentive rules, hydrated from settings alongside the rest.
+export const INCENTIVE = { minAreaPct: 25 };
 let PHOTOS = {};
 
 export function applySettings(s) {
@@ -49,6 +51,7 @@ export function applySettings(s) {
     ATTENTION[k] = Number(v);
   });
   PHOTOS = s.photos || {};
+  INCENTIVE.minAreaPct = s.minArea == null ? 25 : Number(s.minArea);
 }
 applySettings(loadSettings());
 

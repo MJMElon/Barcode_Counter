@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react';
-import { ACTIVITIES, NURSERIES } from './data.js';
+import { ACTIVITIES, INCENTIVE, NURSERIES, prettyD } from './data.js';
 import {
   FIRST_ACT,
   LAST_ACT,
   idealSpan,
   perActivityStats,
+  TARGET_DAYS,
+  incentiveRuns,
   monthsWithData,
   perUnitStats,
   spanStats,
@@ -45,7 +47,8 @@ export default function MotionTab({ db, t, nurseryKeys }) {
   const [nursery, setNursery] = useState('all');
   const [from, setFrom] = useState(FIRST_ACT);
   const [to, setTo] = useState(LAST_ACT);
-  const [view, setView] = useState('act'); // 'act' = by activity, 'plot' = by plot
+  // 'act' = by activity, 'plot' = by plot, 'pay' = who earned the incentive
+  const [view, setView] = useState('act');
   const [month, setMonth] = useState(''); // '' = every month
 
   // "All nurseries" means all the ones this user may see, not every nursery
@@ -55,6 +58,10 @@ export default function MotionTab({ db, t, nurseryKeys }) {
   const span = useMemo(() => spanStats(db, scope, from, to, month), [db, scope, from, to, month]);
   const plotRows = useMemo(
     () => (view === 'plot' ? perUnitStats(db, scope, from, to, month) : []),
+    [view, db, scope, from, to, month]
+  );
+  const runs = useMemo(
+    () => (view === 'pay' ? incentiveRuns(db, scope, from, to, month) : []),
     [view, db, scope, from, to, month]
   );
   const months = useMemo(() => monthsWithData(db, scope), [db, scope]);
@@ -129,11 +136,21 @@ export default function MotionTab({ db, t, nurseryKeys }) {
         {[
           ['act', t('ms.byActivity')],
           ['plot', t('ms.byPlot')],
+          ['pay', t('ms.incentive')],
         ].map(([id, label]) => (
           <button
             key={id}
-            onClick={() => setView(id)}
-            className={`flex-1 rounded-xl px-3 py-2.5 text-[12px] font-black uppercase tracking-wider transition-colors cursor-pointer ${
+            onClick={() => {
+              // The incentive is a rule about one run — Saringan Anak Bibit
+              // through to Transplanting — so opening it lands on that run
+              // rather than on whatever was last being studied.
+              if (id === 'pay' && view !== 'pay') {
+                setFrom(FIRST_ACT);
+                setTo(9);
+              }
+              setView(id);
+            }}
+            className={`flex-1 rounded-xl px-2 py-2.5 text-[11px] sm:text-[12px] font-black uppercase tracking-wider transition-colors cursor-pointer ${
               view === id
                 ? 'bg-emerald-600 text-white'
                 : 'bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-700'
@@ -191,6 +208,87 @@ export default function MotionTab({ db, t, nurseryKeys }) {
           )}
         </div>
       </div>
+
+      {/* Incentive: every completed run listed, fastest first, with both dates
+          on the row. A run that started in July and finished in August is
+          visibly an August run rather than something you have to take on
+          trust from the month filter. */}
+      {view === 'pay' && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-2 flex-wrap">
+            <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-wide">
+              {t('ms.incentiveTitle', { d: TARGET_DAYS })}
+            </h3>
+            <span className="text-[11px] font-black text-emerald-700">
+              {t('ms.qualifiedCount', { n: runs.filter((r) => r.qualified).length, total: runs.length })}
+            </span>
+          </div>
+          {runs.length === 0 ? (
+            <p className="px-4 py-6 text-[12px] font-semibold text-slate-400">{t('ms.spanEmpty')}</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                  <th className="px-2 py-2.5">Plot</th>
+                  <th className="px-2 py-2.5">{t('ms.started')}</th>
+                  <th className="px-2 py-2.5">{t('ms.finished')}</th>
+                  <th className="px-2 py-2.5">{t('ms.days')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {runs.map((r, i) => (
+                  <tr
+                    key={`${r.key}-${r.end}-${i}`}
+                    className={`border-t border-slate-100 ${r.qualified ? 'bg-emerald-50/50' : ''}`}
+                  >
+                    {/* The verdict sits under the plot rather than in a fifth
+                        column: it is the column that matters most, and on a
+                        phone a fifth column is the one that falls off the
+                        edge. */}
+                    <td className="px-2 py-2">
+                      <div className="font-black text-slate-700 text-[12px] leading-tight">{r.label}</div>
+                      {r.area && (
+                        <div
+                          className={`text-[9px] font-bold ${r.entitled ? 'text-slate-400' : 'text-rose-500'}`}
+                        >
+                          {t('ms.areaShare', { p: r.pct })}
+                        </div>
+                      )}
+                      {r.qualified ? (
+                        <span className="inline-block mt-1 rounded-full px-2 py-0.5 text-[10px] font-black border bg-emerald-50 text-emerald-700 border-emerald-200 whitespace-nowrap">
+                          {t('ms.earns')}
+                        </span>
+                      ) : !r.entitled && r.withinTarget ? (
+                        <span className="inline-block mt-1 rounded-full px-2 py-0.5 text-[10px] font-black border bg-rose-50 text-rose-600 border-rose-200 whitespace-nowrap">
+                          {t('ms.tooSmall')}
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="px-2 py-2 text-[11px] font-semibold text-slate-500 whitespace-nowrap">
+                      {prettyD(r.start)}
+                    </td>
+                    <td className="px-2 py-2 text-[11px] font-semibold text-slate-500 whitespace-nowrap">
+                      {prettyD(r.end)}
+                    </td>
+                    <td className="px-2 py-2">
+                      <span
+                        className={`font-black tabular-nums text-[14px] ${
+                          r.withinTarget ? 'text-emerald-600' : 'text-slate-400'
+                        }`}
+                      >
+                        {r.days}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          <p className="px-4 py-2.5 text-[10px] font-semibold text-slate-400 border-t border-slate-100">
+            {t('ms.incentiveNote', { d: TARGET_DAYS, p: INCENTIVE.minAreaPct })}
+          </p>
+        </div>
+      )}
 
       {/* By plot: the same run, split by plot, slowest first */}
       {view === 'plot' && (

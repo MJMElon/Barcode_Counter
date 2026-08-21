@@ -1,4 +1,4 @@
-import { ACTIVITIES, diffDays, keyLabel, nurseryOfPlot } from './data.js';
+import { ACTIVITIES, INCENTIVE, MULTI, diffDays, keyLabel, nurseryOfPlot } from './data.js';
 
 // Motion study — how long each activity actually takes, read off the logs
 // rather than the ideal-day table.
@@ -162,6 +162,42 @@ export function perUnitStats(db, nurseryKey, fromN, toN, month) {
   return Object.keys(by)
     .map((key) => ({ key, label: keyLabel(key), stats: summarise(by[key]) }))
     .sort((a, b) => b.stats.avg - a.stats.avg);
+}
+
+/* ---------- the speed incentive ----------
+   A run finished inside TARGET_DAYS earns it. Fifteen days from Saringan Anak
+   Bibit to Transplanting is the rule this was built for; the run itself is
+   whatever is selected on the page.
+
+   Aggregates cannot answer this. A plot with cycles of 12, 30 and 33 days
+   reports "min 12, avg 25" — you can see somebody once managed 12 days, but
+   not which cycle, not when it finished, and so not whether to pay it. The
+   incentive needs one row per completed run.
+
+   Areas are judged separately, because that is how the work is logged. But an
+   area too small to be a fair test is listed and marked not entitled rather
+   than hidden: an exclusion you cannot see is one you cannot check. */
+export const TARGET_DAYS = 15;
+
+export function incentiveRuns(db, nurseryKey, fromN, toN, month, minAreaPct) {
+  const floor = minAreaPct == null ? INCENTIVE.minAreaPct : minAreaPct;
+  return spanSamples(db, nurseryKey, fromN, toN, month)
+    .map((s) => {
+      const [plot, area] = s.key.split('#');
+      // A whole plot is always entitled; a share is only known for a split one.
+      const pct = area && MULTI[plot] ? Number(MULTI[plot].weights[area]) || 0 : 100;
+      const entitled = pct >= floor;
+      return {
+        ...s,
+        plot,
+        area: area || null,
+        pct,
+        entitled,
+        withinTarget: s.days <= TARGET_DAYS,
+        qualified: entitled && s.days <= TARGET_DAYS,
+      };
+    })
+    .sort((a, b) => a.days - b.days || a.label.localeCompare(b.label));
 }
 
 // The ideal the span is being judged against, for comparison.
