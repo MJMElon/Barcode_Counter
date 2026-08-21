@@ -94,6 +94,12 @@ export default function MaintenanceModule() {
     [visiblePlots]
   );
 
+  // Open on the first nursery rather than on nothing: with no "All" to fall
+  // back to, an empty pick would leave the whole screen blank.
+  useEffect(() => {
+    if (!nursery && nurseryOptions.length) setNursery(nurseryOptions[0]);
+  }, [nurseryOptions, nursery]);
+
   // Records this user may see, then the on-screen filters.
   const visible = useMemo(() => {
     const q = query.toLowerCase().trim();
@@ -244,13 +250,14 @@ export default function MaintenanceModule() {
       <div className="max-w-[900px] mx-auto px-3 sm:px-6 py-4 space-y-3">
         {/* Filters + actions */}
         <div className="flex flex-wrap gap-2">
-          {nurseryOptions.length > 1 && (
+          {/* One nursery at a time. "All" only ever produced a schedule the
+              Field Conductor could not work through as one list. */}
+          {nurseryOptions.length > 0 && (
             <select
               value={nursery}
               onChange={(e) => setNursery(e.target.value)}
               className="bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-700 outline-none focus:border-emerald-500"
             >
-              <option value="">{t('mt.allNurseries')}</option>
               {nurseryOptions.map((n) => (
                 <option key={n}>{n}</option>
               ))}
