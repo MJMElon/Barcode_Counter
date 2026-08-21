@@ -47,9 +47,16 @@ export function cyclesOf(log) {
 }
 
 // Every unit that has anything logged, optionally narrowed to one nursery.
+/**
+ * The units with any history, narrowed to a nursery.
+ * `nurseryKey` is a single key, 'all', or a list of keys — a list is how a
+ * user restricted to some nurseries asks for "all" of the ones they may see.
+ */
 export function unitsOf(db, nurseryKey) {
+  const keys = Array.isArray(nurseryKey) ? nurseryKey : null;
   return Object.keys(db.logs || {}).filter((k) => {
     if (!(db.logs[k] || []).length) return false;
+    if (keys) return keys.includes(nurseryOfPlot(k.split('#')[0]));
     if (!nurseryKey || nurseryKey === 'all') return true;
     return nurseryOfPlot(k.split('#')[0]) === nurseryKey;
   });

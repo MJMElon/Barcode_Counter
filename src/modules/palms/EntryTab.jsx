@@ -139,8 +139,10 @@ function sameSel(a, b) {
   return a.length === b.length && a.every((x, i) => x === b[i]);
 }
 
-export default function EntryTab({ db, t, staffName, refresh, flash }) {
-  const [nursery, setNursery] = useState('BNN');
+export default function EntryTab({ db, t, staffName, refresh, flash, nurseryKeys }) {
+  // Start on the first nursery this user may see, not always BNN — which a
+  // UNN-only Field Conductor is not allowed to open.
+  const [nursery, setNursery] = useState(() => nurseryKeys[0] || 'BNN');
   const [open, setOpen] = useState(null); // plot id shown in the sheet
   const [confirming, setConfirming] = useState(false);
 
@@ -202,7 +204,7 @@ export default function EntryTab({ db, t, staffName, refresh, flash }) {
             onChange={(e) => setNursery(e.target.value)}
             className="bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-800 outline-none focus:border-emerald-500"
           >
-            {Object.keys(NURSERIES).map((k) => (
+            {nurseryKeys.map((k) => (
               <option key={k} value={k}>
                 {NURSERIES[k].label}
               </option>

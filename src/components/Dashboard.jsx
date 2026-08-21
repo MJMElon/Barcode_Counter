@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
-import { canMaintain, canPlotStatus } from '../lib/access.js';
+import { canBarcode, canDo, canMaintain, canPalms, canPlotStatus } from '../lib/access.js';
 import { useLang } from '../context/LanguageContext.jsx';
 import TopNav from './TopNav.jsx';
 import CollectionBoard from './CollectionBoard.jsx';
@@ -10,19 +10,25 @@ export default function Dashboard() {
   const { t } = useLang();
 
   // Order: Scan Barcode Counter first, then Issue Collection DO, Plot Status,
-  // then Maintenance. Plot Status and Maintenance are each hidden for anyone
-  // whose FC Scan Portal User Access has that page switched off. Scan and DO
-  // are unchanged — they are open to everyone who can reach the portal.
+  // Maintenance, PALMS. Every one of them is hidden for anyone whose FC Scan
+  // Portal User Access has that module switched off; someone who has never
+  // been through that screen still sees all five.
   const modules = [
-    { to: '/scan', icon: '📷', tint: 'bg-blue-100', title: t('dash.scanTitle') },
-    { to: '/do', icon: '📋', tint: 'bg-emerald-100', title: t('dash.doTitle') },
+    ...(canBarcode(permissions, 'view')
+      ? [{ to: '/scan', icon: '📷', tint: 'bg-blue-100', title: t('dash.scanTitle') }]
+      : []),
+    ...(canDo(permissions, 'view')
+      ? [{ to: '/do', icon: '📋', tint: 'bg-emerald-100', title: t('dash.doTitle') }]
+      : []),
     ...(canPlotStatus(permissions, 'view')
       ? [{ to: '/plot-status', icon: '🚦', tint: 'bg-amber-100', title: t('dash.plotStatusTitle') }]
       : []),
     ...(canMaintain(permissions, 'view')
       ? [{ to: '/maintenance', icon: '🛠️', tint: 'bg-teal-100', title: t('dash.maintTitle') }]
       : []),
-    { to: '/palms', icon: '🪴', tint: 'bg-violet-100', title: t('dash.palmsTitle') },
+    ...(canPalms(permissions, 'view')
+      ? [{ to: '/palms', icon: '🪴', tint: 'bg-violet-100', title: t('dash.palmsTitle') }]
+      : []),
   ];
 
   return (

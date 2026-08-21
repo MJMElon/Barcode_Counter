@@ -78,11 +78,13 @@ export default function App() {
         path="/scan"
         element={
           <Protected>
-            <ErrorBoundary>
-              <Suspense fallback={<Loading />}>
-                <ScanModule />
-              </Suspense>
-            </ErrorBoundary>
+            <PageGate page="barcode">
+              <ErrorBoundary>
+                <Suspense fallback={<Loading />}>
+                  <ScanModule />
+                </Suspense>
+              </ErrorBoundary>
+            </PageGate>
           </Protected>
         }
       />
@@ -90,11 +92,13 @@ export default function App() {
         path="/do"
         element={
           <Protected>
-            <ErrorBoundary>
-              <Suspense fallback={<Loading />}>
-                <DoModule />
-              </Suspense>
-            </ErrorBoundary>
+            <PageGate page="do">
+              <ErrorBoundary>
+                <Suspense fallback={<Loading />}>
+                  <DoModule />
+                </Suspense>
+              </ErrorBoundary>
+            </PageGate>
           </Protected>
         }
       />
@@ -130,11 +134,13 @@ export default function App() {
         path="/palms"
         element={
           <Protected>
-            <ErrorBoundary>
-              <Suspense fallback={<Loading />}>
-                <PalmsModule />
-              </Suspense>
-            </ErrorBoundary>
+            <PageGate page="palms">
+              <ErrorBoundary>
+                <Suspense fallback={<Loading />}>
+                  <PalmsModule />
+                </Suspense>
+              </ErrorBoundary>
+            </PageGate>
           </Protected>
         }
       />

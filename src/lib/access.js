@@ -17,8 +17,11 @@
  *  - permissions.plot_status_nurseries absent/null → null, meaning ALL
  *  - array → exactly those (an empty array means none)
  *
- * One setting governs both Plot Status and Maintenance, which is how the
- * User Access screen presents it.
+ * One setting governs every nursery-aware screen — Plot Status, Maintenance
+ * and PALMS — which is how the User Access screen presents it. The key still
+ * carries its original plot_status_ name so that access already saved for
+ * people keeps working; renaming it would silently open the portal back up
+ * for everyone who had been narrowed down.
  */
 export function allowedNurseries(permissions) {
   const v = permissions && permissions.plot_status_nurseries;
@@ -28,6 +31,34 @@ export function allowedNurseries(permissions) {
 /** True when this user is restricted to a subset rather than everything. */
 export function isNurseryScoped(permissions) {
   return allowedNurseries(permissions) !== null;
+}
+
+/**
+ * The same nursery is written differently in different places: shared_plots
+ * says "UNN 1", PALMS calls it "UNN1". Compare on letters and digits alone so
+ * one tick on the User Access screen governs both.
+ */
+function nurseryKey(name) {
+  return String(name == null ? '' : name).replace(/[^a-z0-9]/gi, '').toUpperCase();
+}
+
+/** May this user see this nursery, however its name happens to be spelt? */
+export function nurseryAllowed(permissions, name) {
+  const allowed = allowedNurseries(permissions);
+  if (allowed === null) return true;
+  const want = nurseryKey(name);
+  return allowed.some((n) => nurseryKey(n) === want);
+}
+
+/**
+ * Narrow a module's own list of nurseries down to the ones this user may see.
+ * `labelOf` maps an entry to the name to match on, for lists of keys whose
+ * label differs from the key. Returns a new array; the original is untouched.
+ */
+export function visibleNurseries(permissions, list, labelOf) {
+  if (!isNurseryScoped(permissions)) return Array.isArray(list) ? [...list] : [];
+  const name = typeof labelOf === 'function' ? labelOf : (x) => x;
+  return (list || []).filter((item) => nurseryAllowed(permissions, name(item)));
 }
 
 /**
@@ -47,5 +78,8 @@ export function canScan(permissions, page, action) {
   return !!acts[action];
 }
 
-export const canMaintain  = (permissions, action) => canScan(permissions, 'maintenance', action);
+export const canBarcode    = (permissions, action) => canScan(permissions, 'barcode', action);
+export const canDo         = (permissions, action) => canScan(permissions, 'do', action);
+export const canMaintain   = (permissions, action) => canScan(permissions, 'maintenance', action);
 export const canPlotStatus = (permissions, action) => canScan(permissions, 'plot_status', action);
+export const canPalms      = (permissions, action) => canScan(permissions, 'palms', action);

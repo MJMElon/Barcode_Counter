@@ -6,6 +6,7 @@ import SettingsTab from './SettingsTab.jsx';
 import { clearAll, seedDemo } from './demo.js';
 import TopNav from '../../components/TopNav.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { canPalms, visibleNurseries } from '../../lib/access.js';
 import { useLang } from '../../context/LanguageContext.jsx';
 import {
   ACTIVITIES,
@@ -94,7 +95,15 @@ const STATE_BADGE = {
 };
 
 export default function PalmsModule() {
-  const { staffName } = useAuth();
+  const { staffName, permissions } = useAuth();
+  // Which nurseries this person may see, from FC Scan Portal → User Access.
+  // Every tab filters against this one list rather than Object.keys(NURSERIES),
+  // so BNN-only staff never see a UNN plot on any screen. The names are matched
+  // loosely — shared_plots writes "UNN 1" where PALMS says "UNN1".
+  const nurseryKeys = visibleNurseries(permissions, Object.keys(NURSERIES));
+  // Settings is its own tick: it configures the whole module, so it is not
+  // something every Field Conductor should be able to change.
+  const maySetUp = canPalms(permissions, 'settings');
   const { t } = useLang();
 
   // The DB is a plain mutable object persisted to localStorage; a tick
@@ -135,7 +144,7 @@ export default function PalmsModule() {
         subtitle="FC Portal"
         user={staffName}
         back="/dashboard"
-        onSettings={() => setTab(tab === 'set' ? 'entry' : 'set')}
+        onSettings={maySetUp ? () => setTab(tab === 'set' ? 'entry' : 'set') : undefined}
         settingsOn={tab === 'set'}
       />
 
@@ -168,17 +177,19 @@ export default function PalmsModule() {
 
       <div className="max-w-[1000px] mx-auto px-3 sm:px-6 py-4 space-y-3">
         {tab === 'entry' ? (
-          <EntryTab db={db} t={t} staffName={staffName} refresh={refresh} flash={flash} />
+          <EntryTab db={db} t={t} staffName={staffName} refresh={refresh} flash={flash}
+            nurseryKeys={nurseryKeys} />
         ) : tab === 'cull' ? (
-          <CullingTab t={t} staffName={staffName} flash={flash} />
+          <CullingTab t={t} staffName={staffName} flash={flash} nurseryKeys={nurseryKeys} />
         ) : tab === 'motion' ? (
-          <MotionTab db={db} t={t} />
-        ) : tab === 'set' ? (
+          <MotionTab db={db} t={t} nurseryKeys={nurseryKeys} />
+        ) : tab === 'set' && maySetUp ? (
           <SettingsTab t={t} flash={flash} />
         ) : (
           <DashTab
             db={db}
             t={t}
+            nurseryKeys={nurseryKeys}
             stateLabel={stateLabel}
             refresh={refresh}
             flash={flash}
@@ -207,19 +218,19 @@ export default function PalmsModule() {
 }
 
 /* ================= DASHBOARD TAB ================= */
-function DashTab({ db, t, stateLabel, refresh, flash, openDetail, replaceDB }) {
+function DashTab({ db, t, nurseryKeys, stateLabel, refresh, flash, openDetail, replaceDB }) {
   const [fNursery, setFNursery] = useState('all');
   const [filter, setFilter] = useState({ kind: 'all', val: null });
   const [onDate, setOnDate] = useState(''); // '' = no date filter
 
   const plots = useMemo(() => {
-    const ks = fNursery === 'all' ? Object.keys(NURSERIES) : [fNursery];
+    const ks = fNursery === 'all' ? nurseryKeys : [fNursery];
     let ps = [];
     ks.forEach((k) => {
       ps = ps.concat(plotsOf(k));
     });
     return ps;
-  }, [fNursery]);
+  }, [fNursery, nurseryKeys]);
 
   const counts = { total: plots.length, ontrack: 0, soon: 0, overdue: 0, none: 0 };
   plots.forEach((p) => counts[effStatus(db, p).state]++);
@@ -290,7 +301,7 @@ function DashTab({ db, t, stateLabel, refresh, flash, openDetail, replaceDB }) {
           className="bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-800 outline-none focus:border-emerald-500"
         >
           <option value="all">{t('pm.allNurseries')}</option>
-          {Object.keys(NURSERIES).map((k) => (
+          {nurseryKeys.map((k) => (
             <option key={k} value={k}>
               {NURSERIES[k].label}
             </option>

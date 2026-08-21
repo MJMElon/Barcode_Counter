@@ -17,9 +17,9 @@ import { PURPOSE_CULLING, TO_AUDITOR, TO_HQ, addRequest, loadRequests, sentToday
 // Flow: tap Pokok Inang to record amounts — Field Conductor first; a Site
 // Auditor second entry unlocks while the rate stays above 10%; video
 // evidence is requested when even the Auditor amount leaves it above 10%.
-export default function CullingTab({ t, staffName, flash }) {
+export default function CullingTab({ t, staffName, flash, nurseryKeys }) {
   const data = useMemo(() => getSessionData(), []);
-  const [nursery, setNursery] = useState('BNN');
+  const [nursery, setNursery] = useState(() => nurseryKeys[0] || 'BNN');
   const [editing, setEditing] = useState(null); // plot row index in the modal
   const [asking, setAsking] = useState(null); // plot awaiting send confirmation
   const [reqs, setReqs] = useState(() => loadRequests());
@@ -48,7 +48,7 @@ export default function CullingTab({ t, staffName, flash }) {
             onChange={(e) => setNursery(e.target.value)}
             className="bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-800 outline-none focus:border-emerald-500"
           >
-            {Object.keys(CULL_NURSERIES).map((k) => (
+            {nurseryKeys.map((k) => (
               <option key={k} value={k}>
                 {k}
               </option>

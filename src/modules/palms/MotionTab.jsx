@@ -25,14 +25,17 @@ function Cell({ v, label, tone }) {
   );
 }
 
-export default function MotionTab({ db, t }) {
+export default function MotionTab({ db, t, nurseryKeys }) {
   const [nursery, setNursery] = useState('all');
   const [from, setFrom] = useState(FIRST_ACT);
   const [to, setTo] = useState(LAST_ACT);
 
-  const rows = useMemo(() => perActivityStats(db, nursery), [db, nursery]);
-  const span = useMemo(() => spanStats(db, nursery, from, to), [db, nursery, from, to]);
-  const units = useMemo(() => unitsOf(db, nursery).length, [db, nursery]);
+  // "All nurseries" means all the ones this user may see, not every nursery
+  // in the database.
+  const scope = nursery === 'all' ? nurseryKeys : nursery;
+  const rows = useMemo(() => perActivityStats(db, scope), [db, scope]);
+  const span = useMemo(() => spanStats(db, scope, from, to), [db, scope, from, to]);
+  const units = useMemo(() => unitsOf(db, scope).length, [db, scope]);
   const ideal = idealSpan(from, to);
   const measured = rows.reduce((s, r) => s + (r.stats ? r.stats.n : 0), 0);
 
@@ -77,7 +80,7 @@ export default function MotionTab({ db, t }) {
           className="bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-800 outline-none focus:border-emerald-500"
         >
           <option value="all">{t('pm.allNurseries')}</option>
-          {Object.keys(NURSERIES).map((k) => (
+          {nurseryKeys.map((k) => (
             <option key={k} value={k}>
               {NURSERIES[k].label}
             </option>
