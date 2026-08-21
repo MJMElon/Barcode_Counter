@@ -281,7 +281,10 @@ export default function MaintenanceModule() {
 
         {/* The month's schedule, as four blocks of seven days. Tap a job to
             record it against the plots the office asked for. */}
-        {mayRecord && !setup && (
+        {/* Always drawn once the table exists. It used to disappear entirely
+            when a Field Conductor was not allowed to record, which looks
+            exactly like the feature not being there. */}
+        {!setup && (
           <>
             <div className="flex items-baseline justify-between pt-1">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
@@ -289,7 +292,11 @@ export default function MaintenanceModule() {
               </span>
               <span className="text-[11px] font-black text-slate-500">{month}</span>
             </div>
-            {!timelineNursery ? (
+            {!mayRecord ? (
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-4 text-[13px] font-bold text-amber-800">
+                {t('mt.noPermRecord')}
+              </div>
+            ) : !timelineNursery ? (
               <div className="bg-white border border-slate-200 rounded-2xl px-4 py-5 text-center text-[13px] font-bold text-slate-400">
                 {t('mt.pickNursery')}
               </div>
