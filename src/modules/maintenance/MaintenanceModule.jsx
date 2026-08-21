@@ -321,6 +321,14 @@ export default function MaintenanceModule() {
                 {t('mt.noSchedule', { nursery: timelineNurseries.join(', '), month })}
               </div>
             ) : (
+              <>
+                {schedule.some((r) => r.carried) && (
+                  <div className="bg-sky-50 border border-sky-200 rounded-xl px-3.5 py-2.5 text-[11px] font-bold text-sky-800">
+                    {t('mt.carriedFrom', {
+                      month: [...new Set(schedule.filter((r) => r.carried).map((r) => r.month))].join(', '),
+                    })}
+                  </div>
+                )}
               <Timeline
                 month={month}
                 currentWeek={currentWeek}
@@ -328,6 +336,7 @@ export default function MaintenanceModule() {
                 doneCounts={doneCounts}
                 onOpen={(week, workType) => setSheet({ week, workType })}
               />
+              </>
             )}
           </>
         )}

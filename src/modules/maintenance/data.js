@@ -4,6 +4,7 @@
 import { supabase } from '../../lib/supabase.js';
 import { sortRecords, workTypeByKey } from './helpers.js';
 import { batchesByPlot } from './plotBatches.js';
+import { applicableSchedules } from './schedule.js';
 
 export {
   WORK_TYPES,
@@ -108,16 +109,19 @@ export async function saveRecord({ id, plot, workTypeKey, date, qty, chemical, r
 export async function loadSchedules(nurseryKeys, monthLabel) {
   const keys = (nurseryKeys || []).filter(Boolean);
   if (!keys.length) return [];
+  // Every month this nursery has ever had a plan for, not just this one: the
+  // office carries a plan forward without writing a row until it is saved, so
+  // the applicable month has to be worked out here. There is at most one row
+  // per nursery per month, so this stays small.
   const { data, error } = await supabase
     .from('nops_maint_state')
-    .select('nursery, payload')
-    .in('nursery', keys)
-    .eq('month', monthLabel);
+    .select('nursery, month, payload')
+    .in('nursery', keys);
   if (error) {
     if (isMissingTable(error)) return [];
     throw error;
   }
-  return (data || []).filter((r) => r.payload);
+  return applicableSchedules(data || [], monthLabel);
 }
 
 export async function loadPlotBatches() {

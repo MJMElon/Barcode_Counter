@@ -29,6 +29,39 @@ export function monthLabel(ym) {
   return m ? `${MONTH_ABBR[parseInt(m[2], 10) - 1]} ${m[1]}` : '';
 }
 
+/** "Apr 2026" → a number that sorts, so months can be compared. */
+export function monthRank(lbl) {
+  const m = /^([A-Za-z]{3})\s+(\d{4})$/.exec(String(lbl || '').trim());
+  if (!m) return -1;
+  const idx = MONTH_ABBR.findIndex((x) => x.toLowerCase() === m[1].toLowerCase());
+  return idx < 0 ? -1 : parseInt(m[2], 10) * 12 + idx;
+}
+
+/**
+ * The schedule that applies to a month, per nursery.
+ *
+ * The office page carries the previous month's plan forward on screen and
+ * only writes a row once someone ticks or saves — so a month can look fully
+ * planned in the office and have no row of its own. The field has to see the
+ * same plan the office is looking at, so where this month has no row the most
+ * recent earlier one is used, and said to be carried forward.
+ */
+export function applicableSchedules(rows, monthLbl) {
+  const want = monthRank(monthLbl);
+  const best = new Map();     // nursery → { nursery, payload, month, carried }
+  (rows || []).forEach((r) => {
+    if (!r || !r.payload) return;
+    const rank = monthRank(r.month);
+    if (rank < 0 || rank > want) return;         // never a future month's plan
+    const cur = best.get(r.nursery);
+    if (!cur || monthRank(cur.month) < rank) {
+      best.set(r.nursery, { nursery: r.nursery, payload: r.payload, month: r.month,
+                            carried: rank !== want });
+    }
+  });
+  return [...best.values()];
+}
+
 /** The month a date falls in, in the office's own wording. */
 export function monthLabelOf(dateStr) {
   return monthLabel(String(dateStr || '').slice(0, 7));
