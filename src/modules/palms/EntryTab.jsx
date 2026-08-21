@@ -65,10 +65,14 @@ function Track() {
   );
 }
 
-// The carriage is a fixed height; the label strip below it has a floor but may
-// grow, because a plot split into three areas needs three lines. Every cell in
-// a grid row stretches to the tallest of them and the rail is pinned to the
-// bottom, so the track still runs level however many lines a row carries.
+// A cell reads top to bottom: the activity labels, then the carriage, then the
+// rail. That order is what puts the train ON the track — the label used to sit
+// between the wheels and the rail, holding the carriage up off it.
+//
+// The carriage is a fixed height; the label strip above it has a floor but may
+// grow, because a plot split into three areas needs three lines. It grows
+// upwards, since every cell in a grid row stretches to the tallest of them and
+// the carriage stays anchored to the rail at the bottom.
 const LABEL_H = 'min-h-[32px] sm:min-h-[42px]';
 const CAR_H = 'h-[78px] sm:h-[118px]';
 const CELL = 'flex flex-col h-full';
@@ -78,6 +82,7 @@ const CELL = 'flex flex-col h-full';
 function Locomotive() {
   return (
     <div className={`select-none ${CELL}`}>
+      <div className={`${LABEL_H} flex-1`} />
       <div className={`${CAR_H} flex items-end`}>
         <svg viewBox="0 0 104 78" className="w-full h-full" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
           {/* smoke — three puffs leaving the funnel on a stagger */}
@@ -113,7 +118,6 @@ function Locomotive() {
           <rect x="92" y="64" width="12" height="4" rx="2" fill="#94a3b8" />
         </svg>
       </div>
-      <div className={`${LABEL_H} flex-1`} />
       <Track />
     </div>
   );
@@ -267,6 +271,38 @@ export default function EntryTab({ db, t, staffName, refresh, flash, nurseryKeys
             const c = CAR[st.state];
             return (
               <button key={pid} onClick={() => setOpen(pid)} title={pid} className={`cursor-pointer group ${CELL}`}>
+                {/* What this plot is on — readable without opening anything.
+                    It sits above the carriage and grows upwards, so the wheels
+                    stay on the rail whether a plot shows one line or three. */}
+                <div
+                  className={`${LABEL_H} flex-1 px-0.5 pb-1 flex flex-col items-center justify-end leading-[1.15]`}
+                >
+                  {lines.length === 0 ? (
+                    <span className="text-[10px] sm:text-[14px] font-bold text-slate-300">—</span>
+                  ) : (
+                    // Area lines are left-aligned as one block, centred over
+                    // the carriage. Centring each line on its own left the A:,
+                    // B: and C: prefixes stepping in and out down the column
+                    // instead of stacking. A single line has nothing to align
+                    // against, so it stays centred.
+                    <div className={isMulti(pid) ? 'text-left' : 'text-center'}>
+                      {lines.map((line, i) => (
+                        <span
+                          key={i}
+                          // An area line carries a letter prefix as well as the
+                          // activity — "B: Meracun selingan" is the longest
+                          // label the train has to fit — so it drops a point on
+                          // a phone and wraps rather than being cut off.
+                          className={`block break-words sm:text-[14px] font-black ${
+                            isMulti(pid) ? 'text-[9px]' : 'text-[10px]'
+                          } ${changed ? 'text-amber-600' : 'text-slate-500'}`}
+                        >
+                          {line}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <div className={`${CAR_H} flex flex-col items-center justify-end`}>
                   <div className="relative w-[92%] max-w-[86px] sm:max-w-[150px]">
                     {/* roof */}
@@ -299,40 +335,6 @@ export default function EntryTab({ db, t, staffName, refresh, flash, nurseryKeys
                       </span>
                     )}
                   </div>
-                </div>
-                {/* What this plot is on — readable without opening anything.
-                    Centred in the strip so a single activity sits under the
-                    wheels rather than clinging to them. */}
-                <div
-                  className={`${LABEL_H} flex-1 px-0.5 flex flex-col items-center justify-center leading-[1.15]`}
-                >
-                  {lines.length === 0 ? (
-                    <span className="text-[10px] sm:text-[14px] font-bold text-slate-300">—</span>
-                  ) : (
-                    // Area lines are left-aligned as one block, centred under
-                    // the carriage. Centring each line on its own left the A:,
-                    // B: and C: prefixes stepping in and out down the column
-                    // instead of stacking. A single line has nothing to align
-                    // against, so it stays centred.
-                    <div className={isMulti(pid) ? 'text-left' : 'text-center'}>
-                      {lines.map((line, i) => (
-                        <span
-                          key={i}
-                          // An area line carries a letter prefix as well as the
-                          // activity — "B: Meracun selingan" is the longest
-                          // label the train has to fit — so it drops a point on
-                          // a phone and wraps rather than being cut off. The
-                          // label strip grows with it and the rail, pinned to
-                          // the bottom of the cell, stays level across the row.
-                          className={`block break-words sm:text-[14px] font-black ${
-                            isMulti(pid) ? 'text-[9px]' : 'text-[10px]'
-                          } ${changed ? 'text-amber-600' : 'text-slate-500'}`}
-                        >
-                          {line}
-                        </span>
-                      ))}
-                    </div>
-                  )}
                 </div>
                 <Track />
               </button>
