@@ -5,6 +5,7 @@ import {
   LAST_ACT,
   idealSpan,
   perActivityStats,
+  monthsWithData,
   perUnitStats,
   spanStats,
   unitsOf,
@@ -33,21 +34,30 @@ function Cell({ v, label, tone }) {
   );
 }
 
+// '2026-08' -> 'Aug 2026'. Built from a fixed day so the month never slips
+// across a timezone boundary.
+function monthLabel(m) {
+  const [y, mo] = m.split('-').map(Number);
+  return new Date(y, mo - 1, 15).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+}
+
 export default function MotionTab({ db, t, nurseryKeys }) {
   const [nursery, setNursery] = useState('all');
   const [from, setFrom] = useState(FIRST_ACT);
   const [to, setTo] = useState(LAST_ACT);
   const [view, setView] = useState('act'); // 'act' = by activity, 'plot' = by plot
+  const [month, setMonth] = useState(''); // '' = every month
 
   // "All nurseries" means all the ones this user may see, not every nursery
   // in the database.
   const scope = nursery === 'all' ? nurseryKeys : nursery;
-  const rows = useMemo(() => perActivityStats(db, scope), [db, scope]);
-  const span = useMemo(() => spanStats(db, scope, from, to), [db, scope, from, to]);
+  const rows = useMemo(() => perActivityStats(db, scope, month), [db, scope, month]);
+  const span = useMemo(() => spanStats(db, scope, from, to, month), [db, scope, from, to, month]);
   const plotRows = useMemo(
-    () => (view === 'plot' ? perUnitStats(db, scope, from, to) : []),
-    [view, db, scope, from, to]
+    () => (view === 'plot' ? perUnitStats(db, scope, from, to, month) : []),
+    [view, db, scope, from, to, month]
   );
+  const months = useMemo(() => monthsWithData(db, scope), [db, scope]);
   const units = useMemo(() => unitsOf(db, scope).length, [db, scope]);
   const ideal = idealSpan(from, to);
   const measured = rows.reduce((s, r) => s + (r.stats ? r.stats.n : 0), 0);
@@ -81,24 +91,36 @@ export default function MotionTab({ db, t, nurseryKeys }) {
 
   return (
     <>
-      {/* Header + nursery filter */}
+      {/* Header + the two filters: which nursery, and which month the work
+          finished in. Only months with a finished measurement are offered. */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
-        <div className="min-w-0">
-          <h2 className="font-black text-slate-800 text-[15px]">{t('ms.title')}</h2>
-          <div className="text-[11px] font-semibold text-slate-400">{t('ms.lede')}</div>
+        <h2 className="font-black text-slate-800 text-[15px]">{t('ms.title')}</h2>
+        <div className="flex items-center gap-2 flex-wrap">
+          <select
+            value={nursery}
+            onChange={(e) => setNursery(e.target.value)}
+            className="bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-800 outline-none focus:border-emerald-500"
+          >
+            <option value="all">{t('pm.allNurseries')}</option>
+            {nurseryKeys.map((k) => (
+              <option key={k} value={k}>
+                {NURSERIES[k].label}
+              </option>
+            ))}
+          </select>
+          <select
+            value={months.includes(month) ? month : ''}
+            onChange={(e) => setMonth(e.target.value)}
+            className="bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-800 outline-none focus:border-emerald-500"
+          >
+            <option value="">{t('ms.allMonths')}</option>
+            {months.map((m) => (
+              <option key={m} value={m}>
+                {monthLabel(m)}
+              </option>
+            ))}
+          </select>
         </div>
-        <select
-          value={nursery}
-          onChange={(e) => setNursery(e.target.value)}
-          className="bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-800 outline-none focus:border-emerald-500"
-        >
-          <option value="all">{t('pm.allNurseries')}</option>
-          {nurseryKeys.map((k) => (
-            <option key={k} value={k}>
-              {NURSERIES[k].label}
-            </option>
-          ))}
-        </select>
       </div>
 
       {/* Which way the study is cut. By activity answers "how long does
@@ -126,7 +148,6 @@ export default function MotionTab({ db, t, nurseryKeys }) {
       <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-100">
           <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-wide">{t('ms.spanTitle')}</h3>
-          <p className="text-[11px] font-semibold text-slate-400 mt-0.5">{t('ms.spanHint')}</p>
         </div>
         <div className="px-4 py-3">
           <div className="grid grid-cols-2 gap-2">
@@ -162,7 +183,7 @@ export default function MotionTab({ db, t, nurseryKeys }) {
                 ))}
               </div>
               <p className="text-[11px] font-bold text-slate-500 mt-2.5">
-                {t('ms.spanFoot', { n: span.n, ideal })}
+                {t('ms.spanFoot', { ideal })}
               </p>
             </>
           ) : (
@@ -250,7 +271,6 @@ export default function MotionTab({ db, t, nurseryKeys }) {
       </div>
       )}
 
-      <p className="text-[10px] font-semibold text-slate-400 text-center px-2">{t('ms.foot')}</p>
     </>
   );
 }

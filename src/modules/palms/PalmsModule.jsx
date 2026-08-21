@@ -23,7 +23,6 @@ import {
   currentEntries,
   diffDays,
   effActivityName,
-  effEstEnd,
   effStatus,
   isMulti,
   loadDB,
@@ -443,7 +442,6 @@ function DashTab({ db, t, nurseryKeys, stateLabel, refresh, flash, openDetail, r
               ) : (
                 rows.map((p) => {
                   const st = effStatus(db, p);
-                  const ee = effEstEnd(db, p);
                   return (
                     <tr key={p} className="border-t border-slate-100 hover:bg-slate-50/60 transition-colors">
                       <td className="px-3 py-2.5">
@@ -467,28 +465,22 @@ function DashTab({ db, t, nurseryKeys, stateLabel, refresh, flash, openDetail, r
                           {stateLabel(st.state)}
                         </span>
                       </td>
-                      {/* Days left, or days late once past due — coloured to
-                          match the badge, with the date it is counting to
-                          underneath so the figure has a landing point. That
-                          date is the end of THIS activity; the last column is
-                          the end of the whole cycle. */}
+                      {/* Days left, or days late once past due. The colour says
+                          which; the badge beside it says it in words. */}
                       <td className="px-3 py-2.5 whitespace-nowrap">
                         {st.state === 'none' ? (
                           <span className="text-slate-300">—</span>
                         ) : (
-                          <div className="leading-tight">
-                            <span className={`font-black tabular-nums text-[15px] ${DAYS_TONE[st.state]}`}>
-                              {Math.abs(st.left)}
-                            </span>
-                            <span className="text-[10px] font-bold text-slate-400 ml-1">
-                              {st.state === 'overdue' ? t('pm.dLate') : t('pm.dLeft')}
-                            </span>
-                            <div className="text-[10px] font-bold text-slate-400">{prettyD(st.due)}</div>
-                          </div>
+                          <span className={`font-black tabular-nums text-[15px] ${DAYS_TONE[st.state]}`}>
+                            {Math.abs(st.left)}
+                          </span>
                         )}
                       </td>
+                      {/* When the activity now running is due to finish — not
+                          the end of the cycle, which is a different date and
+                          was being read as this one. */}
                       <td className="px-3 py-2.5 font-semibold text-slate-600 whitespace-nowrap">
-                        {ee ? prettyD(ee) : '—'}
+                        {st.due ? prettyD(st.due) : '—'}
                       </td>
                     </tr>
                   );

@@ -84,8 +84,29 @@ function daysForActivity(cycle, n) {
   return { days, end: parts[parts.length - 1].end };
 }
 
+// A measurement belongs to the month it FINISHED in — that is the month the
+// work was signed off, and it is the only date every measurement has.
+// `month` is 'YYYY-MM', or empty for every month.
+function inMonth(month, date) {
+  return !month || (date || '').slice(0, 7) === month;
+}
+
+// Every month that has at least one finished measurement, newest first, so the
+// picker only ever offers months with something behind them.
+export function monthsWithData(db, nurseryKey) {
+  const set = new Set();
+  unitsOf(db, nurseryKey).forEach((key) => {
+    cyclesOf(db.logs[key]).forEach((cycle) => {
+      cycle.entries.forEach((e) => {
+        if (e.end) set.add(e.end.slice(0, 7));
+      });
+    });
+  });
+  return [...set].sort().reverse();
+}
+
 // Shortest / longest / average days per activity across every cycle logged.
-export function perActivityStats(db, nurseryKey) {
+export function perActivityStats(db, nurseryKey, month) {
   const units = unitsOf(db, nurseryKey);
   const byAct = {};
   ACTIVITIES.forEach((a) => (byAct[a.n] = []));
@@ -94,7 +115,9 @@ export function perActivityStats(db, nurseryKey) {
     cyclesOf(db.logs[key]).forEach((cycle) => {
       ACTIVITIES.forEach((a) => {
         const d = daysForActivity(cycle, a.n);
-        if (d) byAct[a.n].push({ days: d.days, key, label: keyLabel(key), end: d.end });
+        if (d && inMonth(month, d.end)) {
+          byAct[a.n].push({ days: d.days, key, label: keyLabel(key), end: d.end });
+        }
       });
     });
   });
@@ -105,7 +128,7 @@ export function perActivityStats(db, nurseryKey) {
 // Days a run of activities took inside one cycle — first activity's start to
 // last activity's end. Measuring the span is what keeps two activities that
 // ran on the same days from being counted twice.
-function spanSamples(db, nurseryKey, fromN, toN) {
+function spanSamples(db, nurseryKey, fromN, toN, month) {
   const lo = Math.min(fromN, toN);
   const hi = Math.max(fromN, toN);
   const samples = [];
@@ -118,22 +141,22 @@ function spanSamples(db, nurseryKey, fromN, toN) {
       const start = starts.sort()[0];
       const end = ends.sort()[ends.length - 1];
       const days = diffDays(start, end);
-      if (days >= 0) samples.push({ days, key, label: keyLabel(key), start, end });
+      if (days >= 0 && inMonth(month, end)) samples.push({ days, key, label: keyLabel(key), start, end });
     });
   });
 
   return samples;
 }
 
-export function spanStats(db, nurseryKey, fromN, toN) {
-  return summarise(spanSamples(db, nurseryKey, fromN, toN));
+export function spanStats(db, nurseryKey, fromN, toN, month) {
+  return summarise(spanSamples(db, nurseryKey, fromN, toN, month));
 }
 
 // The same run, but split by plot rather than pooled: which plots take longest
 // over it. Slowest first, because that is the list worth acting on.
-export function perUnitStats(db, nurseryKey, fromN, toN) {
+export function perUnitStats(db, nurseryKey, fromN, toN, month) {
   const by = {};
-  spanSamples(db, nurseryKey, fromN, toN).forEach((s) => {
+  spanSamples(db, nurseryKey, fromN, toN, month).forEach((s) => {
     (by[s.key] = by[s.key] || []).push(s);
   });
   return Object.keys(by)
