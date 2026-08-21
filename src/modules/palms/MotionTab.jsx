@@ -272,8 +272,11 @@ export default function MotionTab({ db, t, nurseryKeys }) {
                     </td>
                     <td className="px-2 py-2">
                       <span
+                        // Green inside the target, red outside it: the whole
+                        // point of the list is which side of 15 days a run
+                        // fell, so grey said too little.
                         className={`font-black tabular-nums text-[14px] ${
-                          r.withinTarget ? 'text-emerald-600' : 'text-slate-400'
+                          r.withinTarget ? 'text-emerald-600' : 'text-rose-600'
                         }`}
                       >
                         {r.days}

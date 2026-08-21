@@ -309,22 +309,29 @@ export default function EntryTab({ db, t, staffName, refresh, flash, nurseryKeys
                   {lines.length === 0 ? (
                     <span className="text-[10px] sm:text-[14px] font-bold text-slate-300">—</span>
                   ) : (
-                    lines.map((line, i) => (
-                      <span
-                        key={i}
-                        // An area line carries a letter prefix as well as the
-                        // activity — "B: Meracun selingan" is the longest
-                        // label the train has to fit — so it drops a point on
-                        // a phone and wraps rather than being cut off. The
-                        // label strip grows with it and the rail, pinned to
-                        // the bottom of the cell, stays level across the row.
-                        className={`block w-full break-words sm:text-[14px] font-black ${
-                          isMulti(pid) ? 'text-[9px]' : 'text-[10px]'
-                        } ${changed ? 'text-amber-600' : 'text-slate-500'}`}
-                      >
-                        {line}
-                      </span>
-                    ))
+                    // Area lines are left-aligned as one block, centred under
+                    // the carriage. Centring each line on its own left the A:,
+                    // B: and C: prefixes stepping in and out down the column
+                    // instead of stacking. A single line has nothing to align
+                    // against, so it stays centred.
+                    <div className={isMulti(pid) ? 'text-left' : 'text-center'}>
+                      {lines.map((line, i) => (
+                        <span
+                          key={i}
+                          // An area line carries a letter prefix as well as the
+                          // activity — "B: Meracun selingan" is the longest
+                          // label the train has to fit — so it drops a point on
+                          // a phone and wraps rather than being cut off. The
+                          // label strip grows with it and the rail, pinned to
+                          // the bottom of the cell, stays level across the row.
+                          className={`block break-words sm:text-[14px] font-black ${
+                            isMulti(pid) ? 'text-[9px]' : 'text-[10px]'
+                          } ${changed ? 'text-amber-600' : 'text-slate-500'}`}
+                        >
+                          {line}
+                        </span>
+                      ))}
+                    </div>
                   )}
                 </div>
                 <Track />

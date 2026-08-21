@@ -237,7 +237,11 @@ export default function PalmsModule() {
 /* ================= DASHBOARD TAB ================= */
 function DashTab({ db, t, nurseryKeys, stateLabel, refresh, flash, openDetail, replaceDB }) {
   const [fNursery, setFNursery] = useState('all');
-  const [filter, setFilter] = useState({ kind: 'all', val: null });
+  // Two filters that stack rather than replace one another: "Membesar plots
+  // that need attention" is the question the board could not answer while a
+  // single filter meant picking a stage OR a status.
+  const [fAct, setFAct] = useState(null); // activity number, or null
+  const [fState, setFState] = useState(null); // 'ontrack' | 'soon' | 'overdue', or null
   const [onDate, setOnDate] = useState(''); // '' = no date filter
 
   const plots = useMemo(() => {
@@ -265,21 +269,15 @@ function DashTab({ db, t, nurseryKeys, stateLabel, refresh, flash, openDetail, r
       : currentEntries(db, p).length
   ).length;
 
-  function toggleState(s) {
-    setFilter((f) => (f.kind === 'state' && f.val === s ? { kind: 'all', val: null } : { kind: 'state', val: s }));
-  }
-  function toggleActivity(n) {
-    setFilter((f) =>
-      f.kind === 'activity' && f.val === n ? { kind: 'all', val: null } : { kind: 'activity', val: n }
-    );
-  }
+  const toggleState = (v) => setFState((cur) => (cur === v ? null : v));
+  const toggleActivity = (n) => setFAct((cur) => (cur === n ? null : n));
 
   const nurOrder = { BNN: 0, UNN1: 1, UNN2: 2 };
-  let rows = plots.filter((p) => {
-    if (filter.kind === 'state') return effStatus(db, p).state === filter.val;
-    if (filter.kind === 'activity') return plotInActivity(db, p, filter.val);
-    return true;
-  });
+  let rows = plots.filter(
+    (p) =>
+      (fState == null || effStatus(db, p).state === fState) &&
+      (fAct == null || plotInActivity(db, p, fAct))
+  );
   rows = [...rows].sort((a, b) => {
     const na = nurOrder[nurseryOfPlot(a)],
       nb = nurOrder[nurseryOfPlot(b)];
@@ -328,7 +326,8 @@ function DashTab({ db, t, nurseryKeys, stateLabel, refresh, flash, openDetail, r
           value={fNursery}
           onChange={(e) => {
             setFNursery(e.target.value);
-            setFilter({ kind: 'all', val: null });
+            setFAct(null);
+            setFState(null);
           }}
           className="bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-800 outline-none focus:border-emerald-500"
         >
@@ -341,18 +340,15 @@ function DashTab({ db, t, nurseryKeys, stateLabel, refresh, flash, openDetail, r
         </select>
       </div>
 
-      {/* Stat cards */}
+      {/* Stat cards. Needs attention is not one of them — it is a status like
+          any other, and the Plot Status table below has a status picker that
+          reaches all three without spending a card on one of them. */}
       <div className="flex gap-2.5 flex-wrap">
-        {statCard(t('pm.totalPlots'), counts.total, 'text-slate-800', filter.kind === 'all', () =>
-          setFilter({ kind: 'all', val: null })
-        )}
-        {statCard(stateLabel('overdue'), counts.overdue, 'text-rose-600', filter.kind === 'state' && filter.val === 'overdue', () =>
+        {statCard(t('pm.totalPlots'), counts.total, 'text-slate-800', fState == null, () => setFState(null))}
+        {statCard(stateLabel('overdue'), counts.overdue, 'text-rose-600', fState === 'overdue', () =>
           toggleState('overdue')
         )}
-        {statCard(stateLabel('soon'), counts.soon, 'text-amber-600', filter.kind === 'state' && filter.val === 'soon', () =>
-          toggleState('soon')
-        )}
-        {statCard(stateLabel('ontrack'), counts.ontrack, 'text-emerald-600', filter.kind === 'state' && filter.val === 'ontrack', () =>
+        {statCard(stateLabel('ontrack'), counts.ontrack, 'text-emerald-600', fState === 'ontrack', () =>
           toggleState('ontrack')
         )}
       </div>
@@ -372,7 +368,7 @@ function DashTab({ db, t, nurseryKeys, stateLabel, refresh, flash, openDetail, r
           <div className="flex gap-2 min-w-[760px]">
             {ACTIVITIES.map((a) => {
               const n = stageCounts[a.n];
-              const active = filter.kind === 'activity' && filter.val === a.n;
+              const active = fAct === a.n;
               return (
                 <button
                   key={a.n}
@@ -400,26 +396,50 @@ function DashTab({ db, t, nurseryKeys, stateLabel, refresh, flash, openDetail, r
         </div>
       </div>
 
-      {/* Active filter chip */}
-      {filter.kind !== 'all' && (
-        <div className="text-[12px] font-bold text-slate-500 flex items-center gap-2">
+      {/* Active filters — one chip each, each cleared on its own */}
+      {(fAct != null || fState != null) && (
+        <div className="text-[12px] font-bold text-slate-500 flex items-center gap-2 flex-wrap">
           {t('pm.filter')}
-          <span className="inline-flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-full px-3 py-1">
-            {filter.kind === 'state'
-              ? stateLabel(filter.val)
-              : t('pm.filterActivity', { a: activityByN(filter.val).name })}
-            <button onClick={() => setFilter({ kind: 'all', val: null })} className="font-black cursor-pointer">
-              ✕
-            </button>
-          </span>
+          {fAct != null && (
+            <span className="inline-flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-full px-3 py-1">
+              {t('pm.filterActivity', { a: activityByN(fAct).name })}
+              <button onClick={() => setFAct(null)} className="font-black cursor-pointer">
+                ✕
+              </button>
+            </span>
+          )}
+          {fState != null && (
+            <span className="inline-flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-full px-3 py-1">
+              {stateLabel(fState)}
+              <button onClick={() => setFState(null)} className="font-black cursor-pointer">
+                ✕
+              </button>
+            </span>
+          )}
         </div>
       )}
 
       {/* Status table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-2">
+        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-2 flex-wrap">
           <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-wide">{t('pm.statusTitle')}</h3>
-          <span className="text-[11px] font-bold text-slate-400">{t('pm.shown', { n: rows.length })}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-bold text-slate-400">{t('pm.shown', { n: rows.length })}</span>
+            {/* Narrow the list by status without losing the stage above it —
+                "Membesar plots that need attention" needs both at once. */}
+            <select
+              value={fState || ''}
+              onChange={(e) => setFState(e.target.value || null)}
+              className="bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-[12px] font-bold text-slate-800 outline-none focus:border-emerald-500"
+            >
+              <option value="">{t('pm.allStatus')}</option>
+              {['overdue', 'soon', 'ontrack'].map((k) => (
+                <option key={k} value={k}>
+                  {stateLabel(k)}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[640px]">
@@ -443,14 +463,16 @@ function DashTab({ db, t, nurseryKeys, stateLabel, refresh, flash, openDetail, r
                 rows.map((p) => {
                   const st = effStatus(db, p);
                   return (
-                    <tr key={p} className="border-t border-slate-100 hover:bg-slate-50/60 transition-colors">
+                    /* The whole row opens the plot's log. The plot name was a
+                       small target on a phone, and nothing else in the row did
+                       anything, so the row itself is the button now. */
+                    <tr
+                      key={p}
+                      onClick={() => openDetail(p)}
+                      className="border-t border-slate-100 hover:bg-emerald-50/60 transition-colors cursor-pointer"
+                    >
                       <td className="px-3 py-2.5">
-                        <button
-                          onClick={() => openDetail(p)}
-                          className="font-black text-emerald-700 hover:underline cursor-pointer"
-                        >
-                          {p}
-                        </button>
+                        <span className="font-black text-emerald-700">{p}</span>
                         {isMulti(p) && (
                           <span className="ml-1.5 text-[9px] font-black uppercase tracking-wider bg-sky-50 text-sky-700 border border-sky-200 rounded-full px-2 py-0.5 whitespace-nowrap">
                             {t('pm.multiTag', { n: areasOf(p).length })}
