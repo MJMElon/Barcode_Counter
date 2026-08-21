@@ -3,7 +3,7 @@
 
 import { supabase } from '../../lib/supabase.js';
 import { sortRecords, workTypeByKey } from './helpers.js';
-import { batchesByPlot } from './plotBatches.js';
+import { batchKey, batchesByPlot, plotKey } from './plotBatches.js';
 import { applicableSchedules } from './schedule.js';
 
 export {
@@ -142,7 +142,51 @@ async function fetchAll(buildQuery, pageSize = 1000) {
   return { data: all, error: null };
 }
 
+/**
+ * What is standing in each plot.
+ *
+ * Postgres works this out in shared_plot_batch_balance — see
+ * shared/create_plot_batch_balance.sql in the office repository. That turns
+ * tens of thousands of ledger rows crossing the network into one row per
+ * plot·batch, which is the difference between a phone downloading the whole
+ * nursery's history and asking a question.
+ *
+ * Until that view exists the old way still works, so the app is never
+ * waiting on a migration to be run.
+ */
 export async function loadPlotBatches() {
+  const view = await fetchAll(() => supabase
+    .from('shared_plot_batch_balance')
+    .select('plot_key, plot_name, batch_name, qty')
+    .order('plot_key', { ascending: true }));
+  if (!view.error) return mapFromBalances(view.data || []);
+  // Any trouble with the view at all — not created yet, not granted, renamed —
+  // falls back to the long way rather than leaving a Field Conductor standing
+  // in a plot with no batches to tick. Same figures, just more of them moved.
+  console.warn('[maintenance] plot balance view unavailable, reading the ledger:',
+    view.error.message);
+  return loadPlotBatchesFromLedger();
+}
+
+/** The view's rows in the shape the form already expects. */
+function mapFromBalances(rows) {
+  const out = new Map();
+  for (const r of rows) {
+    const pk = r.plot_key || plotKey(r.plot_name);
+    if (!pk) continue;
+    if (!out.has(pk)) out.set(pk, []);
+    out.get(pk).push({ batch: r.batch_name, qty: Number(r.qty || 0) });
+  }
+  // Ordered by batch number, so the list reads against the office movement
+  // report row for row.
+  out.forEach((list) => list.sort(
+    (a, b) => (parseInt(batchKey(a.batch), 10) || 0) - (parseInt(batchKey(b.batch), 10) || 0)
+  ));
+  return out;
+}
+
+/** The whole ledger, added up here. Only for a database without the view. */
+async function loadPlotBatchesFromLedger() {
   const [logsRes, dosRes] = await Promise.all([
     fetchAll(() => supabase.from('shared_inventory_logs')
       .select('transaction_type, plot_name, batch_name, quantity_change, remark')
