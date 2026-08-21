@@ -142,13 +142,18 @@ export default function MaintenanceModule() {
     return () => { live = false; };
   }, [nurseriesSig, month]);
 
+  // Once, when the module opens. Deliberately NOT re-read after a save:
+  // recording that a plot was sprayed moves no seedlings, so the balances
+  // cannot have changed — and this read pages the entire inventory ledger.
+  // Hanging it off the record count meant a Field Conductor working through
+  // twelve plots read the whole ledger twelve times for no new information.
   useEffect(() => {
     let live = true;
     loadPlotBatches()
       .then((m) => { if (live) setBatchMap(m); })
       .catch(() => { if (live) setBatchMap(new Map()); });
     return () => { live = false; };
-  }, [records.length]);
+  }, []);
 
   // Every week's jobs, and how many of each are already recorded.
   const tasksByWeek = useMemo(
