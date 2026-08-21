@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ACTIVITIES, INCENTIVE, NURSERIES, activityByN, prettyD, todayStr } from './data.js';
 import { buildCullingReport, cullingReportFileName } from './cullingReport.js';
 import {
@@ -48,6 +48,194 @@ function monthLabel(m) {
   return new Date(y, mo - 1, 15).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
 }
 
+/* ================= REPORT DIALOG =================
+   The report is a document somebody signs, so what goes on it is decided
+   here rather than inherited from whatever the page happened to be filtered
+   to: which nursery, which month, who prepared it, and which plots belong on
+   it. Everything is included until it is unticked — a report that starts
+   empty invites a half-filled one. */
+function ReportDialog({ db, t, nurseryKeys, months, initial, staffName, onClose }) {
+  const [nursery, setNursery] = useState(initial.nursery);
+  const [month, setMonth] = useState(initial.month);
+  const [by, setBy] = useState(staffName || '');
+  const [dropped, setDropped] = useState(() => new Set());
+
+  const scope = nursery === 'all' ? nurseryKeys : nursery;
+  const runs = useMemo(
+    () => incentiveRuns(db, scope, CULL_FROM, CULL_TO, month),
+    [db, scope, month]
+  );
+
+  // One row per plot, however many runs it had in the period.
+  const plots = useMemo(() => {
+    const by = new Map();
+    runs.forEach((r) => {
+      const cur = by.get(r.key) || { key: r.key, label: r.label, n: 0, earned: 0 };
+      cur.n += 1;
+      if (r.qualified) cur.earned += 1;
+      by.set(r.key, cur);
+    });
+    return [...by.values()].sort((a, b) => a.label.localeCompare(b.label));
+  }, [runs]);
+
+  // Changing nursery or month changes the list, so start it fully ticked
+  // again rather than carrying exclusions across to different plots.
+  useEffect(() => setDropped(new Set()), [nursery, month]);
+
+  const toggle = (key) =>
+    setDropped((cur) => {
+      const next = new Set(cur);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
+  const kept = runs.filter((r) => !dropped.has(r.key));
+
+  function generate() {
+    const s = {
+      nursery: nursery === 'all' ? t('pm.allNurseries') : NURSERIES[nursery].label,
+      month: month ? monthLabel(month) : t('ms.allMonths'),
+      targetDays: TARGET_DAYS,
+      runLabel: `${activityByN(CULL_FROM).name} - ${activityByN(CULL_TO).name}`,
+      printedOn: todayStr(),
+      by: by.trim(),
+    };
+    buildCullingReport(kept, s).save(cullingReportFileName(s));
+    onClose();
+  }
+
+  const field =
+    'w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-800 outline-none focus:border-emerald-500';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl max-h-[94vh] flex flex-col">
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100">
+          <h3 className="flex-1 font-black text-slate-800 text-[15px]">{t('ms.reportTitle')}</h3>
+          <button
+            onClick={onClose}
+            className="shrink-0 w-8 h-8 rounded-full hover:bg-slate-100 text-slate-500 text-xl leading-none cursor-pointer"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="px-5 py-4 space-y-3 overflow-y-auto flex-1">
+          <div className="grid grid-cols-2 gap-2">
+            <label className="min-w-0">
+              <span className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
+                {t('pm.nursery')}
+              </span>
+              <select value={nursery} onChange={(e) => setNursery(e.target.value)} className={field}>
+                <option value="all">{t('pm.allNurseries')}</option>
+                {nurseryKeys.map((k) => (
+                  <option key={k} value={k}>
+                    {NURSERIES[k].label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="min-w-0">
+              <span className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
+                {t('ms.month')}
+              </span>
+              <select value={month} onChange={(e) => setMonth(e.target.value)} className={field}>
+                <option value="">{t('ms.allMonths')}</option>
+                {months.map((m) => (
+                  <option key={m} value={m}>
+                    {monthLabel(m)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <label className="block">
+            <span className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
+              {t('ms.preparedBy')}
+            </span>
+            <input value={by} onChange={(e) => setBy(e.target.value)} className={field} />
+          </label>
+
+          <div>
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                {t('ms.pickPlots')}
+              </span>
+              <span className="flex items-center gap-2">
+                <button
+                  onClick={() => setDropped(new Set())}
+                  className="text-[10px] font-black uppercase tracking-wider text-emerald-600 hover:underline cursor-pointer"
+                >
+                  {t('ms.selectAll')}
+                </button>
+                <button
+                  onClick={() => setDropped(new Set(plots.map((p) => p.key)))}
+                  className="text-[10px] font-black uppercase tracking-wider text-slate-400 hover:underline cursor-pointer"
+                >
+                  {t('ms.selectNone')}
+                </button>
+              </span>
+            </div>
+
+            {plots.length === 0 ? (
+              <p className="text-[12px] font-semibold text-slate-400 py-3">{t('ms.spanEmpty')}</p>
+            ) : (
+              <div className="border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-[34vh] overflow-y-auto">
+                {plots.map((p) => {
+                  const on = !dropped.has(p.key);
+                  return (
+                    <button
+                      key={p.key}
+                      onClick={() => toggle(p.key)}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 text-left cursor-pointer ${
+                        on ? 'bg-white' : 'bg-slate-50'
+                      }`}
+                    >
+                      <span
+                        className={`shrink-0 w-5 h-5 rounded-md grid place-items-center text-[11px] font-black border-2 ${
+                          on ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-white border-slate-300'
+                        }`}
+                      >
+                        {on ? '✓' : ''}
+                      </span>
+                      <span className={`flex-1 min-w-0 text-[12px] font-black ${on ? 'text-slate-800' : 'text-slate-400'}`}>
+                        {p.label}
+                      </span>
+                      <span className="shrink-0 text-[10px] font-bold text-slate-400">
+                        {t('ms.runsN', { n: p.n })}
+                        {p.earned > 0 && <span className="text-emerald-600"> · {t('ms.earnedN', { n: p.earned })}</span>}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="px-5 py-4 border-t border-slate-100">
+          <p className="text-[11px] font-bold text-slate-500 text-center mb-2">
+            {t('ms.reportCount', {
+              n: kept.length,
+              e: kept.filter((r) => r.qualified).length,
+            })}
+          </p>
+          <button
+            onClick={generate}
+            disabled={!kept.length}
+            className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-black text-[12px] uppercase tracking-widest rounded-xl py-3 cursor-pointer"
+          >
+            {t('ms.generate')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function MotionTab({ db, t, nurseryKeys, staffName }) {
   const [nursery, setNursery] = useState('all');
   const [from, setFrom] = useState(FIRST_ACT);
@@ -56,6 +244,7 @@ export default function MotionTab({ db, t, nurseryKeys, staffName }) {
   const [view, setView] = useState('act');
   const [month, setMonth] = useState(''); // '' = every month
   const [act, setAct] = useState(FIRST_ACT); // the activity the 'act' view is on
+  const [reporting, setReporting] = useState(false);
 
   // "All nurseries" means all the ones this user may see, not every nursery
   // in the database.
@@ -94,21 +283,6 @@ export default function MotionTab({ db, t, nurseryKeys, staffName }) {
     setTo(n);
     if (n < from) setFrom(n);
   };
-
-  // The paper trail behind a payout: the same rows on screen, on letterhead,
-  // with the rules printed underneath so a reader can check them.
-  function makeReport() {
-    const scope = {
-      nursery: nursery === 'all' ? t('pm.allNurseries') : NURSERIES[nursery].label,
-      month: month ? monthLabel(month) : t('ms.allMonths'),
-      targetDays: TARGET_DAYS,
-      minAreaPct: INCENTIVE.minAreaPct,
-      runLabel: `${activityByN(CULL_FROM).name} - ${activityByN(CULL_TO).name}`,
-      printedOn: todayStr(),
-      by: staffName,
-    };
-    buildCullingReport(runs, scope).save(cullingReportFileName(scope));
-  }
 
   const select = (value, onPick) => (
     <select
@@ -296,7 +470,7 @@ export default function MotionTab({ db, t, nurseryKeys, staffName }) {
                 {t('ms.qualifiedCount', { n: runs.filter((r) => r.qualified).length, total: runs.length })}
               </span>
               <button
-                onClick={makeReport}
+                onClick={() => setReporting(true)}
                 className="bg-slate-800 hover:bg-slate-900 text-white text-[11px] font-black uppercase tracking-wider rounded-xl px-3 py-2 cursor-pointer"
               >
                 {t('ms.report')}
@@ -371,6 +545,18 @@ export default function MotionTab({ db, t, nurseryKeys, staffName }) {
             {t('ms.incentiveNote', { d: TARGET_DAYS, p: INCENTIVE.minAreaPct })}
           </p>
         </div>
+      )}
+
+      {reporting && (
+        <ReportDialog
+          db={db}
+          t={t}
+          nurseryKeys={nurseryKeys}
+          months={months}
+          initial={{ nursery, month }}
+          staffName={staffName}
+          onClose={() => setReporting(false)}
+        />
       )}
 
       {/* By plot: the same run, split by plot, slowest first */}

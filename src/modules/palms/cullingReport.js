@@ -1,7 +1,7 @@
 import { jsPDF } from 'jspdf';
 import { prettyD } from './data.js';
 
-// The Culling Duration report — the paper trail behind the speed incentive.
+// The Culling Incentive report — the paper trail behind the speed incentive.
 //
 // Every completed run is listed, not just the ones that earned it: a payout
 // list nobody can check against the runs that missed is a list nobody can
@@ -14,7 +14,6 @@ import { prettyD } from './data.js';
 
 const CO_NAME = 'MEGA JUTAMAS SDN BHD';
 const CO_BRAND = 'MJM Nursery';
-const CO_ADDR = 'Lot 1180, Bangunan Bei, Krokop 2, Miri, Sarawak, Malaysia';
 
 const INK = [17, 24, 39];
 const GREY = [85, 85, 85];
@@ -45,7 +44,7 @@ function tableHead(doc, y) {
 
 /**
  * @param runs   rows from incentiveRuns(), fastest first
- * @param scope  { nursery, month, targetDays, minAreaPct, runLabel, by }
+ * @param scope  { nursery, month, targetDays, runLabel, printedOn, by }
  */
 export function buildCullingReport(runs, scope) {
   const doc = new jsPDF();
@@ -59,15 +58,10 @@ export function buildCullingReport(runs, scope) {
   doc.setFontSize(10.5);
   doc.setTextColor(51, 51, 51);
   doc.text(CO_BRAND, 20, 25);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
-  doc.setTextColor(...GREY);
-  doc.text(CO_ADDR, 20, 30);
-
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(17);
   doc.setTextColor(...INK);
-  doc.text('CULLING DURATION', 190, 19, { align: 'right' });
+  doc.text('CULLING INCENTIVE', 190, 19, { align: 'right' });
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
   doc.setTextColor(...GREY);
@@ -83,7 +77,6 @@ export function buildCullingReport(runs, scope) {
     ['Nursery', scope.nursery],
     ['Period', scope.month],
     ['Target', `${scope.targetDays} days or fewer`],
-    ['Smallest area counted', `${scope.minAreaPct}% of its plot`],
   ];
   let y = 44;
   facts.forEach(([k, v]) => {
@@ -153,26 +146,29 @@ export function buildCullingReport(runs, scope) {
     y += 7.5;
   }
 
-  // ── Footnote: the two rules a reader will want to check ──
-  y += 4;
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
-  doc.setTextColor(...GREY);
-  const note =
-    `A run earns the incentive when it finishes within ${scope.targetDays} days. Areas of a split plot are ` +
-    `judged on their own, but an area under ${scope.minAreaPct}% of its plot does not qualify. A run belongs to ` +
-    'the month it finished in, so one starting in July and finishing in August is an August run.';
-  doc.text(doc.splitTextToSize(note, 170), 20, y);
-
-  y += 14;
+  // ── Who prepared it ──
+  // Label, then a gap, then the name on its own line: room for a signature
+  // between the two is what makes this a document somebody signs off.
+  y += 12;
+  if (y > PAGE_BOTTOM) {
+    doc.addPage();
+    y = 24;
+  }
+  doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
-  doc.text(`Prepared by ${scope.by || '—'}`, 20, y);
+  doc.setTextColor(...GREY);
+  doc.text('PREPARED BY', 20, y);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(...INK);
+  doc.text(scope.by || '—', 20, y + 12);
 
   return doc;
 }
 
 export function cullingReportFileName(scope) {
-  const bits = ['culling-duration', scope.nursery, scope.month]
+  const bits = ['culling-incentive', scope.nursery, scope.month]
     .join('-')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
