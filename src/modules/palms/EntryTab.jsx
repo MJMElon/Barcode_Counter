@@ -74,7 +74,11 @@ function Track() {
 // upwards, since every cell in a grid row stretches to the tallest of them and
 // the carriage stays anchored to the rail at the bottom.
 const LABEL_H = 'min-h-[32px] sm:min-h-[42px]';
-const CAR_H = 'h-[78px] sm:h-[118px]';
+// Exactly as tall as a carriage: roof + body + the wheels showing below it
+// (10+42+13 on a phone, 16+66+19 on a laptop). It used to be taller than the
+// thing it held, and since the carriage is anchored to the rail at the bottom,
+// that surplus opened as a gap between the roof and the label above it.
+const CAR_H = 'h-[65px] sm:h-[101px]';
 const CELL = 'flex flex-col h-full';
 
 // Cartoon locomotive at the head of the train. Decorative; only the smoke
@@ -330,7 +334,10 @@ export default function EntryTab({ db, t, staffName, refresh, flash, nurseryKeys
                     </div>
                     {/* edited-today / done / multi-area badge */}
                     {(changed || done || isMulti(pid)) && (
-                      <span className="absolute -top-2 -right-1 text-[10px] sm:text-[13px] leading-none bg-white rounded-full px-1.5 py-1 shadow-sm border border-slate-200">
+                      // On the carriage, not above it: the label now sits
+                      // right on the roof, and a badge hanging over the top
+                      // landed in the middle of it.
+                      <span className="absolute top-0 -right-1 text-[10px] sm:text-[13px] leading-none bg-white rounded-full px-1.5 py-1 shadow-sm border border-slate-200">
                         {changed ? '✏️' : done ? '✅' : `${MULTI[pid].areas.length}⬦`}
                       </span>
                     )}
