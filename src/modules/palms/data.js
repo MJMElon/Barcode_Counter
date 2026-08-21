@@ -55,16 +55,23 @@ export function applySettings(s) {
 }
 applySettings(loadSettings());
 
+// Photos that ship with the app, keyed by plot. Filled in at startup by
+// src/plotPhotos.js, which reads the src/plot-maps folder — a list kept here
+// by hand would be a second thing to remember every time a photo is added.
+// Empty when nothing has registered, which is how a plain Node script can
+// import this module without Vite.
+let SHIPPED_PHOTOS = {};
+export function registerShippedPhotos(map) {
+  SHIPPED_PHOTOS = map || {};
+}
+
 // A photo of this plot on its own, if there is one. A sharp close-up beats a
 // crop out of the whole-nursery map every time, so it wins when present.
 // Returns null when the plot has neither an upload nor a shipped picture, so
 // callers can fall back to the nursery map.
-const SHIPPED_PHOTOS = new Set(['B1', 'B4', 'U8']);
-
 export function plotPhoto(pid) {
   if (PHOTOS[pid]) return PHOTOS[pid];
-  if (SHIPPED_PHOTOS.has(pid)) return './maps/' + pid.toLowerCase() + '.jpeg';
-  return null;
+  return SHIPPED_PHOTOS[pid] || null;
 }
 
 // Older name, kept for the legacy band rendering.

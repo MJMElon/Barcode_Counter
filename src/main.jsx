@@ -6,6 +6,8 @@ import { AuthProvider } from './context/AuthContext.jsx';
 import { LanguageProvider } from './context/LanguageContext.jsx';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
 import './index.css';
+// Registers the plot photos in src/plot-maps with the PALMS data layer.
+import './plotPhotos.js';
 
 // HashRouter keeps deep links working on GitHub Pages without server config.
 // Root-level ErrorBoundary ensures any crash above route-level boundaries
