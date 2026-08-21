@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLang } from '../../context/LanguageContext.jsx';
 import { workTypeLabel } from './helpers.js';
 import { batchesIn } from './plotBatches.js';
+import WorkIcon from './WorkIcons.jsx';
 
 /**
  * Recording one job from the schedule.
@@ -53,8 +54,8 @@ export default function WorkSheet({
 
         {/* What and when */}
         <div className="sticky top-0 bg-white border-b border-slate-200 px-5 py-4 flex items-center gap-3">
-          <span className="w-11 h-11 rounded-2xl bg-slate-100 flex items-center justify-center text-2xl shrink-0">
-            {workType.icon}
+          <span className="w-11 h-11 rounded-2xl bg-slate-100 flex items-center justify-center shrink-0">
+            <WorkIcon workKey={workType.key} className="w-7 h-7 text-slate-700" />
           </span>
           <div className="flex-1 min-w-0">
             <h3 className="text-[15px] font-black text-slate-800 leading-tight">

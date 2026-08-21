@@ -1,6 +1,7 @@
 import { useLang } from '../../context/LanguageContext.jsx';
 import { WORK_TYPES, workTypeLabel } from './helpers.js';
 import { WEEKS, weekDates } from './schedule.js';
+import WorkIcon from './WorkIcons.jsx';
 
 /**
  * The month as four blocks of seven days, each showing the four jobs.
@@ -47,7 +48,7 @@ export default function Timeline({ month, currentWeek, counts, doneCounts, onOpe
                     title={workTypeLabel(wt, lang)}
                     className={`relative flex flex-col items-center gap-1 py-3 px-1 transition-colors ${
                       idle ? 'opacity-30 cursor-default' : 'hover:bg-slate-50 active:bg-slate-100'}`}>
-                    <span className="text-2xl leading-none">{wt.icon}</span>
+                    <WorkIcon workKey={wt.key} className="w-7 h-7 text-slate-700" />
                     <span className="text-[9px] font-black uppercase tracking-wider text-slate-500 text-center leading-tight">
                       {workTypeLabel(wt, lang)}
                     </span>

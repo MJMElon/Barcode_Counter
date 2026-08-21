@@ -19,6 +19,7 @@ import {
   workTypeLabel,
 } from './data.js';
 import Timeline from './Timeline.jsx';
+import WorkIcon from './WorkIcons.jsx';
 import WorkSheet from './WorkSheet.jsx';
 import {
   WEEKS,
@@ -382,7 +383,7 @@ export default function MaintenanceModule() {
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="font-black text-slate-800 text-[15px] leading-tight truncate">
-                        {wt ? wt.icon : '🛠️'} {workTypeLabel(wt, lang) || r.jenis || '—'}
+                        {wt ? <WorkIcon workKey={wt.key} className="w-4 h-4 inline-block align-[-2px] mr-1" /> : null}{workTypeLabel(wt, lang) || r.jenis || '—'}
                       </div>
                       <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">
                         📍 {r.plot_name} · {r.nursery_name || '—'}
@@ -493,7 +494,7 @@ function EntrySheet({ record, plots, onClose, onSave, t, lang }) {
                   : 'border-slate-200 bg-white hover:border-slate-300'
               }`}
             >
-              <div className="text-lg leading-none">{w.icon}</div>
+              <WorkIcon workKey={w.key} className="w-6 h-6" />
               <div className="text-[11px] font-black text-slate-700 leading-tight mt-1">
                 {workTypeLabel(w, lang)}
               </div>
