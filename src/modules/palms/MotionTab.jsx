@@ -64,7 +64,7 @@ function monthLabel(m) {
    to: which nursery, which month, who prepared it, and which plots belong on
    it. Everything is included until it is unticked — a report that starts
    empty invites a half-filled one. */
-function ReportDialog({ db, t, nurseryKeys, months, initial, staffName, onClose }) {
+function ReportDialog({ db, t, nurseryKeys, months, initial, staffName, onGenerated, onClose }) {
   const [nursery, setNursery] = useState(initial.nursery);
   const [month, setMonth] = useState(initial.month);
   const [by, setBy] = useState(staffName || '');
@@ -111,6 +111,9 @@ function ReportDialog({ db, t, nurseryKeys, months, initial, staffName, onClose 
       by: by.trim(),
     };
     buildCullingReport(kept, s).save(cullingReportFileName(s));
+    // Tell the page what was just judged, so the list behind this dialog can
+    // show the verdict for that nursery and month — and only that one.
+    onGenerated(`${nursery}|${month}`);
     onClose();
   }
 
@@ -253,6 +256,16 @@ export default function MotionTab({ db, t, nurseryKeys, staffName }) {
   const [act, setAct] = useState(FIRST_ACT); // the activity the 'act' view is on
   const [unit, setUnit] = useState(null); // the plot the 'plot' view is on
   const [reporting, setReporting] = useState(false);
+  // Which nursery and month a report has actually been generated for.
+  //
+  // Earning the incentive is a decision the report makes, not something the
+  // list knows on its own. Until Generate has been pressed nobody has been
+  // paid or refused, so the screen shows the runs and their days and leaves
+  // the verdict blank rather than announcing an outcome no document backs up.
+  // Keyed to the scope that was reported: change nursery or month and the
+  // marks go again, because last month's payout says nothing about this
+  // month's runs.
+  const [reportedFor, setReportedFor] = useState(null);
 
   // "All nurseries" means all the ones this user may see, not every nursery
   // in the database.
@@ -296,6 +309,7 @@ export default function MotionTab({ db, t, nurseryKeys, staffName }) {
     [view, db, scope, month]
   );
   const months = useMemo(() => monthsWithData(db, scope), [db, scope]);
+  const judged = reportedFor === `${nursery}|${month}`;
   const ideal = ACTIVITIES.find((a) => a.n === act).days;
 
   return (
@@ -457,7 +471,7 @@ export default function MotionTab({ db, t, nurseryKeys, staffName }) {
                 {runs.map((r, i) => (
                   <tr
                     key={`${r.key}-${r.end}-${i}`}
-                    className={`border-t border-slate-100 ${r.qualified ? 'bg-emerald-50/50' : ''}`}
+                    className={`border-t border-slate-100 ${judged && r.qualified ? 'bg-emerald-50/50' : ''}`}
                   >
                     {/* The verdict sits under the plot rather than in a fifth
                         column: it is the column that matters most, and on a
@@ -473,16 +487,19 @@ export default function MotionTab({ db, t, nurseryKeys, staffName }) {
                         </div>
                       )}
                       {/* Earned or not, the same tick and cross the report
-                          prints. The area share above already says why a run
-                          inside the target still missed. */}
-                      <span
-                        className={`block mt-0.5 text-[15px] font-black leading-none ${
-                          r.qualified ? 'text-emerald-600' : 'text-rose-500'
-                        }`}
-                        title={r.qualified ? t('ms.earns') : t('ms.notEarned')}
-                      >
-                        {r.qualified ? '✓' : '✗'}
-                      </span>
+                          prints — but only once that report exists. The area
+                          share above already says why a run inside the target
+                          still missed. */}
+                      {judged && (
+                        <span
+                          className={`block mt-0.5 text-[15px] font-black leading-none ${
+                            r.qualified ? 'text-emerald-600' : 'text-rose-500'
+                          }`}
+                          title={r.qualified ? t('ms.earns') : t('ms.notEarned')}
+                        >
+                          {r.qualified ? '✓' : '✗'}
+                        </span>
+                      )}
                     </td>
                     <td className="px-2 sm:px-4 py-2 sm:py-3 text-[11px] font-semibold text-slate-500 whitespace-nowrap">
                       {prettyD(r.start)}
@@ -521,6 +538,7 @@ export default function MotionTab({ db, t, nurseryKeys, staffName }) {
           months={months}
           initial={{ nursery, month }}
           staffName={staffName}
+          onGenerated={setReportedFor}
           onClose={() => setReporting(false)}
         />
       )}
