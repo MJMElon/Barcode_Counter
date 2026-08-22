@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLang } from '../../context/LanguageContext.jsx';
-import { compressImage, dataUrlBytes } from '../../lib/image.js';
 import { workTypeLabel } from './helpers.js';
+import PhotoSlots from './PhotoSlots.jsx';
 import { batchesIn } from './plotBatches.js';
 import WorkIcon from './WorkIcons.jsx';
 
@@ -17,16 +17,6 @@ const taskKey = (x) => `${x ? x.plot : ''}|${(x && x.chemical) || ''}`;
    from the other on a chip the size of a thumb. */
 const shortChemical = (c) => String(c || '').split(/\s*\+\s*/)[0].replace(/\s+[\d.].*$/, '');
 
-const CameraIcon = () => (
-  <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor" aria-hidden="true">
-    <path d="M9.4 4h5.2l1.1 1.8H20a2 2 0 0 1 2 2v10.4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7.8a2 2 0 0 1 2-2h4.3L9.4 4Zm2.6 4.6a4.9 4.9 0 1 0 0 9.8 4.9 4.9 0 0 0 0-9.8Zm0 2a2.9 2.9 0 1 1 0 5.8 2.9 2.9 0 0 1 0-5.8Z" />
-  </svg>
-);
-const UploadIcon = () => (
-  <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor" aria-hidden="true">
-    <path d="M11 15.4V6.8l-2.9 2.9-1.4-1.4L12 3l5.3 5.3-1.4 1.4L13 6.8v8.6h-2ZM4 17h2v2.4h12V17h2v2.4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V17Z" />
-  </svg>
-);
 
 /**
  * Recording one job from the schedule.
@@ -44,11 +34,11 @@ export default function WorkSheet({
   const [plot, setPlot] = useState(null);      // the task being recorded
   const [batches, setBatches] = useState([]);
   const [remark, setRemark] = useState('');
-  const [photos, setPhotos] = useState([]);    // shrunk JPEG data URLs
-  const [busy, setBusy] = useState(false);
-  const [photoErr, setPhotoErr] = useState('');
-  const camRef = useRef(null);
-  const fileRef = useRef(null);
+  // One entry per slot, null where the slot is still empty — so a photo keeps
+  // the numbered place it was taken in rather than shuffling up when an
+  // earlier one is cleared.
+  const [photos, setPhotos] = useState(() => Array(MAX_PHOTOS).fill(null));
+
 
   // Open on the first plot still to do; if they are all done, the first one.
   useEffect(() => {
@@ -56,8 +46,7 @@ export default function WorkSheet({
     setPlot(next);
     setBatches([]);
     setRemark('');
-    setPhotos([]);
-    setPhotoErr('');
+    setPhotos(Array(MAX_PHOTOS).fill(null));
   }, [workType.key, week]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // Plots the schedule asks for twice this week — the pest spray and the
@@ -68,28 +57,7 @@ export default function WorkSheet({
     return twice;
   }, [tasks]);
 
-  const full = photos.length >= MAX_PHOTOS;
-  const photoBytes = useMemo(() => photos.reduce((s, p) => s + dataUrlBytes(p), 0), [photos]);
-
-  async function addPhotos(e) {
-    const picked = [...(e.target.files || [])];
-    e.target.value = '';          // so the same photo can be chosen twice
-    if (!picked.length) return;
-    setBusy(true);
-    setPhotoErr('');
-    const room = MAX_PHOTOS - photos.length;
-    const taken = picked.slice(0, room);
-    const done = [];
-    for (const f of taken) {
-      try { done.push(await compressImage(f)); }
-      catch { setPhotoErr(t('mt.photoFailed')); }
-    }
-    if (picked.length > room) setPhotoErr(t('mt.photoMax', { n: MAX_PHOTOS }));
-    setPhotos((p) => [...p, ...done]);
-    setBusy(false);
-  }
-
-  const dropPhoto = (i) => setPhotos((p) => p.filter((_, j) => j !== i));
+  const taken = photos.filter(Boolean);
 
   const plotBatches = useMemo(
     () => (plot ? batchesIn(batchMap, plot.plot) : []),
@@ -100,9 +68,16 @@ export default function WorkSheet({
     setPlot(task);
     setBatches([]);
     setRemark('');
-    setPhotos([]);
-    setPhotoErr('');
+    setPhotos(Array(MAX_PHOTOS).fill(null));
   }
+
+  // The seedlings worked on ARE the batches ticked, so the quantity is their
+  // sum rather than a second figure that could disagree with the first.
+  const qty = useMemo(
+    () => plotBatches.filter((b) => batches.includes(b.batch))
+                     .reduce((sum, b) => sum + Number(b.qty || 0), 0),
+    [plotBatches, batches]
+  );
 
   const toggleBatch = (name) =>
     setBatches((b) => (b.includes(name) ? b.filter((x) => x !== name) : [...b, name]));
@@ -113,7 +88,7 @@ export default function WorkSheet({
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4"
          onClick={onClose}>
-      <div className="bg-white w-full sm:max-w-lg sm:rounded-3xl rounded-t-3xl max-h-[92vh] overflow-y-auto shadow-2xl"
+      <div className="relative bg-white w-full sm:max-w-lg sm:rounded-3xl rounded-t-3xl max-h-[92vh] overflow-y-auto shadow-2xl"
            onClick={(e) => e.stopPropagation()}>
 
         {/* What and when */}
@@ -216,51 +191,11 @@ export default function WorkSheet({
               )}
             </div>
 
-            {/* Proof the work was done. Shrunk on the phone before it is
-                uploaded — see lib/image.js — so a morning's records cost
-                kilobytes rather than tens of megabytes. */}
+            {/* Proof the work was done. Same numbered slots as the plot audit,
+                and every picture is shrunk before it leaves the phone. */}
             <div>
               <span className={label}>{t('mt.photos', { n: MAX_PHOTOS })}</span>
-              <div className="flex gap-2">
-                <button type="button" disabled={full || busy}
-                  onClick={() => camRef.current && camRef.current.click()}
-                  className="flex-1 rounded-xl border-2 border-slate-200 disabled:opacity-40 py-2.5 text-[12px] font-black uppercase tracking-wider text-slate-600 flex items-center justify-center gap-2">
-                  <CameraIcon /> {t('mt.takePhoto')}
-                </button>
-                <button type="button" disabled={full || busy}
-                  onClick={() => fileRef.current && fileRef.current.click()}
-                  className="flex-1 rounded-xl border-2 border-slate-200 disabled:opacity-40 py-2.5 text-[12px] font-black uppercase tracking-wider text-slate-600 flex items-center justify-center gap-2">
-                  <UploadIcon /> {t('mt.uploadPhoto')}
-                </button>
-              </div>
-              {/* capture= asks for the camera; without it the picker opens. */}
-              <input ref={camRef} type="file" accept="image/*" capture="environment"
-                     multiple className="hidden" onChange={addPhotos} />
-              <input ref={fileRef} type="file" accept="image/*"
-                     multiple className="hidden" onChange={addPhotos} />
-
-              {busy && (
-                <div className="mt-2 text-[11px] font-bold text-slate-400">{t('mt.shrinking')}</div>
-              )}
-              {photoErr && (
-                <div className="mt-2 text-[11px] font-bold text-amber-700">{photoErr}</div>
-              )}
-              {photos.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {photos.map((p, i) => (
-                    <div key={i} className="relative">
-                      <img src={p} alt="" className="w-20 h-20 object-cover rounded-xl border-2 border-slate-200" />
-                      <button type="button" onClick={() => dropPhoto(i)}
-                        className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-slate-800 text-white text-[12px] font-black leading-none">×</button>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {photos.length > 0 && (
-                <div className="mt-1 text-[10px] font-bold text-slate-400">
-                  {t('mt.photoSize', { kb: Math.round(photoBytes / 1024).toLocaleString() })}
-                </div>
-              )}
+              <PhotoSlots value={photos} onChange={setPhotos} max={MAX_PHOTOS} />
             </div>
 
             <div>
@@ -271,8 +206,8 @@ export default function WorkSheet({
             </div>
 
             <button
-              disabled={saving || busy}
-              onClick={() => onSave({ task: plot, batches, remark, photos })}
+              disabled={saving}
+              onClick={() => onSave({ task: plot, batches, remark, photos: taken, qty })}
               className="w-full rounded-2xl bg-emerald-600 disabled:bg-slate-300 text-white font-black uppercase tracking-widest text-[13px] py-3.5">
               {saving ? t('common.saving') : isDone(plot) ? t('mt.saveAgain') : t('mt.save')}
             </button>

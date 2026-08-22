@@ -20,9 +20,11 @@ import {
   workTypeByKey,
   workTypeLabel,
 } from './data.js';
+import PhotoSlots from './PhotoSlots.jsx';
 import Timeline from './Timeline.jsx';
 import WorkIcon from './WorkIcons.jsx';
 import WorkSheet from './WorkSheet.jsx';
+import { batchesIn } from './plotBatches.js';
 import {
   WEEKS,
   isDone as isJobDone,
@@ -36,6 +38,9 @@ import {
    the same nurseries as "BNN" / "UNN 1" / "UNN 2". Compare on letters and
    digits alone so one is found from the other. */
 const nurseryKey = (name) => String(name || '').replace(/[^a-z0-9]/gi, '').toUpperCase();
+
+/** Matches the work sheet: three photos is enough to show a job was done. */
+const MAX_PHOTOS = 3;
 
 // Maintenance work recorded in the field by a Field Conductor: which job, on
 // which plot, on which day. Plots come from shared_plots (Seedling Stock
@@ -181,7 +186,7 @@ export default function MaintenanceModule() {
     return acc;
   }, {}), [tasksByWeek, records, month]);
 
-  async function handleSheetSave({ task, batches, remark, photos }) {
+  async function handleSheetSave({ task, batches, remark, photos, qty }) {
     const plot = visiblePlots.find((p) => p.plot_name === task.plot)
       || { plot_name: task.plot, nursery_name: task.nursery || nursery || null };
     setSaving(true);
@@ -198,6 +203,7 @@ export default function MaintenanceModule() {
         // written now.
         date: today,
         chemical: task.chemical,
+        qty: qty || null,
         remark,
         batches,
         weekNo: sheet.week,
@@ -219,6 +225,13 @@ export default function MaintenanceModule() {
     const plot = visiblePlots.find((p) => p.plot_name === form.plotName);
     if (!plot) return;
     try {
+      // A photo already in storage comes back as its own URL; only the ones
+      // just taken are data: URLs needing an upload.
+      const already = (form.photos || []).filter((u) => !String(u).startsWith('data:'));
+      const fresh   = (form.photos || []).filter((u) => String(u).startsWith('data:'));
+      const uploaded = fresh.length
+        ? await uploadMaintPhotos(fresh, { plot: form.plotName, workTypeKey: form.workTypeKey, date: form.date })
+        : [];
       await saveRecord({
         id: editing && editing.record ? editing.record.id : null,
         plot,
@@ -228,6 +241,8 @@ export default function MaintenanceModule() {
         chemical: form.chemical,
         remark: form.remark,
         reportedBy: staffName,
+        batches: form.batches,
+        photoUrls: [...already, ...uploaded],
       });
       flash(
         t('mt.savedToast', {
@@ -478,6 +493,7 @@ export default function MaintenanceModule() {
         <EntrySheet
           record={editing.record}
           plots={visiblePlots}
+          batchMap={batchMap}
           onClose={() => setEditing(null)}
           onSave={handleSave}
           t={t}
@@ -495,17 +511,45 @@ export default function MaintenanceModule() {
 }
 
 // Bottom sheet to record a job, or correct one already recorded.
-function EntrySheet({ record, plots, onClose, onSave, t, lang }) {
+function EntrySheet({ record, plots, batchMap, onClose, onSave, t, lang }) {
   const [workTypeKey, setWorkTypeKey] = useState(record ? record.work_type : WORK_TYPES[0].key);
   const [plotName, setPlotName] = useState(record ? record.plot_name : '');
   const [date, setDate] = useState(record ? record.work_date : todayStr());
-  const [qty, setQty] = useState(record && record.qty != null ? String(record.qty) : '');
   const [chemical, setChemical] = useState((record && record.chemical) || '');
   const [remark, setRemark] = useState((record && record.remark) || '');
   const [saving, setSaving] = useState(false);
+  const [batches, setBatches] = useState(
+    record && record.batch_name
+      ? String(record.batch_name).split(',').map((b) => b.trim()).filter(Boolean)
+      : []
+  );
+  const [photos, setPhotos] = useState(() => {
+    const a = Array(MAX_PHOTOS).fill(null);
+    if (record && record.photo_urls) {
+      String(record.photo_urls).split(',').map((u) => u.trim()).filter(Boolean)
+        .forEach((u, i) => { if (i < MAX_PHOTOS) a[i] = u; });
+    }
+    return a;
+  });
 
   // Spraying and manuring use a product; weeding by hand does not.
   const showChemical = workTypeKey === 'pd' || workTypeKey === 'manuring' || workTypeKey === 'interrow';
+
+  // What is standing in the chosen plot, and what the ticked ones come to.
+  // The quantity is that sum, not a number anyone types: the seedlings worked
+  // on ARE the batches worked on, and two figures that should agree will not.
+  const plotBatches = useMemo(() => batchesIn(batchMap, plotName), [batchMap, plotName]);
+  const qty = useMemo(
+    () => plotBatches.filter((b) => batches.includes(b.batch))
+                     .reduce((sum, b) => sum + Number(b.qty || 0), 0),
+    [plotBatches, batches]
+  );
+  const toggleBatch = (name) =>
+    setBatches((b) => (b.includes(name) ? b.filter((x) => x !== name) : [...b, name]));
+
+  // A plot the record was made against but which no longer holds that batch
+  // still has to show it, or editing the record would silently drop it.
+  const strays = batches.filter((b) => !plotBatches.some((x) => x.batch === b));
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
@@ -585,16 +629,54 @@ function EntrySheet({ record, plots, onClose, onSave, t, lang }) {
         )}
 
         <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
-          {t('mt.qty')} <span className="text-slate-400 normal-case">· {t('mt.qtyHint')}</span>
+          {t('mt.batchesInPlot')}
         </label>
-        <input
-          type="number"
-          inputMode="numeric"
-          min="0"
-          value={qty}
-          onChange={(e) => setQty(e.target.value)}
-          className="w-full bg-white border border-slate-300 rounded-xl px-3 py-3 text-sm font-bold outline-none focus:border-emerald-500 mb-3"
-        />
+        {!plotName ? (
+          <div className="text-[12px] font-bold text-slate-400 mb-3">{t('mt.pickPlotFirst')}</div>
+        ) : plotBatches.length === 0 && !strays.length ? (
+          <div className="text-[12px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 mb-3">
+            {t('mt.noBatches', { plot: plotName })}
+          </div>
+        ) : (
+          <div className="space-y-1.5 mb-3">
+            {plotBatches.map((b) => (
+              <label key={b.batch}
+                className={`flex items-center gap-3 rounded-xl border-2 px-3 py-2.5 cursor-pointer ${
+                  batches.includes(b.batch) ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200'}`}>
+                <input type="checkbox" className="w-5 h-5 accent-emerald-600 shrink-0"
+                  checked={batches.includes(b.batch)} onChange={() => toggleBatch(b.batch)} />
+                <span className="font-black text-slate-800 text-[14px] flex-1 min-w-0">{b.batch}</span>
+                <span className={`text-[12px] font-bold shrink-0 tabular-nums ${
+                  b.qty < 0 ? 'text-amber-600' : 'text-slate-400'}`}>
+                  {b.qty.toLocaleString()}
+                </span>
+              </label>
+            ))}
+            {strays.map((b) => (
+              <label key={b}
+                className="flex items-center gap-3 rounded-xl border-2 border-emerald-500 bg-emerald-50 px-3 py-2.5 cursor-pointer">
+                <input type="checkbox" className="w-5 h-5 accent-emerald-600 shrink-0"
+                  checked onChange={() => toggleBatch(b)} />
+                <span className="font-black text-slate-800 text-[14px] flex-1 min-w-0">{b}</span>
+                <span className="text-[10px] font-bold text-slate-400 shrink-0">{t('mt.batchGone')}</span>
+              </label>
+            ))}
+          </div>
+        )}
+
+        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
+          {t('mt.qty')} <span className="text-slate-400 normal-case">· {t('mt.qtyFromBatches')}</span>
+        </label>
+        <div className="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-3 text-sm font-black text-slate-700 mb-3">
+          {qty ? qty.toLocaleString() : '—'}
+        </div>
+
+        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
+          {t('mt.photos', { n: MAX_PHOTOS })}
+        </label>
+        <div className="mb-3">
+          <PhotoSlots value={photos} onChange={setPhotos} max={MAX_PHOTOS} />
+        </div>
 
         <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
           {t('mt.remark')}
@@ -609,7 +691,8 @@ function EntrySheet({ record, plots, onClose, onSave, t, lang }) {
         <button
           onClick={async () => {
             setSaving(true);
-            await onSave({ workTypeKey, plotName, date, qty, chemical: chemical.trim(), remark: remark.trim() });
+            await onSave({ workTypeKey, plotName, date, qty, chemical: chemical.trim(),
+                           remark: remark.trim(), batches, photos: photos.filter(Boolean) });
             setSaving(false);
           }}
           disabled={saving || !plotName || !date || !workTypeKey}
