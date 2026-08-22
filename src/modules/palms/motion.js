@@ -77,11 +77,49 @@ function summarise(samples) {
 // Days one activity took inside one cycle. An activity keyed in twice in the
 // same cycle — stopped and picked up again — counts as the days worked, not
 // the calendar span, so an idle gap in between is not charged to it.
+//
+// This is THE definition of how long an activity took. It used to compete with
+// a span measured from the activity's first start to its last end, and on a
+// plot whose Lining was keyed in January and picked up again in October the
+// two answers were 26 days and 314. A span is right for a RUN across different
+// activities, where days shared by two of them must count once; it is wrong
+// for one activity, where it bills the standing idle.
 function daysForActivity(cycle, n) {
   const parts = cycle.entries.filter((e) => e.actN === n && e.end);
   if (!parts.length) return null;
   const days = parts.reduce((s, e) => s + Math.max(0, diffDays(e.start, e.end)), 0);
-  return { days, end: parts[parts.length - 1].end };
+  return { days, start: parts[0].start, end: parts[parts.length - 1].end };
+}
+
+// Every measurement of one activity, one per cycle that finished it.
+function activitySamples(db, nurseryKey, n, month) {
+  const out = [];
+  unitsOf(db, nurseryKey).forEach((key) => {
+    cyclesOf(db.logs[key]).forEach((cycle) => {
+      const d = daysForActivity(cycle, n);
+      if (d && inMonth(month, d.end)) {
+        out.push({ days: d.days, key, label: keyLabel(key), start: d.start, end: d.end });
+      }
+    });
+  });
+  return out;
+}
+
+// Shortest / longest / average for one activity across every plot.
+export function activityStats(db, nurseryKey, n, month) {
+  return summarise(activitySamples(db, nurseryKey, n, month));
+}
+
+// The same activity, split by plot: which plots take longest over it. Slowest
+// first, because that is the list worth acting on.
+export function perUnitActivityStats(db, nurseryKey, n, month) {
+  const by = {};
+  activitySamples(db, nurseryKey, n, month).forEach((s) => {
+    (by[s.key] = by[s.key] || []).push(s);
+  });
+  return Object.keys(by)
+    .map((key) => ({ key, label: keyLabel(key), stats: summarise(by[key]) }))
+    .sort((a, b) => b.stats.avg - a.stats.avg);
 }
 
 // A measurement belongs to the month it FINISHED in — that is the month the
@@ -106,23 +144,10 @@ export function monthsWithData(db, nurseryKey) {
 }
 
 // Shortest / longest / average days per activity across every cycle logged.
+// Built from the same samples as activityStats, so the table and the summary
+// above it read one number each way.
 export function perActivityStats(db, nurseryKey, month) {
-  const units = unitsOf(db, nurseryKey);
-  const byAct = {};
-  ACTIVITIES.forEach((a) => (byAct[a.n] = []));
-
-  units.forEach((key) => {
-    cyclesOf(db.logs[key]).forEach((cycle) => {
-      ACTIVITIES.forEach((a) => {
-        const d = daysForActivity(cycle, a.n);
-        if (d && inMonth(month, d.end)) {
-          byAct[a.n].push({ days: d.days, key, label: keyLabel(key), end: d.end });
-        }
-      });
-    });
-  });
-
-  return ACTIVITIES.map((a) => ({ act: a, stats: summarise(byAct[a.n]) }));
+  return ACTIVITIES.map((a) => ({ act: a, stats: activityStats(db, nurseryKey, a.n, month) }));
 }
 
 // Days a run of activities took inside one cycle — first activity's start to

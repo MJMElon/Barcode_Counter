@@ -3,14 +3,12 @@ import { ACTIVITIES, INCENTIVE, NURSERIES, prettyD, todayStr } from './data.js';
 import { buildCullingReport, cullingReportFileName } from './cullingReport.js';
 import {
   FIRST_ACT,
-  LAST_ACT,
-  idealSpan,
-  perActivityStats,
   TARGET_DAYS,
+  activityStats,
   incentiveRuns,
   monthsWithData,
-  perUnitStats,
-  spanStats,
+  perActivityStats,
+  perUnitActivityStats,
   unitsOf,
 } from './motion.js';
 
@@ -237,8 +235,6 @@ function ReportDialog({ db, t, nurseryKeys, months, initial, staffName, onClose 
 
 export default function MotionTab({ db, t, nurseryKeys, staffName }) {
   const [nursery, setNursery] = useState('all');
-  const [from, setFrom] = useState(FIRST_ACT);
-  const [to, setTo] = useState(LAST_ACT);
   // 'act' = by activity, 'plot' = by plot, 'pay' = who earned the incentive
   const [view, setView] = useState('act');
   const [month, setMonth] = useState(''); // '' = every month
@@ -248,56 +244,24 @@ export default function MotionTab({ db, t, nurseryKeys, staffName }) {
   // "All nurseries" means all the ones this user may see, not every nursery
   // in the database.
   const scope = nursery === 'all' ? nurseryKeys : nursery;
-  // Each view measures its own thing, and none of them share a picker: By
-  // activity is one activity, Culling Duration is the fixed Saringan ->
-  // Transplanting run, By plot is whatever run is picked for it.
-  const runFrom = view === 'pay' ? CULL_FROM : view === 'act' ? act : from;
-  const runTo = view === 'pay' ? CULL_TO : view === 'act' ? act : to;
-
+  // By activity and By plot answer the same question two ways — how long does
+  // this activity take, pooled or plot by plot — so they share one picker and
+  // one definition of "how long". Culling Duration is the fixed Saringan ->
+  // Transplanting run, measured as a span, which is a different thing.
   const rows = useMemo(() => perActivityStats(db, scope, month), [db, scope, month]);
-  const span = useMemo(
-    () => spanStats(db, scope, runFrom, runTo, month),
-    [db, scope, runFrom, runTo, month]
-  );
+  const span = useMemo(() => activityStats(db, scope, act, month), [db, scope, act, month]);
   const plotRows = useMemo(
-    () => (view === 'plot' ? perUnitStats(db, scope, runFrom, runTo, month) : []),
-    [view, db, scope, runFrom, runTo, month]
+    () => (view === 'plot' ? perUnitActivityStats(db, scope, act, month) : []),
+    [view, db, scope, act, month]
   );
   const runs = useMemo(
-    () => (view === 'pay' ? incentiveRuns(db, scope, runFrom, runTo, month) : []),
-    [view, db, scope, runFrom, runTo, month]
+    () => (view === 'pay' ? incentiveRuns(db, scope, CULL_FROM, CULL_TO, month) : []),
+    [view, db, scope, month]
   );
   const months = useMemo(() => monthsWithData(db, scope), [db, scope]);
   const units = useMemo(() => unitsOf(db, scope).length, [db, scope]);
-  const ideal = idealSpan(runFrom, runTo);
+  const ideal = ACTIVITIES.find((a) => a.n === act).days;
   const measured = rows.reduce((s, r) => s + (r.stats ? r.stats.n : 0), 0);
-
-  // Keep the run pointing forwards: choosing an end before the start pulls the
-  // other end along rather than showing an empty result.
-  const pickFrom = (n) => {
-    setFrom(n);
-    if (n > to) setTo(n);
-  };
-  const pickTo = (n) => {
-    setTo(n);
-    if (n < from) setFrom(n);
-  };
-
-  const select = (value, onPick) => (
-    <select
-      value={value}
-      onChange={(e) => onPick(Number(e.target.value))}
-      className="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-2 text-[12px] font-bold text-slate-800 outline-none focus:border-emerald-500"
-    >
-      {/* The short label, so the whole option is readable inside a phone's
-          half-width select rather than cut off mid-word. */}
-      {ACTIVITIES.map((a) => (
-        <option key={a.n} value={a.n}>
-          {a.n}. {a.mShort}
-        </option>
-      ))}
-    </select>
-  );
 
   return (
     <>
@@ -359,11 +323,7 @@ export default function MotionTab({ db, t, nurseryKeys, staffName }) {
       <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
         <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100">
           <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-wide">
-            {view === 'pay'
-              ? t('ms.cullRun')
-              : view === 'act'
-                ? t('ms.oneActivity')
-                : t('ms.spanTitle')}
+            {view === 'pay' ? t('ms.cullRun') : t('ms.oneActivity')}
           </h3>
         </div>
         <div className="px-4 sm:px-6 py-3 sm:py-4">
@@ -378,7 +338,7 @@ export default function MotionTab({ db, t, nurseryKeys, staffName }) {
           {/* Wrapped rather than squeezed into one scrolling line: eleven
               names readable at 12px need more width than a row has, and two
               tidy rows beat one row of tiny type you have to scroll. */}
-          {view === 'act' && (
+          {view !== 'pay' && (
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
               {ACTIVITIES.map((a) => {
                 const on = act === a.n;
@@ -400,22 +360,6 @@ export default function MotionTab({ db, t, nurseryKeys, staffName }) {
                   </button>
                 );
               })}
-            </div>
-          )}
-          {view === 'plot' && (
-            <div className="grid grid-cols-2 gap-2">
-              <label className="min-w-0">
-                <span className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
-                  {t('ms.from')}
-                </span>
-                {select(from, pickFrom)}
-              </label>
-              <label className="min-w-0">
-                <span className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
-                  {t('ms.to')}
-                </span>
-                {select(to, pickTo)}
-              </label>
             </div>
           )}
 
