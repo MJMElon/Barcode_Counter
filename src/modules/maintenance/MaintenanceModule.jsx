@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useAutoSync, useOnline } from '../../hooks/useOnline.js';
 import TopNav from '../../components/TopNav.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useLang } from '../../context/LanguageContext.jsx';
@@ -9,14 +10,15 @@ import {
   allowedNurseries,
   canMaintain,
   deleteRecord,
+  flushMaintenance,
   isModuleAdmin,
   loadMaintenanceData,
   loadPlotBatches,
   loadSchedules,
-  saveRecord,
+  pendingRecords,
+  submitRecord,
   toCsv,
   todayStr,
-  uploadMaintPhotos,
   workTypeByKey,
   workTypeLabel,
 } from './data.js';
@@ -63,6 +65,9 @@ export default function MaintenanceModule() {
   const [batchMap, setBatchMap] = useState(new Map());
   const [sheet, setSheet] = useState(null);         // { week, workType }
   const [saving, setSaving] = useState(false);
+  const [pending, setPending] = useState([]);   // records the queue is holding
+  const [syncing, setSyncing] = useState(false);
+  const online = useOnline();
 
   const allowed = allowedNurseries(permissions);
   const mayRecord = canMaintain(permissions, 'record');
@@ -97,6 +102,29 @@ export default function MaintenanceModule() {
     reload();
   }, []);
 
+  const refreshPending = () => pendingRecords().then(setPending).catch(() => setPending([]));
+
+  /* Send anything waiting. useAutoSync already fires on mount, every minute
+     while online, and the moment the connection comes back — which is exactly
+     when a queue wants emptying. */
+  async function sync() {
+    if (syncing) return;
+    setSyncing(true);
+    try {
+      const before = (await pendingRecords()).length;
+      if (before) {
+        const r = await flushMaintenance();
+        if (r.sent) { flash(t('mt.synced', { n: r.sent })); reload(); }
+        if (r.dropped) flash(t('mt.syncDropped', { n: r.dropped }));
+      }
+    } catch (e) {
+      console.warn('[maintenance] sync failed:', e);
+    }
+    await refreshPending();
+    setSyncing(false);
+  }
+  useAutoSync(sync, 60000);
+
   const visiblePlots = useMemo(
     () => plots.filter((p) => allowed === null || allowed.includes(p.nursery_name)),
     [plots, allowed]
@@ -113,10 +141,43 @@ export default function MaintenanceModule() {
     if (!nursery && nurseryOptions.length) setNursery(nurseryOptions[0]);
   }, [nurseryOptions, nursery]);
 
+  /* A queued record has not reached the database, but the work HAS been done
+     — so it counts for the week's ticks and shows in the list. Without this a
+     Field Conductor offline would see the plot still outstanding and do it
+     twice. */
+  const pendingAsRecords = useMemo(() => pending.map((j) => {
+    const a = j.payload || {};
+    return {
+      // A queued EDIT keeps the id of the row it is changing, so it stands in
+      // place of that row below rather than appearing beside it as a second
+      // copy of the same work.
+      id: a.id != null ? a.id : 'pending:' + j.uid,
+      _pendingEdit: a.id != null,
+      _pending: true,
+      work_date: a.date,
+      plot_name: a.plot && a.plot.plot_name,
+      nursery_name: a.plot && a.plot.nursery_name,
+      work_type: a.workTypeKey,
+      chemical: a.chemical || null,
+      qty: a.qty ?? null,
+      remark: a.remark || null,
+      reported_by: a.reportedBy || null,
+      batch_name: (a.batches || []).join(', '),
+      week_no: a.weekNo || null,
+      schedule_month: a.scheduleMonth || null,
+      photo_urls: (a.photos || []).join(','),
+    };
+  }), [pending]);
+
+  const allRecords = useMemo(() => {
+    const editedIds = new Set(pendingAsRecords.filter((r) => r._pendingEdit).map((r) => r.id));
+    return [...pendingAsRecords, ...records.filter((r) => !editedIds.has(r.id))];
+  }, [pendingAsRecords, records]);
+
   // Records this user may see, then the on-screen filters.
   const visible = useMemo(() => {
     const q = query.toLowerCase().trim();
-    return records.filter(
+    return allRecords.filter(
       (r) =>
         (allowed === null || allowed.includes(r.nursery_name)) &&
         (!nursery || r.nursery_name === nursery) &&
@@ -124,7 +185,7 @@ export default function MaintenanceModule() {
           (r.plot_name || '').toLowerCase().includes(q) ||
           (r.remark || '').toLowerCase().includes(q))
     );
-  }, [records, allowed, nursery, query]);
+  }, [allRecords, allowed, nursery, query]);
 
   const today = todayStr();
   const month = monthLabelOf(today);
@@ -179,24 +240,19 @@ export default function MaintenanceModule() {
   const doneCounts = useMemo(() => WEEKS.reduce((acc, w) => {
     acc[w] = WORK_TYPES.reduce((c, wt) => {
       c[wt.key] = tasksByWeek[w][wt.key].filter((x) =>
-        isJobDone(records, { workTypeKey: wt.key, plot: x.plot,
-                             chemical: x.chemical, week: w, month })).length;
+        isJobDone(allRecords, { workTypeKey: wt.key, plot: x.plot,
+                                chemical: x.chemical, week: w, month })).length;
       return c;
     }, {});
     return acc;
-  }, {}), [tasksByWeek, records, month]);
+  }, {}), [tasksByWeek, allRecords, month]);
 
   async function handleSheetSave({ task, batches, remark, photos, qty }) {
     const plot = visiblePlots.find((p) => p.plot_name === task.plot)
       || { plot_name: task.plot, nursery_name: task.nursery || nursery || null };
     setSaving(true);
     try {
-      // Photos first: the record should carry their links, and a photo that
-      // will not upload is dropped rather than taking the record with it.
-      const photoUrls = photos && photos.length
-        ? await uploadMaintPhotos(photos, { plot: task.plot, workTypeKey: sheet.workType.key, date: today })
-        : [];
-      await saveRecord({
+      const { queued } = await submitRecord({
         plot,
         workTypeKey: sheet.workType.key,
         // Today, always: the record says the job was done, and it is being
@@ -209,10 +265,15 @@ export default function MaintenanceModule() {
         weekNo: sheet.week,
         scheduleMonth: month,
         reportedBy: staffName,
-        photoUrls,
+        photos,
       });
-      flash(t('mt.savedToast', { work: workTypeLabel(sheet.workType, lang), plot: task.plot }));
-      reload();
+      if (queued) {
+        flash(t('mt.savedOffline', { plot: task.plot }));
+        await refreshPending();
+      } else {
+        flash(t('mt.savedToast', { work: workTypeLabel(sheet.workType, lang), plot: task.plot }));
+        reload();
+      }
     } catch (e) {
       // The job saved; only the batch/week columns were missing.
       if (e && e.message === BATCH_SETUP_NEEDED) { flash(t('mt.batchSetupNeeded')); reload(); }
@@ -225,14 +286,7 @@ export default function MaintenanceModule() {
     const plot = visiblePlots.find((p) => p.plot_name === form.plotName);
     if (!plot) return;
     try {
-      // A photo already in storage comes back as its own URL; only the ones
-      // just taken are data: URLs needing an upload.
-      const already = (form.photos || []).filter((u) => !String(u).startsWith('data:'));
-      const fresh   = (form.photos || []).filter((u) => String(u).startsWith('data:'));
-      const uploaded = fresh.length
-        ? await uploadMaintPhotos(fresh, { plot: form.plotName, workTypeKey: form.workTypeKey, date: form.date })
-        : [];
-      await saveRecord({
+      const { queued } = await submitRecord({
         id: editing && editing.record ? editing.record.id : null,
         plot,
         workTypeKey: form.workTypeKey,
@@ -242,16 +296,19 @@ export default function MaintenanceModule() {
         remark: form.remark,
         reportedBy: staffName,
         batches: form.batches,
-        photoUrls: [...already, ...uploaded],
+        photos: form.photos,
       });
-      flash(
-        t('mt.savedToast', {
+      if (queued) {
+        flash(t('mt.savedOffline', { plot: plot.plot_name }));
+        await refreshPending();
+      } else {
+        flash(t('mt.savedToast', {
           work: workTypeLabel(workTypeByKey(form.workTypeKey), lang),
           plot: plot.plot_name,
-        })
-      );
+        }));
+        reload();
+      }
       setEditing(null);
-      reload();
     } catch (e) {
       flash(t('mt.saveErr', { msg: e.message || String(e) }));
     }
@@ -313,6 +370,30 @@ export default function MaintenanceModule() {
             </button>
           )}
         </div>
+
+        {/* What has been recorded but not yet sent. Shown rather than hidden:
+            a Field Conductor needs to know their morning is safe, and that it
+            has not reached the office yet. */}
+        {(pending.length > 0 || !online) && (
+          <div className={`rounded-2xl border px-4 py-3 flex items-center gap-3 ${
+            pending.length ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'}`}>
+            <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${online ? 'bg-amber-500' : 'bg-slate-400'}`} />
+            <div className="flex-1 min-w-0">
+              <div className="text-[12px] font-black text-slate-700">
+                {pending.length ? t('mt.pendingN', { n: pending.length }) : t('mt.offline')}
+              </div>
+              <div className="text-[10px] font-bold text-slate-400">
+                {online ? t('mt.pendingHint') : t('mt.offlineHint')}
+              </div>
+            </div>
+            {online && pending.length > 0 && (
+              <button onClick={sync} disabled={syncing}
+                className="shrink-0 bg-amber-500 disabled:opacity-50 text-white font-black text-[10px] uppercase tracking-widest rounded-xl px-3 py-2">
+                {syncing ? t('mt.syncing') : t('mt.syncNow')}
+              </button>
+            )}
+          </div>
+        )}
 
         {mayRecord && (
           <button
@@ -391,7 +472,7 @@ export default function MaintenanceModule() {
             batchMap={batchMap}
             today={today}
             saving={saving}
-            isDone={(task) => isJobDone(records, {
+            isDone={(task) => isJobDone(allRecords, {
               workTypeKey: sheet.workType.key, plot: task.plot,
               chemical: task.chemical, week: sheet.week, month })}
             onSave={handleSheetSave}
@@ -425,7 +506,11 @@ export default function MaintenanceModule() {
                         📍 {r.plot_name} · {r.nursery_name || '—'}
                       </div>
                     </div>
-                    {r.work_date === today && (
+                    {r._pending ? (
+                      <span className="shrink-0 text-[9px] font-black uppercase tracking-widest bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-2 py-1">
+                        ⏳ {t('mt.waiting')}
+                      </span>
+                    ) : r.work_date === today && (
                       <span className="shrink-0 text-[9px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-1">
                         ✓ {t('mt.today')}
                       </span>
@@ -462,7 +547,7 @@ export default function MaintenanceModule() {
                     </div>
                   )}
 
-                  {mayEdit && (
+                  {mayEdit && !r._pending && (
                     <div className="flex gap-2 mt-2.5">
                       <button
                         onClick={() => setEditing({ record: r })}

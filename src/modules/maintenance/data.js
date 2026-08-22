@@ -2,6 +2,7 @@
 // (no imports there, so they stay unit-testable in plain node).
 
 import { dataUrlToBlob } from '../../lib/image.js';
+import { PERMANENT, flushOutbox, isOnline, listJobs, looksOffline, queueJob } from '../../lib/outbox.js';
 import { supabase } from '../../lib/supabase.js';
 import { sortRecords, workTypeByKey } from './helpers.js';
 import { batchKey, batchesByPlot, plotKey } from './plotBatches.js';
@@ -90,9 +91,76 @@ export async function uploadMaintPhotos(dataUrls, { plot, workTypeKey, date }) {
   return urls;
 }
 
+/* The kind of job the outbox holds for this module. */
+export const MAINT_JOB = 'maint_record';
+
+/**
+ * Save a record, signal or no signal.
+ *
+ * Offline it goes straight to the queue; online it is tried and only queued
+ * if the attempt failed for a reason a retry could fix. Either way the Field
+ * Conductor gets an answer immediately and never loses the work.
+ *
+ * Returns { queued } so the screen can say which happened.
+ */
+export async function submitRecord(args) {
+  if (!isOnline()) {
+    await queueJob(MAINT_JOB, args);
+    return { queued: true };
+  }
+  try {
+    await sendRecord(args);
+    return { queued: false };
+  } catch (e) {
+    if (e && e.message === BATCH_SETUP_NEEDED) throw e;   // saved; only columns missing
+    if (looksOffline(e)) {
+      await queueJob(MAINT_JOB, args);
+      return { queued: true };
+    }
+    throw e;
+  }
+}
+
+/**
+ * Everything a queued record needs doing, in order: the photos up to storage,
+ * then the row. Used by submitRecord and, later, by the flush.
+ */
+export async function sendRecord(args) {
+  const { photos, ...rest } = args || {};
+  const already  = (photos || []).filter((u) => u && !String(u).startsWith('data:'));
+  const fresh    = (photos || []).filter((u) => u && String(u).startsWith('data:'));
+  const uploaded = fresh.length
+    ? await uploadMaintPhotos(fresh, { plot: rest.plot && rest.plot.plot_name, workTypeKey: rest.workTypeKey, date: rest.date })
+    : [];
+  await saveRecord({ ...rest, photoUrls: [...already, ...uploaded] });
+}
+
+/** Send everything the queue is holding. */
+export function flushMaintenance() {
+  return flushOutbox({
+    [MAINT_JOB]: async (payload, uid) => {
+      try {
+        await sendRecord({ ...payload, clientUid: uid });
+      } catch (e) {
+        // A row this uid already wrote — the last flush was cut off between
+        // the server taking it and the queue letting go of it.
+        if (/duplicate key|already exists|23505/i.test(String((e && e.message) || ''))) return;
+        if (looksOffline(e)) throw e;                 // try again later
+        throw new Error(PERMANENT);                   // the server refused it
+      }
+    },
+  });
+}
+
+/** What is still waiting, so a screen can show it rather than lose it. */
+export async function pendingRecords() {
+  const jobs = await listJobs();
+  return jobs.filter((j) => j.kind === MAINT_JOB);
+}
+
 /** Create or update one record. `id` present = update. */
 export async function saveRecord({ id, plot, workTypeKey, date, qty, chemical, remark, reportedBy,
-                                   batches, weekNo, scheduleMonth, photoUrls }) {
+                                   batches, weekNo, scheduleMonth, photoUrls, clientUid }) {
   const wt = workTypeByKey(workTypeKey);
   const row = {
     work_date: date,
@@ -116,6 +184,9 @@ export async function saveRecord({ id, plot, workTypeKey, date, qty, chemical, r
   if (weekNo) extra.week_no = weekNo;
   if (scheduleMonth) extra.schedule_month = scheduleMonth;
   if (photoUrls && photoUrls.length) extra.photo_urls = photoUrls.join(',');
+  // Written by a queued record so a repeated flush is refused by the unique
+  // index rather than saving the same morning's work twice.
+  if (clientUid) extra.client_uid = clientUid;
 
   const run = (payload) => (id
     ? supabase.from('nops_maint_field_records').update(payload).eq('id', id)
