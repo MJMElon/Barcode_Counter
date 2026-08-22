@@ -472,15 +472,17 @@ export default function MotionTab({ db, t, nurseryKeys, staffName }) {
                           {t('ms.areaShare', { p: r.pct })}
                         </div>
                       )}
-                      {r.qualified ? (
-                        <span className="inline-block mt-1 rounded-full px-2 py-0.5 text-[10px] font-black border bg-emerald-50 text-emerald-700 border-emerald-200 whitespace-nowrap">
-                          {t('ms.earns')}
-                        </span>
-                      ) : !r.entitled && r.withinTarget ? (
-                        <span className="inline-block mt-1 rounded-full px-2 py-0.5 text-[10px] font-black border bg-rose-50 text-rose-600 border-rose-200 whitespace-nowrap">
-                          {t('ms.tooSmall')}
-                        </span>
-                      ) : null}
+                      {/* Earned or not, the same tick and cross the report
+                          prints. The area share above already says why a run
+                          inside the target still missed. */}
+                      <span
+                        className={`block mt-0.5 text-[15px] font-black leading-none ${
+                          r.qualified ? 'text-emerald-600' : 'text-rose-500'
+                        }`}
+                        title={r.qualified ? t('ms.earns') : t('ms.notEarned')}
+                      >
+                        {r.qualified ? '✓' : '✗'}
+                      </span>
                     </td>
                     <td className="px-2 sm:px-4 py-2 sm:py-3 text-[11px] font-semibold text-slate-500 whitespace-nowrap">
                       {prettyD(r.start)}

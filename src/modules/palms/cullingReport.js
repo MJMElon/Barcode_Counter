@@ -69,6 +69,24 @@ function tableHead(doc, cols, y) {
   return y + 14.5;
 }
 
+// A tick and a cross drawn as lines rather than typed as characters. The
+// standard PDF fonts are WinAnsi-encoded and have no U+2713 or U+2717, so a
+// typed tick reaches the page as a wrong glyph or an empty box. Drawing them
+// costs four line segments and renders the same in every reader.
+function mark(doc, ok, x, y) {
+  doc.setLineWidth(0.9);
+  doc.setLineCap('round');
+  if (ok) {
+    doc.setDrawColor(...GREEN);
+    doc.lines([[1.5, 1.7], [3, -4.2]], x - 2.2, y - 1.6);
+  } else {
+    doc.setDrawColor(...RED);
+    doc.lines([[4, 4]], x - 2, y - 3.4);
+    doc.lines([[-4, 4]], x + 2, y - 3.4);
+  }
+  doc.setLineCap('butt');
+}
+
 function sectionTitle(doc, text, y) {
   doc.setFont(FONT, 'bold');
   doc.setFontSize(11);
@@ -112,18 +130,8 @@ function drawTable(doc, rows, y, { withResult, empty }) {
     doc.setTextColor(...(r.withinTarget ? GREEN : RED));
     doc.text(String(r.days), at('days'), y, { align: 'center' });
 
-    if (withResult) {
-      // An area that finished in time but is too small to count says so,
-      // rather than silently reading as a miss.
-      const verdict = r.qualified
-        ? 'Earns'
-        : !r.entitled && r.withinTarget
-          ? `Area too small (${r.pct}%)`
-          : '—';
-      doc.setTextColor(...(r.qualified ? GREEN : GREY));
-      doc.setFont(FONT, r.qualified ? 'bold' : 'normal');
-      doc.text(verdict, at('result'), y, { align: 'center' });
-    }
+    // Earned or not — a tick or a cross, nothing to read.
+    if (withResult) mark(doc, r.qualified, at('result'), y);
 
     doc.setDrawColor(...LIGHT);
     doc.setLineWidth(0.2);
