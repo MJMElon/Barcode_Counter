@@ -1,6 +1,7 @@
 // Data layer for the Maintenance module. Pure helpers live in helpers.js
 // (no imports there, so they stay unit-testable in plain node).
 
+import { dataUrlToBlob } from '../../lib/image.js';
 import { supabase } from '../../lib/supabase.js';
 import { sortRecords, workTypeByKey } from './helpers.js';
 import { batchKey, batchesByPlot, plotKey } from './plotBatches.js';
@@ -16,6 +17,7 @@ export {
   workTypeByKey,
   workTypeLabel,
 } from './helpers.js';
+export { isModuleAdmin } from '../../lib/access.js';
 
 /** Raised when the table has not been created yet, so the UI can say which
     SQL to run instead of showing a raw PostgREST error. */
@@ -57,9 +59,40 @@ export async function loadMaintenanceData() {
   };
 }
 
+/**
+ * Photos of the work, into the shared `documents` bucket.
+ *
+ * They arrive already shrunk (see lib/image.js) — a phone hands over several
+ * megabytes and what is kept is a couple of hundred kilobytes. Object storage
+ * rather than a column in the database: these are files, and the database has
+ * a disk to protect.
+ *
+ * Best effort per photo. One that will not upload is left out rather than
+ * losing the record it belongs to — a Field Conductor should not be made to
+ * key the job again because the signal dropped on a picture.
+ */
+export async function uploadMaintPhotos(dataUrls, { plot, workTypeKey, date }) {
+  const urls = [];
+  for (let i = 0; i < (dataUrls || []).length; i++) {
+    try {
+      const safe = (s) => String(s || '').replace(/[^0-9A-Za-z_-]+/g, '_');
+      const path = `maint_photos/${safe(date)}/${safe(plot)}_${safe(workTypeKey)}_${Date.now()}_${i}.jpg`;
+      const { error } = await supabase.storage
+        .from('documents')
+        .upload(path, dataUrlToBlob(dataUrls[i]), { contentType: 'image/jpeg', upsert: true });
+      if (error) { console.warn('[maintenance] photo upload failed:', error.message); continue; }
+      const { data } = supabase.storage.from('documents').getPublicUrl(path);
+      if (data && data.publicUrl) urls.push(data.publicUrl);
+    } catch (e) {
+      console.warn('[maintenance] photo upload failed:', e);
+    }
+  }
+  return urls;
+}
+
 /** Create or update one record. `id` present = update. */
 export async function saveRecord({ id, plot, workTypeKey, date, qty, chemical, remark, reportedBy,
-                                   batches, weekNo, scheduleMonth }) {
+                                   batches, weekNo, scheduleMonth, photoUrls }) {
   const wt = workTypeByKey(workTypeKey);
   const row = {
     work_date: date,
@@ -82,6 +115,7 @@ export async function saveRecord({ id, plot, workTypeKey, date, qty, chemical, r
   if (batches && batches.length) extra.batch_name = batches.join(', ');
   if (weekNo) extra.week_no = weekNo;
   if (scheduleMonth) extra.schedule_month = scheduleMonth;
+  if (photoUrls && photoUrls.length) extra.photo_urls = photoUrls.join(',');
 
   const run = (payload) => (id
     ? supabase.from('nops_maint_field_records').update(payload).eq('id', id)

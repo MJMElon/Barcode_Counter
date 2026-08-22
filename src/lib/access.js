@@ -78,6 +78,22 @@ export function canScan(permissions, page, action) {
   return !!acts[action];
 }
 
+/**
+ * An admin of a module, by the same rule the office pages use
+ * (shared_access.js `isAdminOf`): permissions.modules.<name> === 'admin', or
+ * the account that manages users.
+ *
+ * Unlike canScan this fails CLOSED. It guards changing or deleting a record
+ * somebody has already made, and "no permissions loaded yet" must not read as
+ * consent.
+ */
+export function isModuleAdmin(permissions, moduleName = 'operation') {
+  const p = permissions || {};
+  if (p.manage_users) return true;
+  const lvl = p.modules && p.modules[moduleName];
+  return String(lvl || '').toLowerCase() === 'admin';
+}
+
 export const canBarcode    = (permissions, action) => canScan(permissions, 'barcode', action);
 export const canDo         = (permissions, action) => canScan(permissions, 'do', action);
 export const canMaintain   = (permissions, action) => canScan(permissions, 'maintenance', action);

@@ -105,25 +105,7 @@ export function bandsFromWeights(areas, weights) {
   return band;
 }
 
-// A phone photo can be several megabytes, which would blow the storage quota
-// in a couple of uploads. Scale it down before keeping it.
-export function readImageScaled(file, maxW = 1280, quality = 0.82) {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      const scale = Math.min(1, maxW / img.width);
-      const c = document.createElement('canvas');
-      c.width = Math.max(1, Math.round(img.width * scale));
-      c.height = Math.max(1, Math.round(img.height * scale));
-      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-      URL.revokeObjectURL(url);
-      resolve(c.toDataURL('image/jpeg', quality));
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error('unreadable image'));
-    };
-    img.src = url;
-  });
-}
+// Scaling a photo before it is kept now lives in lib/image.js, shared with
+// the maintenance module. Re-exported here so this module's own callers —
+// and its 1280px / 0.82 defaults — are untouched.
+export { readImageScaled } from '../../lib/image.js';

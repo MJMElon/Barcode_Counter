@@ -123,18 +123,24 @@ export function weekTasks(payload, week) {
   const out = {};
 
   // ── P & D ──
+  // The pest spray and the disease spray are two jobs, not one: the office
+  // ticks them separately and writes a work-record row for each, so the field
+  // gets one entry per side rather than a single line naming both chemicals.
+  // Doing them on the same walk is a coincidence of the day, not a reason to
+  // record them as one piece of work.
   const pdCfg = (s.pdConfig || {})[wk];
   const pdTicks = (s.pd || {})[wk] || {};
-  out.pd = Object.keys(pdTicks)
-    .filter((plot) => pdTicks[plot] && (pdTicks[plot].P || pdTicks[plot].D))
-    .sort(plotCmp)
-    .map((plot) => ({
-      plot,
-      chemical: [
-        pdTicks[plot].P ? pdChemical(pdCfg, 'P') : '',
-        pdTicks[plot].D ? pdChemical(pdCfg, 'D') : '',
-      ].filter(Boolean).join(' + '),
-    }));
+  out.pd = [];
+  Object.keys(pdTicks).sort(plotCmp).forEach((plot) => {
+    const tick = pdTicks[plot];
+    if (!tick) return;
+    ['P', 'D'].forEach((side) => {
+      if (!tick[side]) return;
+      const chemical = pdChemical(pdCfg, side);
+      if (!chemical) return;
+      out.pd.push({ plot, chemical, side });
+    });
+  });
 
   // ── Manuring ──
   const mCfg = (s.manuringConfig || [])[ri] || [];
@@ -215,12 +221,19 @@ export function weekCounts(payload, week) {
  * Has this plot's job already been recorded for this week?
  * Matched on the month's week rather than the exact day, because the schedule
  * asks for the job once in the block, not on a particular date.
+ *
+ * `chemical` separates the two P & D sprays on the same plot, which are two
+ * jobs. A record made before they were split names both chemicals at once, so
+ * a record whose chemical CONTAINS this one still counts — otherwise every
+ * spray already recorded would reappear as outstanding.
  */
-export function isDone(records, { workTypeKey, plot, week, month }) {
+export function isDone(records, { workTypeKey, plot, week, month, chemical }) {
   return (records || []).some(
     (r) =>
       r.work_type === workTypeKey &&
       r.plot_name === plot &&
+      (!chemical || !r.chemical || r.chemical === chemical ||
+        String(r.chemical).indexOf(chemical) !== -1) &&
       (r.week_no ? r.week_no === week : weekOfDate(r.work_date) === week) &&
       monthLabelOf(r.work_date) === month
   );

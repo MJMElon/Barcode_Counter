@@ -9,12 +9,14 @@ import {
   allowedNurseries,
   canMaintain,
   deleteRecord,
+  isModuleAdmin,
   loadMaintenanceData,
   loadPlotBatches,
   loadSchedules,
   saveRecord,
   toCsv,
   todayStr,
+  uploadMaintPhotos,
   workTypeByKey,
   workTypeLabel,
 } from './data.js';
@@ -59,7 +61,12 @@ export default function MaintenanceModule() {
 
   const allowed = allowedNurseries(permissions);
   const mayRecord = canMaintain(permissions, 'record');
-  const mayEdit   = canMaintain(permissions, 'edit');
+  // Changing or removing a record already made is an admin's job. A Field
+  // Conductor records the work; correcting the books is not the same act, and
+  // the office is who answers for it. The maintenance 'edit' tick still has to
+  // be on, so an admin can also be kept out of a module they do not run.
+  const isAdmin   = isModuleAdmin(permissions, 'operation');
+  const mayEdit   = isAdmin && canMaintain(permissions, 'edit');
   const mayExport = canMaintain(permissions, 'export');
 
   const flash = (text) => {
@@ -167,17 +174,23 @@ export default function MaintenanceModule() {
   const doneCounts = useMemo(() => WEEKS.reduce((acc, w) => {
     acc[w] = WORK_TYPES.reduce((c, wt) => {
       c[wt.key] = tasksByWeek[w][wt.key].filter((x) =>
-        isJobDone(records, { workTypeKey: wt.key, plot: x.plot, week: w, month })).length;
+        isJobDone(records, { workTypeKey: wt.key, plot: x.plot,
+                             chemical: x.chemical, week: w, month })).length;
       return c;
     }, {});
     return acc;
   }, {}), [tasksByWeek, records, month]);
 
-  async function handleSheetSave({ task, batches, remark }) {
+  async function handleSheetSave({ task, batches, remark, photos }) {
     const plot = visiblePlots.find((p) => p.plot_name === task.plot)
       || { plot_name: task.plot, nursery_name: task.nursery || nursery || null };
     setSaving(true);
     try {
+      // Photos first: the record should carry their links, and a photo that
+      // will not upload is dropped rather than taking the record with it.
+      const photoUrls = photos && photos.length
+        ? await uploadMaintPhotos(photos, { plot: task.plot, workTypeKey: sheet.workType.key, date: today })
+        : [];
       await saveRecord({
         plot,
         workTypeKey: sheet.workType.key,
@@ -190,6 +203,7 @@ export default function MaintenanceModule() {
         weekNo: sheet.week,
         scheduleMonth: month,
         reportedBy: staffName,
+        photoUrls,
       });
       flash(t('mt.savedToast', { work: workTypeLabel(sheet.workType, lang), plot: task.plot }));
       reload();
@@ -362,7 +376,9 @@ export default function MaintenanceModule() {
             batchMap={batchMap}
             today={today}
             saving={saving}
-            isDone={(plot) => isJobDone(records, { workTypeKey: sheet.workType.key, plot, week: sheet.week, month })}
+            isDone={(task) => isJobDone(records, {
+              workTypeKey: sheet.workType.key, plot: task.plot,
+              chemical: task.chemical, week: sheet.week, month })}
             onSave={handleSheetSave}
             onClose={() => setSheet(null)}
           />
@@ -407,8 +423,28 @@ export default function MaintenanceModule() {
                     {r.chemical ? ` · ${r.chemical}` : ''}
                     {r.reported_by ? ` · ${t('mt.by', { name: r.reported_by })}` : ''}
                   </div>
+                  {r.batch_name && (
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {String(r.batch_name).split(',').map((b) => b.trim()).filter(Boolean).map((b) => (
+                        <span key={b} className="text-[10px] font-black text-slate-600 bg-slate-100 border border-slate-200 rounded-lg px-2 py-0.5">
+                          {b}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   {r.remark && (
                     <div className="text-[12px] text-slate-500 mt-1 italic break-words">{r.remark}</div>
+                  )}
+                  {r.photo_urls && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {String(r.photo_urls).split(',').map((u) => u.trim()).filter(Boolean).map((u) => (
+                        // Opens full size in a new tab; the card only needs a thumbnail.
+                        <a key={u} href={u} target="_blank" rel="noreferrer">
+                          <img src={u} alt="" loading="lazy"
+                               className="w-16 h-16 object-cover rounded-xl border border-slate-200" />
+                        </a>
+                      ))}
+                    </div>
                   )}
 
                   {mayEdit && (
