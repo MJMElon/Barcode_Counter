@@ -12,6 +12,12 @@ import { prettyD } from './data.js';
 // Both dates sit on every row for the same reason: a run that started in July
 // and finished in August has to be visibly an August run.
 //
+// The plot column names the plot, not the area within it. A split plot's areas
+// are how PALMS logs the work, not how the nursery talks about it: "U8 earned
+// the incentive" is the sentence, and which of its areas did is a detail for
+// the screen the figures came from. A plot with two earning areas therefore
+// appears twice, each with its own dates — two runs, honestly two rows.
+//
 // Set in Times, and the letterhead matches the Delivery Order (src/lib/pdf.js)
 // so the two read as documents from the same company.
 
@@ -98,7 +104,7 @@ function drawTable(doc, rows, y, { withResult, empty }) {
     doc.setTextColor(...INK);
     doc.setFont(FONT, 'normal');
     doc.text(String(i + 1), at('no'), y, { align: 'center' });
-    doc.text(r.label, at('plot'), y, { align: 'center' });
+    doc.text(r.plot || r.label, at('plot'), y, { align: 'center' });
     doc.text(prettyD(r.start), at('start'), y, { align: 'center' });
     doc.text(prettyD(r.end), at('end'), y, { align: 'center' });
 

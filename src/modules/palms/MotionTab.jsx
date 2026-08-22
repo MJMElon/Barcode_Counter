@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ACTIVITIES, INCENTIVE, NURSERIES, prettyD, todayStr } from './data.js';
+import { ACTIVITIES, INCENTIVE, NURSERIES, keyLabel, nurseryOfPlot, prettyD, todayStr } from './data.js';
 import { buildCullingReport, cullingReportFileName } from './cullingReport.js';
 import {
   FIRST_ACT,
@@ -7,8 +7,8 @@ import {
   activityStats,
   incentiveRuns,
   monthsWithData,
-  perActivityStats,
   perUnitActivityStats,
+  unitActivityStats,
   unitsOf,
 } from './motion.js';
 
@@ -34,6 +34,18 @@ function Cell({ v, label, tone }) {
     </td>
   );
 }
+
+const NUR_ORDER = { BNN: 0, UNN1: 1, UNN2: 2 };
+
+// A picker tile. Fixed height, not one that follows the label: the grid gives
+// them equal widths, and without this a two-line name makes its row taller
+// than the row beneath it.
+const tile = (on) =>
+  `px-2 min-h-[56px] flex items-center justify-center text-center rounded-xl border-2 transition-all cursor-pointer hover:-translate-y-0.5 ${
+    on
+      ? 'bg-emerald-50 border-emerald-500 text-emerald-700'
+      : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-emerald-400 hover:bg-white'
+  }`;
 
 // Culling Duration measures one fixed run and nothing else.
 const CULL_FROM = FIRST_ACT; // Saringan Anak Bibit
@@ -239,6 +251,7 @@ export default function MotionTab({ db, t, nurseryKeys, staffName }) {
   const [view, setView] = useState('act');
   const [month, setMonth] = useState(''); // '' = every month
   const [act, setAct] = useState(FIRST_ACT); // the activity the 'act' view is on
+  const [unit, setUnit] = useState(null); // the plot the 'plot' view is on
   const [reporting, setReporting] = useState(false);
 
   // "All nurseries" means all the ones this user may see, not every nursery
@@ -248,20 +261,42 @@ export default function MotionTab({ db, t, nurseryKeys, staffName }) {
   // this activity take, pooled or plot by plot — so they share one picker and
   // one definition of "how long". Culling Duration is the fixed Saringan ->
   // Transplanting run, measured as a span, which is a different thing.
-  const rows = useMemo(() => perActivityStats(db, scope, month), [db, scope, month]);
+  // The two views are mirrors. By activity holds an activity still and varies
+  // the plot; By plot holds a plot still and varies the activity. Each picks
+  // its subject in the first card and lists the other in the second.
+  const units = useMemo(
+    () =>
+      unitsOf(db, scope).sort((a, b) => {
+        const [pa, aa = ''] = a.split('#');
+        const [pb, ab = ''] = b.split('#');
+        const na = NUR_ORDER[nurseryOfPlot(pa)] ?? 9;
+        const nb = NUR_ORDER[nurseryOfPlot(pb)] ?? 9;
+        if (na !== nb) return na - nb;
+        const da = parseInt(pa.replace(/\D/g, ''), 10);
+        const dbn = parseInt(pb.replace(/\D/g, ''), 10);
+        if (da !== dbn) return da - dbn;
+        return aa.localeCompare(ab);
+      }),
+    [db, scope]
+  );
+  // A nursery the picked plot does not belong to leaves the choice stranded.
+  const pickedUnit = unit && units.includes(unit) ? unit : units[0] || null;
+
   const span = useMemo(() => activityStats(db, scope, act, month), [db, scope, act, month]);
   const plotRows = useMemo(
-    () => (view === 'plot' ? perUnitActivityStats(db, scope, act, month) : []),
+    () => (view === 'act' ? perUnitActivityStats(db, scope, act, month) : []),
     [view, db, scope, act, month]
+  );
+  const actRows = useMemo(
+    () => (view === 'plot' && pickedUnit ? unitActivityStats(db, pickedUnit, month) : []),
+    [view, db, pickedUnit, month]
   );
   const runs = useMemo(
     () => (view === 'pay' ? incentiveRuns(db, scope, CULL_FROM, CULL_TO, month) : []),
     [view, db, scope, month]
   );
   const months = useMemo(() => monthsWithData(db, scope), [db, scope]);
-  const units = useMemo(() => unitsOf(db, scope).length, [db, scope]);
   const ideal = ACTIVITIES.find((a) => a.n === act).days;
-  const measured = rows.reduce((s, r) => s + (r.stats ? r.stats.n : 0), 0);
 
   return (
     <>
@@ -319,76 +354,70 @@ export default function MotionTab({ db, t, nurseryKeys, staffName }) {
         ))}
       </div>
 
-      {/* A run of activities — the whole cycle by default */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
-        <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100">
-          <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-wide">
-            {view === 'pay' ? t('ms.cullRun') : t('ms.oneActivity')}
-          </h3>
-        </div>
-        <div className="px-4 sm:px-6 py-3 sm:py-4">
-          {/* By activity picks one activity — a from/until pair asked a
-              question it does not have. Culling Duration is one fixed run, so
-              it picks nothing at all. */}
-          {/* The eleven activities as tiles, the way the Monitoring Board's
-              stage flow reads: a row of buttons rather than a dropdown you
-              have to open to see what is in it. Names only — the figures for
-              whichever one is picked are in the three cards below, and
-              repeating them on every tile said the same thing twice. */}
-          {/* Wrapped rather than squeezed into one scrolling line: eleven
-              names readable at 12px need more width than a row has, and two
-              tidy rows beat one row of tiny type you have to scroll. */}
-          {view !== 'pay' && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
-              {ACTIVITIES.map((a) => {
-                const on = act === a.n;
-                return (
+      {/* What the view is about: an activity, or a plot. Culling Duration is
+          neither — it is a fixed run and picks nothing. */}
+      {view !== 'pay' && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
+          <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100">
+            <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-wide">
+              {view === 'act' ? t('ms.oneActivity') : t('ms.plotsTitle')}
+            </h3>
+          </div>
+          <div className="px-4 sm:px-6 py-3 sm:py-4">
+            {/* Tiles rather than a dropdown you have to open to see what is in
+                it, wrapped rather than squeezed into one scrolling line, and
+                every tile the same size so the block reads as one set. */}
+            {view === 'act' ? (
+              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
+                {ACTIVITIES.map((a) => (
                   <button
                     key={a.n}
                     onClick={() => setAct(a.n)}
-                    // A fixed height, not one that follows the label: the grid
-                    // already makes every tile the same width, and without
-                    // this the row holding "Saringan Anak Bibit" on two lines
-                    // stood taller than the row below it.
-                    className={`px-2 min-h-[56px] flex items-center justify-center text-center rounded-xl border-2 transition-all cursor-pointer hover:-translate-y-0.5 ${
-                      on
-                        ? 'bg-emerald-50 border-emerald-500 text-emerald-700'
-                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-emerald-400 hover:bg-white'
-                    }`}
+                    className={tile(act === a.n)}
                   >
                     <span className="text-[12px] font-black leading-tight">{a.short}</span>
                   </button>
-                );
-              })}
-            </div>
-          )}
-
-          {span ? (
-            <>
-              <div className={`grid grid-cols-3 gap-2 ${view === 'pay' ? '' : 'mt-3'}`}>
-                {[
-                  ['ms.fastest', span.min, 'text-emerald-600'],
-                  ['ms.average', { days: span.avg }, 'text-slate-800'],
-                  ['ms.slowest', span.max, 'text-rose-600'],
-                ].map(([k, s, tone]) => (
-                  <div key={k} className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 min-w-0">
-                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t(k)}</div>
-                    <div className={`text-xl font-black tabular-nums ${tone}`}>{s.days}</div>
-                    <div className="text-[10px] font-bold text-slate-400 truncate">
-                      {s.label ? s.label : t('ms.days')}
-                    </div>
-                  </div>
                 ))}
               </div>
-              <p className="text-[11px] font-bold text-slate-500 mt-2.5">
-                {t('ms.spanFoot', { ideal })}
-              </p>
-            </>
-          ) : (
-            <p className="text-[12px] font-semibold text-slate-400 mt-3">{t('ms.spanEmpty')}</p>
-          )}
+            ) : (
+              <div className="grid grid-cols-4 sm:grid-cols-8 lg:grid-cols-10 gap-2">
+                {units.map((k) => (
+                  <button key={k} onClick={() => setUnit(k)} className={tile(pickedUnit === k)}>
+                    <span className="text-[12px] font-black leading-tight">{keyLabel(k)}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* The chosen activity's figures pooled across every plot. A plot
+                has eleven activities and no single pair of numbers, so By plot
+                goes straight to its table. */}
+            {view === 'act' &&
+              (span ? (
+                <>
+                  <div className="grid grid-cols-3 gap-2 mt-3">
+                    {[
+                      ['ms.fastest', span.min, 'text-emerald-600'],
+                      ['ms.average', { days: span.avg }, 'text-slate-800'],
+                      ['ms.slowest', span.max, 'text-rose-600'],
+                    ].map(([k, v, tone]) => (
+                      <div key={k} className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 min-w-0">
+                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t(k)}</div>
+                        <div className={`text-xl font-black tabular-nums ${tone}`}>{v.days}</div>
+                        <div className="text-[10px] font-bold text-slate-400 truncate">
+                          {v.label ? v.label : t('ms.days')}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[11px] font-bold text-slate-500 mt-2.5">{t('ms.spanFoot', { ideal })}</p>
+                </>
+              ) : (
+                <p className="text-[12px] font-semibold text-slate-400 mt-3">{t('ms.spanEmpty')}</p>
+              ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Incentive: every completed run listed, fastest first, with both dates
           on the row. A run that started in July and finished in August is
@@ -494,11 +523,11 @@ export default function MotionTab({ db, t, nurseryKeys, staffName }) {
         />
       )}
 
-      {/* By plot: the same run, split by plot, slowest first */}
-      {view === 'plot' && (
+      {/* By activity, section two: the chosen activity plot by plot */}
+      {view === 'act' && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
           <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 flex items-center justify-between gap-2 flex-wrap">
-            <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-wide">{t('ms.perPlotTitle')}</h3>
+            <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-wide">{t('ms.plotsTitle')}</h3>
             <span className="text-[11px] font-bold text-slate-400">{t('ms.slowestFirst')}</span>
           </div>
           {plotRows.length === 0 ? (
@@ -531,46 +560,48 @@ export default function MotionTab({ db, t, nurseryKeys, staffName }) {
         </div>
       )}
 
-      {/* By activity: each activity on its own, across every plot */}
-      {view === 'act' && (
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
-        <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 flex items-center justify-between gap-2 flex-wrap">
-          <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-wide">{t('ms.perActTitle')}</h3>
-          <span className="text-[11px] font-bold text-slate-400">{t('ms.measured', { n: measured, u: units })}</span>
-        </div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-slate-50 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">
-              <th className="px-2 sm:px-4 py-2.5 sm:py-3.5">{t('pm.colActivity')}</th>
-              <th className="px-2 sm:px-4 py-2.5 sm:py-3.5">{t('ms.min')}</th>
-              <th className="px-2 sm:px-4 py-2.5 sm:py-3.5">{t('ms.max')}</th>
-              <th className="px-2 sm:px-4 py-2.5 sm:py-3.5">{t('ms.avg')}</th>
-              <th className="px-2 py-2.5 hidden sm:table-cell">{t('ms.ideal')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(({ act, stats }) => (
-              <tr key={act.n} className="border-t border-slate-100">
-                <td className="px-2 sm:px-4 py-2 sm:py-3 align-top">
-                  <div className="font-black text-slate-700 text-[12px] leading-tight">
-                    <span className="sm:hidden">{act.mShort}</span>
-                    <span className="hidden sm:inline">{act.name}</span>
-                  </div>
-                  <div className="text-[9px] font-bold text-slate-400">
-                    {stats ? t('ms.cycles', { n: stats.n }) : t('ms.noData')}
-                  </div>
-                </td>
-                <Cell v={stats && stats.min.days} label={stats && stats.min.label} tone="text-emerald-600" />
-                <Cell v={stats && stats.max.days} label={stats && stats.max.label} tone="text-rose-600" />
-                <Cell v={stats && stats.avg} tone="text-slate-800" />
-                <td className="px-2 sm:px-4 py-2 sm:py-3 align-top hidden sm:table-cell">
-                  <div className="font-black tabular-nums text-[13px] text-slate-400">{act.days}</div>
-                </td>
+      {/* By plot, section two: every activity for the chosen plot */}
+      {view === 'plot' && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
+          <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 flex items-center justify-between gap-2 flex-wrap">
+            <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-wide">
+              {t('ms.oneActivity')}
+            </h3>
+            <span className="text-[11px] font-bold text-slate-400">{pickedUnit ? keyLabel(pickedUnit) : '—'}</span>
+          </div>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-slate-50 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                <th className="px-2 sm:px-4 py-2.5 sm:py-3.5">{t('pm.colActivity')}</th>
+                <th className="px-2 sm:px-4 py-2.5 sm:py-3.5">{t('ms.min')}</th>
+                <th className="px-2 sm:px-4 py-2.5 sm:py-3.5">{t('ms.max')}</th>
+                <th className="px-2 sm:px-4 py-2.5 sm:py-3.5">{t('ms.avg')}</th>
+                <th className="px-2 sm:px-4 py-2.5 sm:py-3.5 hidden sm:table-cell">{t('ms.ideal')}</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {actRows.map(({ act: a, stats }) => (
+                <tr key={a.n} className="border-t border-slate-100">
+                  <td className="px-2 sm:px-4 py-2 sm:py-3 align-top">
+                    <div className="font-black text-slate-700 text-[12px] leading-tight">
+                      <span className="sm:hidden">{a.mShort}</span>
+                      <span className="hidden sm:inline">{a.name}</span>
+                    </div>
+                    <div className="text-[9px] font-bold text-slate-400">
+                      {stats ? t('ms.cycles', { n: stats.n }) : t('ms.noData')}
+                    </div>
+                  </td>
+                  <Cell v={stats && stats.min.days} tone="text-emerald-600" />
+                  <Cell v={stats && stats.max.days} tone="text-rose-600" />
+                  <Cell v={stats && stats.avg} tone="text-slate-800" />
+                  <td className="px-2 sm:px-4 py-2 sm:py-3 align-top hidden sm:table-cell">
+                    <div className="font-black tabular-nums text-[13px] text-slate-400">{a.days}</div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
     </>

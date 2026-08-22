@@ -122,6 +122,25 @@ export function perUnitActivityStats(db, nurseryKey, n, month) {
     .sort((a, b) => b.stats.avg - a.stats.avg);
 }
 
+// Every activity's figures for ONE plot, in activity order. The mirror of
+// perUnitActivityStats: that one holds an activity still and varies the plot,
+// this one holds the plot still and varies the activity. Both read
+// activitySamples, so a plot's number here is the same number it contributes
+// there.
+export function unitActivityStats(db, key, month) {
+  const cycles = cyclesOf((db.logs || {})[key]);
+  return ACTIVITIES.map((a) => {
+    const samples = [];
+    cycles.forEach((cycle) => {
+      const d = daysForActivity(cycle, a.n);
+      if (d && inMonth(month, d.end)) {
+        samples.push({ days: d.days, key, label: keyLabel(key), start: d.start, end: d.end });
+      }
+    });
+    return { act: a, stats: summarise(samples) };
+  });
+}
+
 // A measurement belongs to the month it FINISHED in — that is the month the
 // work was signed off, and it is the only date every measurement has.
 // `month` is 'YYYY-MM', or empty for every month.
