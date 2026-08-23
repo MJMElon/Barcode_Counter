@@ -23,6 +23,7 @@ import {
   workTypeLabel,
 } from './data.js';
 import PhotoSlots from './PhotoSlots.jsx';
+import ThisWeek from './ThisWeek.jsx';
 import Timeline from './Timeline.jsx';
 import WorkIcon from './WorkIcons.jsx';
 import WorkSheet from './WorkSheet.jsx';
@@ -395,6 +396,28 @@ export default function MaintenanceModule() {
           </div>
         )}
 
+        {/* The week in hand, first and at full width — a Field Conductor
+            opens this standing in a nursery with a job to start, not to read
+            a month's plan. Only the jobs actually due appear. */}
+        {!setup && schedule.length > 0 && mayRecord && (
+          <>
+            <div className="flex items-baseline justify-between pt-1">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                {t('mt.thisWeekTitle')}
+              </span>
+              <span className="text-[11px] font-black text-slate-500">
+                {t('mt.weekN', { n: currentWeek })} · {weekDates(currentWeek, month)}
+              </span>
+            </div>
+            <ThisWeek
+              week={currentWeek}
+              counts={counts[currentWeek]}
+              doneCounts={doneCounts[currentWeek]}
+              onOpen={(week, workType) => setSheet({ week, workType })}
+            />
+          </>
+        )}
+
         {mayRecord && (
           <button
             onClick={() => setEditing({})}
@@ -420,7 +443,7 @@ export default function MaintenanceModule() {
           <>
             <div className="flex items-baseline justify-between pt-1">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                {t('mt.schedule')}
+                {t('mt.thisMonth')}
               </span>
               <span className="text-[11px] font-black text-slate-500">{month}</span>
             </div>
@@ -481,7 +504,7 @@ export default function MaintenanceModule() {
         )}
 
         <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest pt-1">
-          {t('mt.recent')}
+          {t('mt.completed')}
         </div>
 
         {loading ? (
