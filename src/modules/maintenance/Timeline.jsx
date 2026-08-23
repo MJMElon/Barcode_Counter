@@ -54,13 +54,19 @@ export default function Timeline({ month, currentWeek, counts, doneCounts, onOpe
                     </span>
                   );
                 }
+                // Finished work steps back: faded, ticked, and out of the way
+                // of the jobs still wanting attention. Still tappable, because
+                // an admin may need to look at what was recorded.
+                const clear = left === 0;
                 return (
                   <button key={wt.key} type="button" title={label}
                     onClick={() => onOpen(w, wt)}
-                    className={`inline-flex items-center gap-1.5 rounded-full pl-1.5 pr-2.5 py-1.5 ${tint.bg} ${tint.fg}`}>
-                    <WorkIcon workKey={wt.key} className="w-[17px] h-[17px]" />
+                    className={`inline-flex items-center gap-1.5 rounded-full pl-1.5 pr-2.5 py-1.5 ${
+                      clear ? 'bg-slate-50 text-slate-400' : `${tint.bg} ${tint.fg}`}`}>
+                    <WorkIcon workKey={wt.key}
+                      className={`w-[17px] h-[17px] ${clear ? 'opacity-45' : ''}`} />
                     <span className="text-[11px] font-black tabular-nums">
-                      {left === 0 ? `✓ ${total}` : `${left}/${total}`}
+                      {clear ? `✓ ${total}` : `${left}/${total}`}
                     </span>
                   </button>
                 );

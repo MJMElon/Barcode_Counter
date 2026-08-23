@@ -28,7 +28,8 @@ const shortChemical = (c) => String(c || '').split(/\s*\+\s*/)[0].replace(/\s+[\
  * batches were in the plot and a remark.
  */
 export default function WorkSheet({
-  workType, week, weekDates, month, tasks, batchMap, isDone, today, saving, onSave, onClose,
+  workType, week, weekDates, month, tasks, batchMap, isDone, isAdmin,
+  today, saving, onSave, onClose,
 }) {
   const { t, lang } = useLang();
   const [plot, setPlot] = useState(null);      // the task being recorded
@@ -40,9 +41,15 @@ export default function WorkSheet({
   const [photos, setPhotos] = useState(() => Array(MAX_PHOTOS).fill(null));
 
 
-  // Open on the first plot still to do; if they are all done, the first one.
+  /* Work already recorded is not re-recordable: a second save would be a
+     second record of the same job, and correcting one is the office's to do.
+     An admin may still open a done plot, because somebody has to be able to
+     put a mistake right. */
+  const canOpen = (task) => isAdmin || !isDone(task);
+
+  // Open on the first plot still to do; for an admin, the first one either way.
   useEffect(() => {
-    const next = tasks.find((x) => !isDone(x)) || tasks[0] || null;
+    const next = tasks.find((x) => !isDone(x)) || (isAdmin ? tasks[0] : null);
     setPlot(next);
     setBatches([]);
     setRemark('');
@@ -118,10 +125,15 @@ export default function WorkSheet({
               {tasks.map((x, i) => {
                 const done = isDone(x);
                 const on = plot && taskKey(plot) === taskKey(x);
+                const locked = done && !isAdmin;
                 return (
-                  <button key={taskKey(x) + i} onClick={() => pick(x)}
+                  <button key={taskKey(x) + i}
+                    disabled={locked}
+                    title={locked ? t('mt.alreadyRecorded') : undefined}
+                    onClick={() => canOpen(x) && pick(x)}
                     className={`px-3 py-2 rounded-xl text-[13px] font-black border-2 transition-colors text-left ${
                       on ? 'bg-emerald-600 text-white border-emerald-700'
+                         : locked ? 'bg-slate-50 text-slate-400 border-slate-200 cursor-default'
                          : done ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                 : 'bg-white text-slate-700 border-slate-200'}`}>
                     {done ? '✓ ' : ''}{x.plot}
@@ -137,6 +149,13 @@ export default function WorkSheet({
             </div>
           )}
         </div>
+
+        {!plot && tasks.length > 0 && (
+          <div className="px-5 py-6 text-center">
+            <div className="text-[14px] font-black text-emerald-700">{t('mt.allRecorded')}</div>
+            <div className="text-[12px] font-bold text-slate-400 mt-1">{t('mt.allRecordedHint')}</div>
+          </div>
+        )}
 
         {plot && (
           <div className="px-5 py-4 space-y-3">
@@ -209,7 +228,7 @@ export default function WorkSheet({
               disabled={saving}
               onClick={() => onSave({ task: plot, batches, remark, photos: taken, qty })}
               className="w-full rounded-2xl bg-emerald-600 disabled:bg-slate-300 text-white font-black uppercase tracking-widest text-[13px] py-3.5">
-              {saving ? t('common.saving') : isDone(plot) ? t('mt.saveAgain') : t('mt.save')}
+              {saving ? t('common.saving') : isDone(plot) ? t('mt.saveCorrection') : t('mt.save')}
             </button>
           </div>
         )}

@@ -514,6 +514,7 @@ export default function MaintenanceModule() {
             batchMap={batchMap}
             today={today}
             saving={saving}
+            isAdmin={isAdmin}
             isDone={(task) => isJobDone(allRecords, {
               workTypeKey: sheet.workType.key, plot: task.plot,
               chemical: task.chemical, week: sheet.week, month })}
