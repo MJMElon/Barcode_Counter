@@ -28,6 +28,7 @@ import Timeline from './Timeline.jsx';
 import WorkIcon from './WorkIcons.jsx';
 import WorkSheet from './WorkSheet.jsx';
 import { batchesIn } from './plotBatches.js';
+import { tintOf } from './tints.js';
 import {
   WEEKS,
   isDone as isJobDone,
@@ -44,6 +45,24 @@ const nurseryKey = (name) => String(name || '').replace(/[^a-z0-9]/gi, '').toUpp
 
 /** Matches the work sheet: three photos is enough to show a job was done. */
 const MAX_PHOTOS = 3;
+
+/* "Today", "Yesterday", then the date. Most of the list is the last day or
+   two, and a Field Conductor reads those faster as words than as 2026-08-22.
+   Anything older gets the date, because "5 days ago" is a sum nobody wants
+   to do. */
+function relativeDay(iso, today, t) {
+  if (!iso) return '—';
+  if (iso === today) return t('mt.today');
+  const ms = Date.parse(iso), now = Date.parse(today);
+  if (Number.isFinite(ms) && Number.isFinite(now)) {
+    if (Math.round((now - ms) / 86400000) === 1) return t('mt.yesterday');
+    const d = new Date(ms);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleDateString('en-MY', { day: '2-digit', month: 'short', year: 'numeric' });
+    }
+  }
+  return iso;
+}
 
 // Maintenance work recorded in the field by a Field Conductor: which job, on
 // which plot, on which day. Plots come from shared_plots (Seedling Stock
@@ -520,55 +539,67 @@ export default function MaintenanceModule() {
                   key={r.id}
                   className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] p-3.5"
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="font-black text-slate-800 text-[15px] leading-tight truncate">
-                        {wt ? <WorkIcon workKey={wt.key} className="w-4 h-4 inline-block align-[-2px] mr-1" /> : null}{workTypeLabel(wt, lang) || r.jenis || '—'}
+                  <div className="flex items-start gap-3">
+                    {/* The job's own colour and icon, so the list is scanned
+                        the same way the week above it is. */}
+                    <span className={`w-[38px] h-[38px] rounded-xl grid place-items-center shrink-0 ${tintOf(r.work_type).bg}`}>
+                      <WorkIcon workKey={r.work_type} className={`w-[22px] h-[22px] ${tintOf(r.work_type).fg}`} />
+                    </span>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="font-black text-slate-800 text-[14px] leading-tight">
+                        {workTypeLabel(wt, lang) || r.jenis || '—'} · {r.plot_name}
                       </div>
-                      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">
-                        📍 {r.plot_name} · {r.nursery_name || '—'}
+                      {/* One line for everything that is context rather than
+                          content: when, what was used, and who. */}
+                      <div className="text-[11.5px] font-bold text-slate-400 mt-0.5">
+                        {[
+                          relativeDay(r.work_date, today, t),
+                          r.chemical || null,
+                          r.qty != null ? Number(r.qty).toLocaleString() : null,
+                          r.reported_by || null,
+                        ].filter(Boolean).join(' · ')}
                       </div>
+
+                      {r.batch_name && (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {String(r.batch_name).split(',').map((b) => b.trim()).filter(Boolean).map((b) => (
+                            <span key={b} className="text-[10px] font-black tabular-nums text-slate-600 bg-slate-100 rounded-md px-2 py-0.5">
+                              {b}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {r.remark && (
+                        <div className="text-[12px] text-slate-500 mt-1.5 italic break-words">{r.remark}</div>
+                      )}
+                      {r.photo_urls && (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {String(r.photo_urls).split(',').map((u) => u.trim()).filter(Boolean).map((u) => (
+                            // Opens full size in a new tab; the card only needs a thumbnail.
+                            <a key={u} href={u} target="_blank" rel="noreferrer">
+                              <img src={u} alt="" loading="lazy"
+                                   className="w-[42px] h-[42px] object-cover rounded-[9px] border border-slate-200" />
+                            </a>
+                          ))}
+                        </div>
+                      )}
                     </div>
+
+                    {/* Done, or still on the phone waiting for a signal. */}
                     {r._pending ? (
                       <span className="shrink-0 text-[9px] font-black uppercase tracking-widest bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-2 py-1">
                         ⏳ {t('mt.waiting')}
                       </span>
-                    ) : r.work_date === today && (
-                      <span className="shrink-0 text-[9px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-1">
-                        ✓ {t('mt.today')}
-                      </span>
+                    ) : (
+                      <svg viewBox="0 0 24 24" aria-hidden="true"
+                           className="w-[18px] h-[18px] text-emerald-600 shrink-0 mt-1"
+                           fill="none" stroke="currentColor" strokeWidth="2.6"
+                           strokeLinecap="round" strokeLinejoin="round">
+                        <path d="m5 13 4 4L19 7" />
+                      </svg>
                     )}
                   </div>
-
-                  <div className="text-[12px] font-bold text-slate-500 mt-1.5">
-                    🗓️ {r.work_date}
-                    {r.qty != null ? ` · ${Number(r.qty).toLocaleString()}` : ''}
-                    {r.chemical ? ` · ${r.chemical}` : ''}
-                    {r.reported_by ? ` · ${t('mt.by', { name: r.reported_by })}` : ''}
-                  </div>
-                  {r.batch_name && (
-                    <div className="mt-1.5 flex flex-wrap gap-1">
-                      {String(r.batch_name).split(',').map((b) => b.trim()).filter(Boolean).map((b) => (
-                        <span key={b} className="text-[10px] font-black text-slate-600 bg-slate-100 border border-slate-200 rounded-lg px-2 py-0.5">
-                          {b}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {r.remark && (
-                    <div className="text-[12px] text-slate-500 mt-1 italic break-words">{r.remark}</div>
-                  )}
-                  {r.photo_urls && (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {String(r.photo_urls).split(',').map((u) => u.trim()).filter(Boolean).map((u) => (
-                        // Opens full size in a new tab; the card only needs a thumbnail.
-                        <a key={u} href={u} target="_blank" rel="noreferrer">
-                          <img src={u} alt="" loading="lazy"
-                               className="w-16 h-16 object-cover rounded-xl border border-slate-200" />
-                        </a>
-                      ))}
-                    </div>
-                  )}
 
                   {mayEdit && !r._pending && (
                     <div className="flex gap-2 mt-2.5">
