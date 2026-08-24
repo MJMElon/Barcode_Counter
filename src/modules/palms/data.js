@@ -556,13 +556,18 @@ export function seedSample() {
 }
 
 /* ---------- link for the Culling Calculator ----------
-   A plot is "in culling scope" when its current PALMS activity is
-   Saringan Anak Bibit (1), Tunggu buat culling (2), Culling (3) or
-   Pengambilan (11) — for multi-area plots, when ANY area is. */
-const CULLING_ACTS = new Set([1, 2, 3, 11]);
+   A plot reaches the calculator when PALMS says it is at Pengambilan (11) —
+   collection — and not before. Counting pokok inang is a job done against
+   what is being taken out of the plot, so the earlier culling-ish stages
+   (Saringan Anak Bibit, Tunggu buat culling, Culling) used to widen this and
+   listed plots there was nothing to count in yet.
+
+   For a multi-area plot, ANY area at Pengambilan brings the plot in: the
+   collection is happening on the plot even if only part of it is ready. */
+const PENGAMBILAN = 11;
 export function cullingScopePlots() {
   const db = loadDB();
-  const inScope = (key) => currentEntries(db, key).some((e) => CULLING_ACTS.has(e.actN));
+  const inScope = (key) => currentEntries(db, key).some((e) => e.actN === PENGAMBILAN);
   const set = new Set();
   Object.keys(NURSERIES).forEach((nk) =>
     plotsOf(nk).forEach((pid) => {

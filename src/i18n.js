@@ -95,7 +95,7 @@ const en = {
   'cull.reqPurpose': 'Purpose',
   'cull.reqBy': 'Requested by',
   'cull.save': 'Save',
-  'cull.noPalmsPlots': 'No plots at a culling stage in this nursery — update plot status in the PALMS module first.',
+  'cull.noPalmsPlots': 'No plots at Pengambilan in this nursery — set a plot to Pengambilan in the PALMS module first.',
 
   // PALMS
   // motion study
@@ -645,7 +645,7 @@ const ms = {
   'cull.reqPurpose': 'Tujuan',
   'cull.reqBy': 'Dimohon oleh',
   'cull.save': 'Simpan',
-  'cull.noPalmsPlots': 'Tiada plot pada peringkat culling di nurseri ini — kemas kini status plot dalam modul PALMS dahulu.',
+  'cull.noPalmsPlots': 'Tiada plot pada peringkat Pengambilan di nurseri ini — tetapkan status plot kepada Pengambilan dalam modul PALMS dahulu.',
 
   // PALMS
   // motion study

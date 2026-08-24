@@ -12,8 +12,8 @@ import { cullingScopePlots, prettyD, todayStr } from './data.js';
 import { PURPOSE_CULLING, TO_AUDITOR, TO_HQ, addRequest, loadRequests, sentToday } from './requests.js';
 
 // Culling Calculator — lives inside PALMS as its third tab (it used to be a
-// standalone module). Only plots whose current PALMS activity is Saringan
-// Anak Bibit, Tunggu buat culling, Culling or Pengambilan are listed.
+// standalone module). A plot is listed here once PALMS says it is at
+// Pengambilan, and not before — see cullingScopePlots().
 // Flow: tap Pokok Inang to record amounts — Field Conductor first; a Site
 // Auditor second entry unlocks while the rate stays above 10%; video
 // evidence is requested when even the Auditor amount leaves it above 10%.
@@ -27,7 +27,7 @@ export default function CullingTab({ t, staffName, flash, nurseryKeys }) {
   const refresh = () => setTick((n) => n + 1);
   const today = todayStr();
 
-  // Plots currently at a culling-related stage in PALMS.
+  // Plots PALMS has moved to Pengambilan.
   const scope = useMemo(() => cullingScopePlots(), [nursery]);
   const rows = data[nursery].filter((r) => scope.has(r.plot));
 
