@@ -13,6 +13,7 @@ const ScanModule = lazy(() => import('./modules/scan/ScanModule.jsx'));
 const DoModule = lazy(() => import('./modules/do/DoModule.jsx'));
 const MaintenanceModule = lazy(() => import('./modules/maintenance/MaintenanceModule.jsx'));
 const PalmsModule = lazy(() => import('./modules/palms/PalmsModule.jsx'));
+const CullingModule = lazy(() => import('./modules/palms/CullingModule.jsx'));
 
 function Loading() {
   const { t } = useLang();
@@ -129,10 +130,22 @@ export default function App() {
           </Protected>
         }
       />
-      {/* The Culling Calculator now lives inside PALMS. Send old links at the
-          calculator's own tab — landing on /palms opened the daily status
-          screen instead, with nothing to say the calculator was still there. */}
-      <Route path="/culling" element={<Navigate to="/palms?tab=cull" replace />} />
+      {/* The Culling Calculator is its own page. It reads the PALMS stores,
+          so it is governed by the same permission. */}
+      <Route
+        path="/culling"
+        element={
+          <Protected>
+            <PageGate page="palms">
+              <ErrorBoundary>
+                <Suspense fallback={<Loading />}>
+                  <CullingModule />
+                </Suspense>
+              </ErrorBoundary>
+            </PageGate>
+          </Protected>
+        }
+      />
       {/* Plot Status was retired — PALMS does the same job and more. Old
           bookmarks land on the dashboard rather than a blank screen. */}
       <Route path="/plot-status" element={<Navigate to="/" replace />} />

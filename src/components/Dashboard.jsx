@@ -32,7 +32,7 @@ export default function Dashboard() {
     // to know it is filed under PALMS to find it. Same permission as PALMS,
     // since it is the same module underneath.
     ...(canPalms(permissions, 'view')
-      ? [{ to: '/palms?tab=cull', icon: '🧮', tint: 'bg-rose-100', title: t('cull.title') }]
+      ? [{ to: '/culling', icon: '🧮', tint: 'bg-rose-100', title: t('cull.title') }]
       : []),
   ];
 
