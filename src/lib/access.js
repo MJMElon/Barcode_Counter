@@ -38,7 +38,7 @@ export function isNurseryScoped(permissions) {
  * says "UNN 1", PALMS calls it "UNN1". Compare on letters and digits alone so
  * one tick on the User Access screen governs both.
  */
-function nurseryKey(name) {
+export function nurseryKey(name) {
   return String(name == null ? '' : name).replace(/[^a-z0-9]/gi, '').toUpperCase();
 }
 

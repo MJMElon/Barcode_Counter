@@ -4,6 +4,7 @@ import { canBarcode, canDo, canMaintain, canPalms, canPlotStatus } from '../lib/
 import { useLang } from '../context/LanguageContext.jsx';
 import TopNav from './TopNav.jsx';
 import CollectionBoard from './CollectionBoard.jsx';
+import MaintenanceBoard from './MaintenanceBoard.jsx';
 
 export default function Dashboard() {
   const { staffName, permissions } = useAuth();
@@ -37,6 +38,11 @@ export default function Dashboard() {
       <div className="max-w-[900px] mx-auto px-3 sm:px-6 py-4 sm:py-6">
         {/* "TV" board: who is coming today to collect seedlings */}
         <CollectionBoard />
+
+        {/* The month's four maintenance jobs, rolled up out of the module's
+            week-by-week timeline. Only for someone who may open Maintenance —
+            a summary is still the module's data. */}
+        {canMaintain(permissions, 'view') && <MaintenanceBoard />}
 
         {/* Modules */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

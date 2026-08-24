@@ -86,11 +86,13 @@ export default function AuthScreen() {
         <div className="bk-cover">
           <div className="bk-smudge" aria-hidden="true" />
 
+          {/* The cover reads top to bottom: who it belongs to, the book, the
+              portal it opens. 555 is the hero — the rest is small print. */}
+          <div className="bk-brand">MJM Nursery</div>
           <div className="bk-logo-wrap">
             <div className="bk-logo">555</div>
           </div>
           <div className="bk-portal">{t('auth.portal')}</div>
-          <div className="bk-portal-sub">MJM Nursery · Field Crew</div>
 
           <div className="bk-lines">
             {allowed === false && <div className="bk-note bk-warn">{t('auth.noAccess')}</div>}
@@ -181,8 +183,11 @@ export default function AuthScreen() {
 
       <style>{`
         /* ══ The 555 exercise book — cover ══
-           Identical to the Auditor Portal's login but for the three --bk-cover
-           values below. Keep it that way: one book, a pile of colours. */
+           The Auditor Portal's login is the same book in pink — it differs
+           only in the three --bk-cover values below, and should stay that
+           way: one book, a pile of colours. NOTE: the masthead here has since
+           been restacked (house name, then 555, then the portal) and the
+           Auditor Portal has not been brought across yet. */
         .bk-page{
           --bk-cover:#a9c5de; --bk-cover-2:#93b3d1; --bk-cover-3:#84a4c3;  /* FC: blue */
           --bk-ink:#23303f; --bk-print:#9c1c2c; --bk-red:#e23b4b; --bk-red-dark:#a5121f;
@@ -232,11 +237,21 @@ export default function AuthScreen() {
           transform:rotate(-7deg);pointer-events:none;
         }
 
-        .bk-logo-wrap{text-align:center;margin-bottom:4px}
+        /* The house name, above the book. Sized to read as a heading and
+           still be plainly subordinate to the 555 under it. */
+        .bk-brand{
+          text-align:center;
+          font-size:19px;font-weight:900;letter-spacing:.26em;text-transform:uppercase;
+          color:rgba(35,48,63,.62);
+          margin-bottom:2px;
+        }
+        .bk-logo-wrap{display:flex;justify-content:center;margin-bottom:4px}
         .bk-logo{
-          display:inline-block;
+          /* Grows with the phone rather than sitting at one fixed size: on a
+             360px screen the cover is ~276px wide inside its padding, which
+             27vw comfortably fits, and it stops growing on a tablet. */
           font-family:'Outfit',sans-serif;font-weight:900;font-style:italic;
-          font-size:74px;line-height:.9;letter-spacing:-.02em;
+          font-size:clamp(88px,27vw,116px);line-height:.9;letter-spacing:-.02em;
           color:var(--bk-red);
           -webkit-text-stroke:1.5px #fff5f6;paint-order:stroke fill;
           text-shadow:
@@ -245,17 +260,14 @@ export default function AuthScreen() {
             5px 5px 0 #8e0f1b,6px 6px 0 #8e0f1b,
             7px 7px 0 #7a0c17,8px 8px 0 #7a0c17,
             10px 12px 16px rgba(80,6,14,.4);
-          transform:rotate(-1.2deg);
+          /* The glyphs are centred, but the shadow only falls down-RIGHT, so
+             the ink looks pushed left of centre. Nudge it back. */
+          transform:rotate(-1.2deg) translateX(4px);
         }
         .bk-portal{
-          margin-top:12px;text-align:center;
-          font-size:12px;font-weight:900;letter-spacing:.34em;text-transform:uppercase;
+          margin-top:14px;text-align:center;
+          font-size:14px;font-weight:900;letter-spacing:.3em;text-transform:uppercase;
           color:var(--bk-print);
-        }
-        .bk-portal-sub{
-          margin-top:5px;text-align:center;
-          font-size:9.5px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;
-          color:rgba(35,48,63,.45);
         }
 
         /* the fill-in lines, the way the cover asks for your name */
@@ -320,8 +332,10 @@ export default function AuthScreen() {
 
         @media (max-width:360px){
           .bk-cover{padding:26px 20px 22px}
-          .bk-logo{font-size:64px}
-          .bk-portal{letter-spacing:.26em;font-size:11px}
+          /* Narrower cover, so ease the ceiling — the 555 still fills it. */
+          .bk-logo{font-size:clamp(76px,28vw,96px)}
+          .bk-brand{font-size:17px;letter-spacing:.22em}
+          .bk-portal{letter-spacing:.24em;font-size:12.5px}
         }
         @media (min-height:800px){
           .bk-lines{margin-top:48px}

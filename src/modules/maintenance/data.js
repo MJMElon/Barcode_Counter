@@ -18,7 +18,7 @@ export {
   workTypeByKey,
   workTypeLabel,
 } from './helpers.js';
-export { isModuleAdmin } from '../../lib/access.js';
+export { isModuleAdmin, nurseryKey } from '../../lib/access.js';
 
 /** Raised when the table has not been created yet, so the UI can say which
     SQL to run instead of showing a raw PostgREST error. */
@@ -89,6 +89,44 @@ export async function uploadMaintPhotos(dataUrls, { plot, workTypeKey, date }) {
     }
   }
   return urls;
+}
+
+/**
+ * A queued record, in the shape of the database row it is going to become.
+ *
+ * The work HAS been done — only the upload is outstanding — so anything
+ * counting or listing work has to see it, or a Field Conductor offline is
+ * told a plot is still due and does it twice.
+ */
+export function queuedAsRecord(job) {
+  const a = (job && job.payload) || {};
+  return {
+    // A queued EDIT keeps the id of the row it is changing, so it stands in
+    // place of that row rather than appearing beside it as a second copy.
+    id: a.id != null ? a.id : 'pending:' + (job && job.uid),
+    _pendingEdit: a.id != null,
+    _pending: true,
+    work_date: a.date,
+    plot_name: a.plot && a.plot.plot_name,
+    nursery_name: a.plot && a.plot.nursery_name,
+    work_type: a.workTypeKey,
+    chemical: a.chemical || null,
+    qty: a.qty ?? null,
+    remark: a.remark || null,
+    reported_by: a.reportedBy || null,
+    batch_name: (a.batches || []).join(', '),
+    week_no: a.weekNo || null,
+    schedule_month: a.scheduleMonth || null,
+    photo_urls: (a.photos || []).join(','),
+  };
+}
+
+/** Saved rows plus whatever the outbox is still holding, edits standing in
+    place of the row they change rather than doubling it. */
+export function withQueued(records, jobs) {
+  const queued = (jobs || []).map(queuedAsRecord);
+  const editedIds = new Set(queued.filter((r) => r._pendingEdit).map((r) => r.id));
+  return [...queued, ...(records || []).filter((r) => !editedIds.has(r.id))];
 }
 
 /* The kind of job the outbox holds for this module. */

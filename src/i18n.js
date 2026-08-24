@@ -17,7 +17,7 @@ const en = {
   'common.signOut': 'Sign Out',
 
   // auth
-  'auth.portal': 'Scan & DO Portal',
+  'auth.portal': 'FC Portal',
   'auth.noAccess': 'Your account does not yet have operations access. Please contact an admin.',
   'auth.fullName': 'Full Name',
   'auth.email': 'Email Address',
@@ -397,6 +397,14 @@ const en = {
   'nav.fcPortal': 'MJM Nursery — FC Portal',
 
   // collection board ("TV")
+  // maintenance board (dashboard summary)
+  'mtb.title': 'Maintenance Status',
+  'mtb.donePct': '{pct}% done',
+  'mtb.none': 'Not due',
+  'mtb.footer': 'This month · weekly plan',
+  'mtb.cached': 'Offline · cached',
+  'mtb.unavailable': 'Schedule unavailable',
+
   'board.title': "Today's Collections",
   'board.empty': 'No collections booked today',
   'board.footer': 'Collection Time Booking',
@@ -578,7 +586,7 @@ const ms = {
   'common.signOut': 'Log Keluar',
 
   // auth
-  'auth.portal': 'Portal Imbas & DO',
+  'auth.portal': 'Portal FC',
   'auth.noAccess': 'Akaun anda belum mempunyai akses operasi. Sila hubungi admin.',
   'auth.fullName': 'Nama Penuh',
   'auth.email': 'Alamat E-mel',
@@ -954,6 +962,14 @@ const ms = {
   'nav.fcPortal': 'MJM Nursery — FC Portal',
 
   // collection board ("TV")
+  // maintenance board (dashboard summary)
+  'mtb.title': 'Status Penyelenggaraan',
+  'mtb.donePct': '{pct}% siap',
+  'mtb.none': 'Tiada',
+  'mtb.footer': 'Bulan ini · jadual mingguan',
+  'mtb.cached': 'Luar talian · cache',
+  'mtb.unavailable': 'Jadual tiada',
+
   'board.title': 'Kutipan Hari Ini',
   'board.empty': 'Tiada kutipan ditempah hari ini',
   'board.footer': 'Tempahan Masa Kutipan',

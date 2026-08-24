@@ -15,10 +15,12 @@ import {
   loadMaintenanceData,
   loadPlotBatches,
   loadSchedules,
+  nurseryKey,
   pendingRecords,
   submitRecord,
   toCsv,
   todayStr,
+  withQueued,
   workTypeByKey,
   workTypeLabel,
 } from './data.js';
@@ -37,11 +39,6 @@ import {
   weekDates,
   weekOfDate,
 } from './schedule.js';
-
-/* The office files its schedule under BNN / UNN1 / UNN2; shared_plots writes
-   the same nurseries as "BNN" / "UNN 1" / "UNN 2". Compare on letters and
-   digits alone so one is found from the other. */
-const nurseryKey = (name) => String(name || '').replace(/[^a-z0-9]/gi, '').toUpperCase();
 
 /** Matches the work sheet: three photos is enough to show a job was done. */
 const MAX_PHOTOS = 3;
@@ -164,35 +161,8 @@ export default function MaintenanceModule() {
   /* A queued record has not reached the database, but the work HAS been done
      — so it counts for the week's ticks and shows in the list. Without this a
      Field Conductor offline would see the plot still outstanding and do it
-     twice. */
-  const pendingAsRecords = useMemo(() => pending.map((j) => {
-    const a = j.payload || {};
-    return {
-      // A queued EDIT keeps the id of the row it is changing, so it stands in
-      // place of that row below rather than appearing beside it as a second
-      // copy of the same work.
-      id: a.id != null ? a.id : 'pending:' + j.uid,
-      _pendingEdit: a.id != null,
-      _pending: true,
-      work_date: a.date,
-      plot_name: a.plot && a.plot.plot_name,
-      nursery_name: a.plot && a.plot.nursery_name,
-      work_type: a.workTypeKey,
-      chemical: a.chemical || null,
-      qty: a.qty ?? null,
-      remark: a.remark || null,
-      reported_by: a.reportedBy || null,
-      batch_name: (a.batches || []).join(', '),
-      week_no: a.weekNo || null,
-      schedule_month: a.scheduleMonth || null,
-      photo_urls: (a.photos || []).join(','),
-    };
-  }), [pending]);
-
-  const allRecords = useMemo(() => {
-    const editedIds = new Set(pendingAsRecords.filter((r) => r._pendingEdit).map((r) => r.id));
-    return [...pendingAsRecords, ...records.filter((r) => !editedIds.has(r.id))];
-  }, [pendingAsRecords, records]);
+     twice. The dashboard's month summary counts the same way (withQueued). */
+  const allRecords = useMemo(() => withQueued(records, pending), [records, pending]);
 
   // Records this user may see, then the on-screen filters.
   const visible = useMemo(() => {
