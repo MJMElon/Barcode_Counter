@@ -101,6 +101,137 @@ export function dividerXAt(line, y) {
   return pts[pts.length - 1].x;
 }
 
+/* ---------- tidying a hand-drawn divider ----------
+   A finger on a phone does not draw a straight line, and the wobble it leaves
+   is not information — nobody means "the boundary jogs one percent left here
+   and back again". So the points the finger passed through are cleaned into
+   the line the person was plainly aiming for:
+
+     · a stroke that only wobbles becomes the straight line it was aiming at,
+       fitted through every point rather than drawn between the two shakiest
+     · within a few degrees of upright it is stood exactly upright
+     · a stroke that genuinely bends keeps its bend, with the jitter along it
+       smoothed away (Ramer–Douglas–Peucker)
+     · either way the ends carry on to the top and bottom of the frame, so the
+       divider reaches the plot's edges instead of stopping where the finger
+       lifted
+
+   Wobble and bend are told apart by averaging the stroke's departure from its
+   own best-fit line in bands down its length: jitter falls either side and
+   cancels, a bend leans the same way for a stretch. */
+const SIMPLIFY_PCT = 2.5; // of the view: how far a point must matter to survive
+// How far the line may bow before it counts as a real curve rather than an
+// unsteady hand. This is measured on the BOW, not on the worst single point:
+// a wobble throws points either side of the intended line and they cancel,
+// while a curve leans the same way for a stretch. Judging by the worst point
+// instead let one jitter spike keep a plainly straight line crooked.
+const BOW_PCT = 2.5;
+const UPRIGHT_DEG = 9; // within this of vertical, stand it upright
+
+function perpDist(p, a, b) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.hypot(dx, dy);
+  if (!len) return Math.hypot(p.x - a.x, p.y - a.y);
+  return Math.abs((p.x - a.x) * dy - (p.y - a.y) * dx) / len;
+}
+
+function rdp(pts, eps) {
+  if (pts.length < 3) return pts;
+  let idx = 0;
+  let max = 0;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const d = perpDist(pts[i], pts[0], pts[pts.length - 1]);
+    if (d > max) {
+      max = d;
+      idx = i;
+    }
+  }
+  if (max <= eps) return [pts[0], pts[pts.length - 1]];
+  return [...rdp(pts.slice(0, idx + 1), eps).slice(0, -1), ...rdp(pts.slice(idx), eps)];
+}
+
+const r2 = (v) => Math.round(v * 100) / 100;
+
+// The straight line that best fits the stroke, as x = m·y + c. Fitting all the
+// points beats joining the first to the last: both ends are as shaky as the
+// middle, so a chord drawn between them inherits their error.
+function fitLine(pts) {
+  const n = pts.length;
+  const sy = pts.reduce((s, p) => s + p.y, 0);
+  const sx = pts.reduce((s, p) => s + p.x, 0);
+  const syy = pts.reduce((s, p) => s + p.y * p.y, 0);
+  const sxy = pts.reduce((s, p) => s + p.x * p.y, 0);
+  const d = n * syy - sy * sy;
+  if (!d) return { m: 0, c: sx / n }; // all at one height: no slope to find
+  const m = (n * sxy - sx * sy) / d;
+  return { m, c: (sx - m * sy) / n };
+}
+
+// How far the stroke leans away from that line, averaged in bands down its
+// length. Averaging is what separates a wobble from a curve: jitter either
+// side of the line cancels within a band, a bow does not.
+function bowOf(pts, fit, bands = 5) {
+  const ys = pts.map((p) => p.y);
+  const y0 = Math.min(...ys);
+  const span = Math.max(...ys) - y0 || 1;
+  const sums = new Array(bands).fill(0);
+  const counts = new Array(bands).fill(0);
+  pts.forEach((p) => {
+    const b = Math.min(bands - 1, Math.floor(((p.y - y0) / span) * bands));
+    sums[b] += p.x - (fit.m * p.y + fit.c);
+    counts[b]++;
+  });
+  let bow = 0;
+  for (let i = 0; i < bands; i++) {
+    if (counts[i]) bow = Math.max(bow, Math.abs(sums[i] / counts[i]));
+  }
+  return bow;
+}
+
+export function tidyDivider(line, view) {
+  if (!line || line.length < 2) return line;
+  const v = view || { x: 0, y: 0, w: 100, h: 100 };
+  const scale = Math.max(v.w, v.h);
+  const top = v.y;
+  const bottom = v.y + v.h;
+  const clampX = (x) => Math.min(v.x + v.w, Math.max(v.x, x));
+
+  // Top to bottom: the only direction this model reads a divider in.
+  let pts = [...line].sort((a, b) => a.y - b.y);
+
+  const at = (p, q, y) => (q.y === p.y ? p.x : p.x + ((y - p.y) / (q.y - p.y)) * (q.x - p.x));
+
+  const fit = fitLine(pts);
+  if (bowOf(pts, fit) <= (BOW_PCT / 100) * scale) {
+    // Straight: two points, top of the frame to bottom, and nothing in
+    // between to go crooked again.
+    const deg = Math.abs((Math.atan(fit.m) * 180) / Math.PI);
+    if (deg <= UPRIGHT_DEG) {
+      const x = r2(clampX(fit.m * ((top + bottom) / 2) + fit.c));
+      return [
+        { x, y: r2(top) },
+        { x, y: r2(bottom) },
+      ];
+    }
+    return [
+      { x: r2(clampX(fit.m * top + fit.c)), y: r2(top) },
+      { x: r2(clampX(fit.m * bottom + fit.c)), y: r2(bottom) },
+    ];
+  }
+
+  // A real curve: keep its shape, drop the jitter, and carry the ends out to
+  // the frame along the direction each end was heading.
+  pts = rdp(pts, (SIMPLIFY_PCT / 100) * scale);
+  if (pts[0].y > top) pts = [{ x: clampX(at(pts[0], pts[1], top)), y: top }, ...pts];
+  const n = pts.length;
+  if (pts[n - 1].y < bottom) {
+    pts = [...pts, { x: clampX(at(pts[n - 1], pts[n - 2], bottom)), y: bottom }];
+  }
+
+  return pts.map((p) => ({ x: r2(p.x), y: r2(p.y) }));
+}
+
 // Areas run left to right in the order the dividers were drawn.
 export function areaIndexAt(dividers, pt) {
   let i = 0;

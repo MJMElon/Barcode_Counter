@@ -30,6 +30,15 @@ function BackArrow() {
   );
 }
 
+// The caption written from the drawing: each area and the share it takes.
+// The shares are whole numbers that add to 100 (weightsFromDividers rounds by
+// largest remainder), so the caption never shows 33.333% or three shares that
+// come to 99.
+function autoCaption(areas, weights) {
+  if (!areas || !weights) return '';
+  return areas.map((a) => `${a} ${Math.round(Number(weights[a]) || 0)}%`).join(' · ');
+}
+
 export default function SettingsTab({ db, t, flash, refresh }) {
   const [section, setSection] = useState(null); // null = the menu
   const [settings, setSettings] = useState(() => loadSettings());
@@ -62,6 +71,12 @@ export default function SettingsTab({ db, t, flash, refresh }) {
   const [count, setCount] = useState(cfg ? cfg.areas.length : 1);
   const [dividers, setDividers] = useState(() => (cfg && cfg.dividers ? cfg.dividers : []));
   const [cap, setCap] = useState(cfg ? cfg.cap : '');
+  // Whether the caption has been typed over. Until it has, it follows the
+  // drawing; once it has, it is left alone.
+  const [capEdited, setCapEdited] = useState(() => {
+    const auto = cfg ? autoCaption(cfg.areas, cfg.weights) : '';
+    return !!(cfg && cfg.cap && cfg.cap !== auto);
+  });
   const [photo, setPhoto] = useState(() => settings.photos[plot] || null);
   const [busy, setBusy] = useState(false);
 
@@ -71,6 +86,7 @@ export default function SettingsTab({ db, t, flash, refresh }) {
     setCount(c ? c.areas.length : 1);
     setDividers(c && c.dividers ? c.dividers : []);
     setCap(c ? c.cap : '');
+    setCapEdited(!!(c && c.cap && c.cap !== autoCaption(c.areas, c.weights)));
     setPhoto(settings.photos[p] || null);
   }
 
@@ -124,6 +140,12 @@ export default function SettingsTab({ db, t, flash, refresh }) {
   // are measured over the picture rather than inside the outline.
   const weights = ready && count > 1 ? weightsFromDividers(areas, dividers, ownPhoto ? null : poly) : null;
 
+  // What the caption actually says: the drawing's own description until
+  // somebody types over it. Derived rather than pushed into state, so redrawing
+  // a line updates it immediately and cannot fight the typing.
+  const autoCap = autoCaption(areas, weights);
+  const capValue = capEdited ? cap : autoCap;
+
   function changeCount(n) {
     setCount(n);
     setDividers((d) => d.slice(0, Math.max(0, n - 1)));
@@ -142,7 +164,7 @@ export default function SettingsTab({ db, t, flash, refresh }) {
         areas: [...areas],
         weights,
         dividers,
-        cap: cap.trim(),
+        cap: capValue.trim(),
       };
     }
     if (!saveSettings(next)) {
@@ -365,13 +387,33 @@ export default function SettingsTab({ db, t, flash, refresh }) {
               )}
 
               <div>
-                <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
-                  {t('set.caption')}
+                <div className="flex items-baseline justify-between gap-2 mb-1">
+                  <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                    {t('set.caption')}
+                  </div>
+                  {/* Written from the drawing until it is typed over, and one
+                      tap puts it back — so redrawing a line does not quietly
+                      throw away a caption somebody wrote by hand. */}
+                  {capEdited && autoCap && capValue !== autoCap ? (
+                    <button
+                      onClick={() => setCapEdited(false)}
+                      className="text-[10px] font-black uppercase tracking-wider text-emerald-700 hover:text-emerald-800 cursor-pointer"
+                    >
+                      {t('set.capAuto')}
+                    </button>
+                  ) : (
+                    autoCap && (
+                      <span className="text-[10px] font-bold text-slate-400">{t('set.capFromDrawing')}</span>
+                    )
+                  )}
                 </div>
                 <textarea
                   rows={2}
-                  value={cap}
-                  onChange={(e) => setCap(e.target.value)}
+                  value={capValue}
+                  onChange={(e) => {
+                    setCapEdited(true);
+                    setCap(e.target.value);
+                  }}
                   className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-semibold outline-none focus:border-emerald-500"
                 />
               </div>

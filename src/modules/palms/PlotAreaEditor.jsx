@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { areaIndexAt, bbox, dividerXAt, sortDividers, weightsFromDividers } from './plotMaps.js';
+import { areaIndexAt, bbox, dividerXAt, sortDividers, tidyDivider, weightsFromDividers } from './plotMaps.js';
 
 const AREA_TINT = ['rgba(16,185,129,.30)', 'rgba(245,158,11,.30)', 'rgba(56,189,248,.30)', 'rgba(217,70,239,.30)', 'rgba(244,63,94,.30)'];
 
@@ -60,7 +60,8 @@ export default function PlotAreaEditor({ photoUrl, mapUrl, poly, areas, dividers
     if (!drawing) return;
     // A tap is not a line.
     if (drawing.length >= 2) {
-      const next = [...(dividers || []), drawing].slice(0, areas.length - 1);
+      // Straightened on release: what was aimed at, not what the finger did.
+      const next = [...(dividers || []), tidyDivider(drawing, view)].slice(0, areas.length - 1);
       onChange(sortDividers(next));
     }
     setDrawing(null);
