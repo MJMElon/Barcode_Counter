@@ -603,8 +603,16 @@ function LogTable({ db, k, t }) {
   );
 }
 
-function DetailModal({ db, pid, t, onClose, openMap }) {
+export function DetailModal({ db, pid, t, onClose, openMap }) {
   const nk = nurseryOfPlot(pid);
+  // A split plot used to stack every area's log one under the other, so
+  // reading area B meant scrolling past the whole of area A. One area at a
+  // time, picked from a row of buttons: the log starts at the top whichever
+  // area you are on, and adding a third area does not make the modal longer.
+  const areas = isMulti(pid) ? MULTI[pid].areas : [];
+  const [area, setArea] = useState(areas[0] || null);
+  const shown = areas.includes(area) ? area : areas[0];
+
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
@@ -636,15 +644,35 @@ function DetailModal({ db, pid, t, onClose, openMap }) {
               <div className="text-[12px] font-bold text-slate-600 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
                 {t('pm.combined')} <b>{combinedLabel(db, pid)}</b>
               </div>
-              {MULTI[pid].areas.map((a) => (
-                <div key={a}>
-                  <div className="text-[11px] font-black text-slate-700 uppercase tracking-wide mb-1.5">
-                    {t('pm.area', { a })}{' '}
-                    <span className="text-slate-400 normal-case">({MULTI[pid].weights[a]}%)</span>
-                  </div>
-                  <LogTable db={db} k={`${pid}#${a}`} t={t} />
-                </div>
-              ))}
+
+              {/* One button per area, its share of the plot underneath — the
+                  share is what decides whether an area counts for the
+                  incentive, so it stays visible while you choose. */}
+              <div className="flex gap-1.5 sm:gap-2">
+                {areas.map((a) => {
+                  const on = a === shown;
+                  return (
+                    <button
+                      key={a}
+                      onClick={() => setArea(a)}
+                      className={`flex-1 min-w-0 rounded-xl border-2 px-2 py-2 transition-all cursor-pointer ${
+                        on
+                          ? 'bg-emerald-50 border-emerald-500 text-emerald-700'
+                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-emerald-400 hover:bg-white'
+                      }`}
+                    >
+                      <div className="text-[12px] font-black leading-tight truncate">
+                        {t('pm.area', { a })}
+                      </div>
+                      <div className={`text-[10px] font-bold ${on ? 'text-emerald-600' : 'text-slate-400'}`}>
+                        {MULTI[pid].weights[a]}%
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <LogTable db={db} k={`${pid}#${shown}`} t={t} />
             </>
           ) : (
             <LogTable db={db} k={pid} t={t} />
