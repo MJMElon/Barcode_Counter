@@ -92,6 +92,46 @@ export function keyLabel(k) {
   return k.includes('#') ? k.replace('#', ' · ') : k;
 }
 
+/**
+ * Carry a plot's history onto its areas when it is split.
+ *
+ * Work is logged against a unit key: the plot on its own ("B2") while it is
+ * whole, "B2#A" once it is split. Splitting therefore used to blank the plot
+ * on every screen — the new area keys had never been written to, so a plot
+ * halfway through a cycle came back reading as untouched, and the cycle it
+ * was in the middle of vanished from the board, the train and the study.
+ *
+ * Nothing about the plot changed on the ground, so nothing about it should
+ * change on screen. Everything logged before the split was done to the whole
+ * plot and so belongs to every area cut out of it: each new area starts
+ * holding the plot's history, and they only diverge from the split onwards —
+ * which is the point of splitting, that the areas can now be worked
+ * separately.
+ *
+ * An area that already has its own log is left alone, so redrawing the
+ * dividers on a plot that has been split for months moves the boundaries and
+ * touches nothing else. Nothing is ever deleted: the whole-plot log stays
+ * underneath, which is what lets un-splitting put the plot back as it was.
+ *
+ * Returns the number of areas seeded.
+ */
+export function carryLogsToAreas(db, pid, areas) {
+  const src = db.logs[pid];
+  if (!src || !src.length) return 0;
+  let seeded = 0;
+  areas.forEach((a) => {
+    const k = aKey(pid, a);
+    if ((db.logs[k] || []).length) return; // this area has its own history
+    db.logs[k] = JSON.parse(JSON.stringify(src));
+    // The per-key side tables travel with the log, or an area inherits the
+    // plot's entries while claiming nobody has touched it today.
+    if (db.updated[pid] && !db.updated[k]) db.updated[k] = { ...db.updated[pid] };
+    if (db.unlocked[pid] && !db.unlocked[k]) db.unlocked[k] = db.unlocked[pid];
+    seeded++;
+  });
+  return seeded;
+}
+
 /* ---------- storage ---------- */
 export function freshDB() {
   return { logs: {}, updated: {}, editReq: {}, unlocked: {}, history: [], seq: 0 };

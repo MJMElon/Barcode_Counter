@@ -6,8 +6,10 @@ import {
   NURSERIES,
   activityByN,
   applySettings,
+  carryLogsToAreas,
   plotPhoto,
   plotsOf,
+  saveDB,
 } from './data.js';
 import { AREA_LETTERS, defaultSettings, loadSettings, readImageScaled, saveSettings } from './settings.js';
 
@@ -28,7 +30,7 @@ function BackArrow() {
   );
 }
 
-export default function SettingsTab({ t, flash }) {
+export default function SettingsTab({ db, t, flash, refresh }) {
   const [section, setSection] = useState(null); // null = the menu
   const [settings, setSettings] = useState(() => loadSettings());
   const allPlots = useMemo(
@@ -149,7 +151,19 @@ export default function SettingsTab({ t, flash }) {
     }
     applySettings(next);
     setSettings(next);
-    flash(t('set.savedPlot', { p: plot }));
+
+    // Splitting redraws boundaries; it does not start the plot again. Hand the
+    // plot's history to each new area so the work already logged is still
+    // there, on both sides of the line.
+    let seeded = 0;
+    if (count > 1) {
+      seeded = carryLogsToAreas(db, plot, areas);
+      if (seeded) {
+        saveDB(db);
+        refresh();
+      }
+    }
+    flash(seeded ? t('set.savedPlotKept', { p: plot, n: seeded }) : t('set.savedPlot', { p: plot }));
   }
 
   /* ---- needs attention ----

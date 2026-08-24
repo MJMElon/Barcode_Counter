@@ -208,7 +208,7 @@ export default function PalmsModule() {
         ) : tab === 'motion' ? (
           <MotionTab db={db} t={t} nurseryKeys={nurseryKeys} staffName={staffName} />
         ) : tab === 'set' && maySetUp ? (
-          <SettingsTab t={t} flash={flash} />
+          <SettingsTab db={db} t={t} flash={flash} refresh={refresh} />
         ) : (
           <DashTab
             db={db}
