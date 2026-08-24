@@ -54,7 +54,6 @@ const en = {
 
   // culling calculator (PALMS tab)
   'cull.title': 'Culling Calculator',
-  'cull.tapHint': 'Tap a Pokok Inang cell to record the amount.',
   'cull.balance': 'Balance',
   'cull.rate': 'Culling Rate',
   'cull.action': 'Action',
@@ -65,13 +64,6 @@ const en = {
   'cull.fillIn': 'Fill in amount',
   'cull.fillInShort': 'Fill in',
   'cull.tapToEdit': 'tap to change',
-  'cull.rateNow': 'Current culling rate',
-  'cull.rateNew': 'New culling rate',
-  'cull.enterValue': 'enter a value',
-  'cull.lower': 'lower',
-  'cull.higher': 'higher',
-  'cull.noChange': 'no change',
-  'cull.target': 'Pokok inang target',
   'cull.fcAmount': 'Pokok Inang Amount',
   'cull.auditorAmount': 'Pokok Inang Amount (Auditor)',
   'cull.editAmount': 'Change amount',
@@ -97,14 +89,12 @@ const en = {
   'cull.sentToast': 'Request for {p} sent',
   'cull.alreadySent': '{p} was already sent today',
   'cull.confirmSendTitle': 'Send to Site Auditor',
-  'cull.confirmSendLead': 'This is what will be sent. Confirm to raise the request.',
   'cull.confirmSend': 'Confirm & Send',
   'cull.reqTitle': 'Requests sent',
   'cull.reqDate': 'Date sent',
   'cull.reqPurpose': 'Purpose',
   'cull.reqBy': 'Requested by',
   'cull.save': 'Save',
-  'cull.palmsNote': 'Only plots at Saringan Anak Bibit, Tunggu cull, Culling or Pengambilan stage in PALMS are shown.',
   'cull.noPalmsPlots': 'No plots at a culling stage in this nursery — update plot status in the PALMS module first.',
 
   // PALMS
@@ -625,7 +615,6 @@ const ms = {
 
   // culling calculator (PALMS tab)
   'cull.title': 'Kalkulator Culling',
-  'cull.tapHint': 'Ketik sel Pokok Inang untuk merekod bilangan.',
   'cull.balance': 'Baki',
   'cull.rate': 'Kadar Culling',
   'cull.action': 'Tindakan',
@@ -636,13 +625,6 @@ const ms = {
   'cull.fillIn': 'Isi jumlah',
   'cull.fillInShort': 'Isi',
   'cull.tapToEdit': 'ketik untuk ubah',
-  'cull.rateNow': 'Kadar culling semasa',
-  'cull.rateNew': 'Kadar culling baharu',
-  'cull.enterValue': 'masukkan nilai',
-  'cull.lower': 'lebih rendah',
-  'cull.higher': 'lebih tinggi',
-  'cull.noChange': 'tiada perubahan',
-  'cull.target': 'Sasaran pokok inang',
   'cull.fcAmount': 'Bilangan Pokok Inang',
   'cull.auditorAmount': 'Bilangan Pokok Inang (Auditor)',
   'cull.editAmount': 'Ubah jumlah',
@@ -668,14 +650,12 @@ const ms = {
   'cull.sentToast': 'Permintaan {p} dihantar',
   'cull.alreadySent': '{p} sudah dihantar hari ini',
   'cull.confirmSendTitle': 'Hantar ke Site Auditor',
-  'cull.confirmSendLead': 'Inilah maklumat yang akan dihantar. Sahkan untuk menghantar permintaan.',
   'cull.confirmSend': 'Sahkan & Hantar',
   'cull.reqTitle': 'Permintaan dihantar',
   'cull.reqDate': 'Tarikh dihantar',
   'cull.reqPurpose': 'Tujuan',
   'cull.reqBy': 'Dimohon oleh',
   'cull.save': 'Simpan',
-  'cull.palmsNote': 'Hanya plot pada peringkat Saringan Anak Bibit, Tunggu cull, Culling atau Pengambilan dalam PALMS dipaparkan.',
   'cull.noPalmsPlots': 'Tiada plot pada peringkat culling di nurseri ini — kemas kini status plot dalam modul PALMS dahulu.',
 
   // PALMS

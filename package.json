@@ -1,9 +1,9 @@
 {
-  "name": "mjm-scan",
+  "name": "fc-portal",
   "private": true,
   "version": "2.0.0",
   "type": "module",
-  "description": "MJM Nursery — Scan & Issue Collection DO (React + Supabase)",
+  "description": "MJM Nursery FC Portal — Scan, Issue Collection DO, Plot Status, Maintenance, PALMS (React + Supabase)",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

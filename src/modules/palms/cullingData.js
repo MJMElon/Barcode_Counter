@@ -127,9 +127,3 @@ export function videoNeeded(row) {
     cullingRate(row.balance, row.pokok, row.pokokAuditor, row.transplant) > 0.1
   );
 }
-
-// Sasaran = how many pokok inang must be picked so the balance drops to
-// transplant × 0.1 (culling rate ≤ 10%)
-export function targetPokok(row) {
-  return Math.max(0, Math.ceil(row.balance - row.transplant * 0.1));
-}
