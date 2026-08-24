@@ -3,7 +3,7 @@
 
 import { dataUrlToBlob } from '../../lib/image.js';
 import { PERMANENT, flushOutbox, isOnline, listJobs, looksOffline, queueJob } from '../../lib/outbox.js';
-import { supabase } from '../../lib/supabase.js';
+import { fetchAllRows, supabase } from '../../lib/supabase.js';
 import { sortRecords, workTypeByKey } from './helpers.js';
 import { batchKey, batchesByPlot, plotKey } from './plotBatches.js';
 import { applicableSchedules } from './schedule.js';
@@ -268,24 +268,6 @@ export async function loadSchedules(nurseryKeys, monthLabel) {
 }
 
 /**
- * Supabase caps one request at 1000 rows. The ledger is far longer than that,
- * and a partial read does not fail — it quietly returns a balance built from
- * whichever movements happened to come back first, which is how the plot's
- * batches came to disagree with the office movement report. Page until the
- * rows run out, the same way that report does.
- */
-async function fetchAll(buildQuery, pageSize = 1000) {
-  const all = [];
-  for (let from = 0; ; from += pageSize) {
-    const { data, error } = await buildQuery().range(from, from + pageSize - 1);
-    if (error) return { data: null, error };
-    all.push(...(data || []));
-    if (!data || data.length < pageSize) break;
-  }
-  return { data: all, error: null };
-}
-
-/**
  * What is standing in each plot.
  *
  * Postgres works this out in shared_plot_batch_balance — see
@@ -298,7 +280,7 @@ async function fetchAll(buildQuery, pageSize = 1000) {
  * waiting on a migration to be run.
  */
 export async function loadPlotBatches() {
-  const view = await fetchAll(() => supabase
+  const view = await fetchAllRows(() => supabase
     .from('shared_plot_batch_balance')
     .select('plot_key, plot_name, batch_name, qty')
     .order('plot_key', { ascending: true }));
@@ -331,13 +313,13 @@ function mapFromBalances(rows) {
 /** The whole ledger, added up here. Only for a database without the view. */
 async function loadPlotBatchesFromLedger() {
   const [logsRes, dosRes] = await Promise.all([
-    fetchAll(() => supabase.from('shared_inventory_logs')
+    fetchAllRows(() => supabase.from('shared_inventory_logs')
       .select('transaction_type, plot_name, batch_name, quantity_change, remark')
       .in('transaction_type', ['Seeds_Received', 'Planted', 'Transplanted',
         'Transplanted_Premium', 'Transplanted_DoubleTone', 'Damaged_Seeds',
         '1st_Culling', '2nd_Culling', '3rd_Culling', 'Cull3_Transfer'])
       .order('id', { ascending: true })),
-    fetchAll(() => supabase.from('shared_do_records')
+    fetchAllRows(() => supabase.from('shared_do_records')
       .select('status, remark, plot_1, qty_1, batch_1, plot_2, qty_2, batch_2, plot_3, qty_3, batch_3, plot_4, qty_4, batch_4, plot_5, qty_5, batch_5')
       .order('id', { ascending: true }))
       .then((r) => r, () => ({ data: [] })),

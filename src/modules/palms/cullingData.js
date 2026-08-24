@@ -1,88 +1,68 @@
-// Culling Calculator — trial data & formulas.
-// Ported from the NurseryFCmobile standalone app; numbers are preset RANDOM
-// values for the trial (no backend yet). Data lives for the whole browser
-// session so entered amounts survive navigating back to the dashboard.
+// Culling Calculator — the numbers on screen and the formulas over them.
+//
+// Two different things live here and they are kept apart on purpose:
+//
+//   FIGURES   Transplant and Baki, read off the Seedling Stock ledger by
+//             cullingFigures.js. Nobody types these; they are refreshed from
+//             the server and cached so the calculator still works offline.
+//   ENTRIES   Pokok Inang (Field Conductor, then Site Auditor) and the video
+//             filename. These are typed in the field and belong to the
+//             device until there is somewhere to send them.
+//
+// They were one blob before, dealt as random trial values. Refreshing the
+// figures would then have wiped the amounts somebody had just keyed in, so
+// entries are stored per plot and survive every refresh.
 
+import { NURSERIES as PALMS_NURSERIES, plotsOf } from './data.js';
+import { loadCullingFigures } from './cullingFigures.js';
+
+/** The nurseries, with the long name the plot modal shows. Plots themselves
+    come from PALMS, so there is one list of what exists, not two. */
 export const NURSERIES = {
-  BNN: { prefix: 'B', count: 14, label: '' },
-  UNN1: { prefix: 'U', count: 18, label: 'Nurseri Ulu 1' },
-  UNN2: { prefix: 'N', count: 20, label: 'Nurseri Ulu 2' },
+  BNN: { prefix: PALMS_NURSERIES.BNN.prefix, count: PALMS_NURSERIES.BNN.count, label: '' },
+  UNN1: { prefix: PALMS_NURSERIES.UNN1.prefix, count: PALMS_NURSERIES.UNN1.count, label: 'Nurseri Ulu 1' },
+  UNN2: { prefix: PALMS_NURSERIES.UNN2.prefix, count: PALMS_NURSERIES.UNN2.count, label: 'Nurseri Ulu 2' },
 };
 
-function randInt(min, max) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-// Every plot is dealt one of five starting hands, cycling in order, so each
-// of the calculator's action states is guaranteed to appear rather than
-// depending on the luck of the draw:
-//
-//   0  rate under 10%, nothing keyed in    -> Mohon drone terbang
-//   1  rate under 10%, FC amount keyed in  -> Pindah pokok inang + drone
-//   2  rate over 10%, FC amount keyed in   -> Tunggu Site Auditor
-//   3  rate over 10%, Auditor amount too   -> Sila bagitahu HQ (+ video)
-//   4  rate over 10%, nothing keyed in     -> no action yet
-function buildData() {
-  const data = {};
-  let n = 0;
-  for (const key in NURSERIES) {
-    const cfg = NURSERIES[key];
-    data[key] = [];
-    for (let i = 1; i <= cfg.count; i++) {
-      const transplant = randInt(900, 1200);
-      const hand = n % 5;
-      const low = hand === 0 || hand === 1;
-      // start the rate comfortably below or above the 10% line
-      const startRate = low ? randInt(600, 950) / 10000 : randInt(1250, 1800) / 10000;
-      const balance = Math.round(transplant * startRate);
-
-      let pokok = null;
-      let pokokAuditor = null;
-      if (hand === 1) {
-        // shave a little off — still under 10%
-        pokok = Math.round(balance * 0.25);
-      } else if (hand === 2) {
-        // not enough to drop under 10%, so the Site Auditor is next
-        pokok = Math.max(0, Math.round(balance - transplant * 0.115));
-      } else if (hand === 3) {
-        pokok = Math.max(0, Math.round(balance - transplant * 0.14));
-        pokokAuditor = Math.max(0, Math.round(transplant * 0.02));
-      }
-
-      data[key].push({
-        plot: cfg.prefix + i,
-        transplant,
-        balance,
-        pokok, // Field Conductor entry
-        pokokAuditor, // Auditor entry (2nd level)
-        video: null, // recorded/uploaded video filename
-      });
-      n++;
-    }
-  }
-  return data;
-}
-
-// Kept on the device, not just in memory. Amounts the Field Conductor keys
-// in used to vanish on a page reload, and the plot figures were re-rolled
-// from scratch — which left requests already raised pointing at plots whose
-// numbers had completely changed.
-const CULL_KEY = 'palms_culling_v1';
+const STORE_KEY = 'palms_culling_v2';
 
 let sessionData = null;
 
+/** A plot with no server figures yet: the rate is unknown, not zero. */
+function blankRow(plot) {
+  return { plot, transplant: 0, balance: 0, pokok: null, pokokAuditor: null, video: null };
+}
+
+function buildRows() {
+  const data = {};
+  for (const key in NURSERIES) data[key] = plotsOf(key).map(blankRow);
+  return data;
+}
+
 function readStored() {
   try {
-    const raw = localStorage.getItem(CULL_KEY);
+    const raw = localStorage.getItem(STORE_KEY);
     return raw ? JSON.parse(raw) : null;
   } catch (e) {
     return null;
   }
 }
 
+/** Entries and the last figures seen, keyed by plot so neither can be lost
+    by the other being rewritten. */
 export function persistSessionData() {
   try {
-    localStorage.setItem(CULL_KEY, JSON.stringify(sessionData));
+    const entries = {};
+    const figures = {};
+    for (const key in sessionData) {
+      for (const r of sessionData[key]) {
+        if (r.pokok !== null || r.pokokAuditor !== null || r.video) {
+          entries[r.plot] = { pokok: r.pokok, pokokAuditor: r.pokokAuditor, video: r.video };
+        }
+        if (r.transplant) figures[r.plot] = { transplant: r.transplant, balance: r.balance };
+      }
+    }
+    localStorage.setItem(STORE_KEY, JSON.stringify({ entries, figures }));
     return true;
   } catch (e) {
     return false;
@@ -90,19 +70,67 @@ export function persistSessionData() {
 }
 
 export function getSessionData() {
-  if (!sessionData) sessionData = readStored() || buildData();
+  if (sessionData) return sessionData;
+  sessionData = buildRows();
+  const saved = readStored() || {};
+  const entries = saved.entries || {};
+  const figures = saved.figures || {};
+  for (const key in sessionData) {
+    for (const r of sessionData[key]) {
+      Object.assign(r, entries[r.plot] || {}, figures[r.plot] || {});
+    }
+  }
   return sessionData;
 }
 
-// Deal a fresh set — used by the demo-data button so the calculator matches
-// the plot statuses being reseeded alongside it.
-export function resetSessionData() {
-  sessionData = buildData();
+/**
+ * Pull Transplant and Baki from the Seedling Stock ledger into the rows.
+ *
+ * Best effort by design: this runs on a phone that may have no signal, and a
+ * calculator that cannot reach the office must still show the amounts already
+ * keyed in and whatever figures it cached last time. Returns true when the
+ * numbers were refreshed.
+ */
+export async function refreshFigures() {
+  const data = getSessionData();
+  let figures;
+  try {
+    figures = await loadCullingFigures();
+  } catch (e) {
+    console.warn('[culling] could not read plot figures:', (e && e.message) || e);
+    return false;
+  }
+  for (const key in data) {
+    for (const r of data[key]) {
+      const f = figures.get(r.plot.toUpperCase());
+      // A plot that has dropped out of the ledger keeps its last known
+      // figures rather than silently resetting to an unknown rate.
+      if (f) { r.transplant = f.transplant; r.balance = f.balance; }
+    }
+  }
   persistSessionData();
-  return sessionData;
+  return true;
 }
 
-// rate = (Today balance − Pokok Inang FC − Pokok Inang Auditor) / Transplant
+/** Clear what people typed. The figures are the office's, not the demo's, so
+    they are left alone — reseeding plot statuses does not un-transplant a
+    plot. */
+export function resetSessionData() {
+  const data = getSessionData();
+  for (const key in data) {
+    for (const r of data[key]) { r.pokok = null; r.pokokAuditor = null; r.video = null; }
+  }
+  persistSessionData();
+  return data;
+}
+
+/** True once the plot has real figures behind it; false means "cannot say",
+    which the screen shows as — rather than as 0.00%. */
+export function hasFigures(row) {
+  return !!row && row.transplant > 0;
+}
+
+// rate = (Baki − Pokok Inang FC − Pokok Inang Auditor) / Transplant
 // (amounts treated as 0 before they are filled in)
 export function cullingRate(balance, pokok, pokokAuditor, transplant) {
   const p = pokok || 0;
@@ -123,6 +151,7 @@ export function fmtNum(n) {
 // is still above 10%
 export function videoNeeded(row) {
   return (
+    hasFigures(row) &&
     row.pokokAuditor !== null &&
     cullingRate(row.balance, row.pokok, row.pokokAuditor, row.transplant) > 0.1
   );

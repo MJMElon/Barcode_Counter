@@ -96,6 +96,7 @@ const en = {
   'cull.reqBy': 'Requested by',
   'cull.save': 'Save',
   'cull.noPalmsPlots': 'No plots at Pengambilan in this nursery — set a plot to Pengambilan in the PALMS module first.',
+  'cull.noFigures': 'No Transplant figure for this plot in the Seedling Stock records, so the rate cannot be worked out.',
 
   // PALMS
   // motion study
@@ -646,6 +647,7 @@ const ms = {
   'cull.reqBy': 'Dimohon oleh',
   'cull.save': 'Simpan',
   'cull.noPalmsPlots': 'Tiada plot pada peringkat Pengambilan di nurseri ini — tetapkan status plot kepada Pengambilan dalam modul PALMS dahulu.',
+  'cull.noFigures': 'Tiada angka Transplant untuk plot ini dalam rekod Stok Anak Benih, jadi kadar tidak dapat dikira.',
 
   // PALMS
   // motion study

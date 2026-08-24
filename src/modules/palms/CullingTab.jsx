@@ -1,11 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   NURSERIES as CULL_NURSERIES,
   cullingRate,
   fmtNum,
   fmtPct,
   getSessionData,
+  hasFigures,
   persistSessionData,
+  refreshFigures,
   videoNeeded,
 } from './cullingData.js';
 import { cullingScopePlots, prettyD, todayStr } from './data.js';
@@ -26,6 +28,16 @@ export default function CullingTab({ t, staffName, flash, nurseryKeys }) {
   const [, setTick] = useState(0); // re-render after mutating session data
   const refresh = () => setTick((n) => n + 1);
   const today = todayStr();
+
+  /* Transplant and Baki come off the Seedling Stock ledger, so they are read
+     when the tab opens rather than dealt in the browser. Whatever is cached
+     stays on screen while this runs and if it fails — a calculator with no
+     signal still has to show the amounts already keyed in. */
+  useEffect(() => {
+    let live = true;
+    refreshFigures().then((ok) => { if (live && ok) refresh(); });
+    return () => { live = false; };
+  }, []);
 
   // Plots PALMS has moved to Pengambilan.
   const scope = useMemo(() => cullingScopePlots(), [nursery]);
@@ -115,12 +127,15 @@ export default function CullingTab({ t, staffName, flash, nurseryKeys }) {
                       <td className="px-1 sm:px-5 py-2.5 sm:py-3.5 align-middle text-center">
                         <span
                           className={`inline-block sm:min-w-[68px] rounded-full px-1.5 sm:px-2.5 py-1 text-[10px] sm:text-[11px] font-black tabular-nums border ${
-                            hot
+                            rate === null
+                              ? 'bg-slate-50 text-slate-400 border-slate-200'
+                              : hot
                               ? 'bg-rose-50 text-rose-700 border-rose-200'
                               : 'bg-teal-50 text-teal-700 border-teal-200'
                           }`}
+                          title={rate === null ? t('cull.noFigures') : undefined}
                         >
-                          {fmtPct(rate)}
+                          {rate === null ? '—' : fmtPct(rate)}
                         </span>
                       </td>
                       <td className="px-1 sm:px-5 py-2.5 sm:py-3.5 align-middle text-center">
@@ -275,6 +290,14 @@ function derive(row, reqs, today, t) {
   const hot = rate > 0.1;
   let act;
   let sendTo = null;
+  /* No figures for this plot in the ledger — nothing transplanted in that the
+     batches standing there can be measured against. 0.00% would read as a
+     clean plot and send a drone request off the back of a number nobody
+     worked out, so the row says it cannot say and offers no action. */
+  if (!hasFigures(row)) {
+    return { rate: null, hot: false, act: <span className="text-slate-300 font-bold">—</span>,
+             sendTo: null, sent: false };
+  }
   if (!hot) {
     sendTo = TO_AUDITOR;
     act = (
