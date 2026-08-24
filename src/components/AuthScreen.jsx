@@ -3,8 +3,13 @@ import { supabase } from '../lib/supabase.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useLang, LangToggle } from '../context/LanguageContext.jsx';
 
-// Login / Sign-up / Forgot-password / Recovery screen. Ported from the Mobile
-// app's auth UI, using the shared Supabase project.
+// Login / Sign-up / Forgot-password / Recovery screen, on the shared Supabase
+// project — the same accounts as ai.mjmnursery.com.
+//
+// Dressed as the field book the FC crew already carries: kraft cover, spiral
+// along the top, graph paper inside. The Audit portal is a 555 red-cover
+// exercise book instead, so the two login pages are never mistaken for each
+// other on a phone held at arm's length in the sun.
 export default function AuthScreen() {
   const { recovering, setRecovering, allowed } = useAuth();
   const { t } = useLang();
@@ -67,128 +72,288 @@ export default function AuthScreen() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden bg-[#050a0e]">
-      <div className="absolute inset-0" style={{ background: 'radial-gradient(ellipse at 50% 40%,#0a1a12 0%,#050a0e 70%)' }} />
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          backgroundImage:
-            'linear-gradient(rgba(16,185,129,.04)1px,transparent 1px),linear-gradient(90deg,rgba(16,185,129,.04)1px,transparent 1px)',
-          backgroundSize: '60px 60px',
-        }}
-      />
-
-      <div className="absolute top-4 right-4 z-20">
+    <div className="fc-desk">
+      <div className="fc-lang">
         <LangToggle dark />
       </div>
 
-      <div className="relative z-10 w-full max-w-md rounded-[2.5rem] p-10 border border-emerald-400/20 bg-[rgba(5,20,12,.88)] backdrop-blur-2xl shadow-2xl">
-        <div className="flex flex-col items-center mb-8">
-          <div className="text-center" style={{ fontSize: 'clamp(2.2rem,6vw,3.2rem)', lineHeight: 1.1, fontWeight: 900, color: '#ecfdf5' }}>
-            MJM
-            <span className="block text-emerald-400 font-black" style={{ fontSize: '0.55em', letterSpacing: '0.3em', marginTop: 2 }}>
-              NURSERY
-            </span>
-          </div>
-          <div className="inline-flex items-center justify-center px-4 py-1.5 rounded-[10px] mt-3 text-white font-black tracking-[0.12em] border border-emerald-400" style={{ background: 'linear-gradient(135deg,#059669,#10b981)' }}>
-            AI
-          </div>
-          <p className="text-[11px] font-black text-emerald-500 uppercase tracking-[0.35em] mt-5 text-center">{t('auth.portal')}</p>
+      <div className="fc-book">
+        {/* spiral along the top edge */}
+        <div className="fc-rings" aria-hidden="true">
+          {Array.from({ length: 9 }).map((_, i) => <i key={i} />)}
         </div>
 
-        {allowed === false && (
-          <div className="mb-4 text-[11px] font-bold text-amber-300 bg-amber-900/30 border border-amber-500/40 rounded-xl px-4 py-3 text-center">
-            {t('auth.noAccess')}
+        {/* kraft cover flap */}
+        <div className="fc-cover">
+          <div className="fc-holes" aria-hidden="true">
+            {Array.from({ length: 9 }).map((_, i) => <i key={i} />)}
           </div>
-        )}
-
-        {msg && (
-          <div
-            className={`mb-4 text-[11px] font-bold rounded-xl px-4 py-3 text-center border ${
-              msg.kind === 'error'
-                ? 'text-red-300 bg-red-900/30 border-red-500/40'
-                : 'text-emerald-300 bg-emerald-900/30 border-emerald-500/40'
-            }`}
-          >
-            {msg.text}
-          </div>
-        )}
-
-        {recovering ? (
-          <div className="space-y-3">
-            <div className="text-center text-[10px] font-bold text-emerald-500 uppercase tracking-widest mb-2">
-              {t('auth.newPasswordTitle')}
+          <div className="fc-cover-in">
+            <div>
+              <div className="fc-brand">MJM Nursery</div>
+              <div className="fc-title">FC Field Book</div>
+              <div className="fc-sub">{t('auth.portal')}</div>
             </div>
-            <input
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              placeholder={t('auth.newPasswordPlaceholder')}
-              className="auth-input"
-            />
-            <button onClick={handleUpdatePassword} disabled={busy} className="auth-btn">
-              {busy ? t('auth.updating') : t('auth.savePassword')}
-            </button>
+            <div className="fc-555">
+              <b>555</b>
+              <i>No. ___</i>
+            </div>
           </div>
-        ) : (
-          <div className="space-y-3">
-            {mode === 'signup' && (
+        </div>
+
+        {/* graph paper */}
+        <div className="fc-page">
+          {allowed === false && (
+            <div className="fc-note fc-note-warn">{t('auth.noAccess')}</div>
+          )}
+
+          {msg && (
+            <div className={`fc-note ${msg.kind === 'error' ? 'fc-note-err' : 'fc-note-ok'}`}>
+              {msg.text}
+            </div>
+          )}
+
+          {recovering ? (
+            <>
+              <label className="fc-label">{t('auth.newPasswordTitle')}</label>
               <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder={t('auth.fullName')}
-                className="auth-input"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="fc-input"
               />
-            )}
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder={t('auth.email')}
-              className="auth-input"
-            />
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleMain()}
-              placeholder={t('auth.password')}
-              className="auth-input"
-            />
-            <button onClick={handleMain} disabled={busy} className="auth-btn mt-1">
-              {busy ? t('auth.processing') : mode === 'signup' ? t('auth.signup') : t('auth.login')}
-            </button>
-            <div className="flex justify-between items-center pt-2">
-              {mode === 'login' && (
-                <button
-                  onClick={handleForgot}
-                  className="text-[10px] font-bold text-emerald-600/70 hover:text-emerald-400 uppercase tracking-widest bg-transparent border-none cursor-pointer"
-                >
-                  {t('auth.forgot')}
-                </button>
-              )}
-              <button
-                onClick={() => {
-                  setMode(mode === 'login' ? 'signup' : 'login');
-                  setMsg(null);
-                }}
-                className="text-[10px] font-bold text-slate-400 hover:text-emerald-400 uppercase tracking-widest bg-transparent border-none cursor-pointer ml-auto"
-              >
-                {mode === 'login' ? t('auth.createAccount') : t('auth.backToLogin')}
+              <button onClick={handleUpdatePassword} disabled={busy} className="fc-btn">
+                {busy ? t('auth.updating') : t('auth.savePassword')}
               </button>
-            </div>
-          </div>
-        )}
+            </>
+          ) : (
+            <>
+              {mode === 'signup' && (
+                <>
+                  <label className="fc-label">{t('auth.fullName')}</label>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="fc-input"
+                  />
+                </>
+              )}
+
+              <label className="fc-label">{t('auth.email')}</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoCapitalize="none"
+                className="fc-input"
+              />
+
+              <label className="fc-label">{t('auth.password')}</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleMain()}
+                className="fc-input"
+              />
+
+              <button onClick={handleMain} disabled={busy} className="fc-btn">
+                {busy ? t('auth.processing') : mode === 'signup' ? t('auth.signup') : t('auth.login')}
+              </button>
+
+              <div className="fc-links">
+                {mode === 'login' && (
+                  <button onClick={handleForgot} className="fc-link">
+                    {t('auth.forgot')}
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    setMode(mode === 'login' ? 'signup' : 'login');
+                    setMsg(null);
+                  }}
+                  className="fc-link fc-link-right"
+                >
+                  {mode === 'login' ? t('auth.createAccount') : t('auth.backToLogin')}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
+      <div className="fc-foot">Mega Jutamas Sdn Bhd · Miri, Sarawak</div>
+
       <style>{`
-        .auth-input{background:rgba(255,255,255,.05);border:1px solid rgba(52,211,153,.2);color:#ecfdf5;border-radius:14px;padding:14px 18px;width:100%;font-size:14px;font-weight:600;outline:none;transition:all .2s;}
-        .auth-input::placeholder{color:rgba(167,243,208,.4);}
-        .auth-input:focus{border-color:#10b981;box-shadow:0 0 0 3px rgba(16,185,129,.15);background:rgba(255,255,255,.08);}
-        .auth-btn{width:100%;padding:14px;background:linear-gradient(135deg,#059669,#10b981);color:white;font-weight:900;font-size:12px;letter-spacing:.15em;text-transform:uppercase;border:none;border-radius:14px;cursor:pointer;box-shadow:0 8px 20px rgba(16,185,129,.35);transition:all .2s;}
-        .auth-btn:hover{transform:translateY(-1px);}
-        .auth-btn:disabled{opacity:.6;cursor:default;transform:none;}
+        :root{
+          --fc-hand:'Patrick Hand','Bradley Hand','Segoe Print','Comic Sans MS',cursive;
+          --fc-ink:#173a2b;
+          --fc-green:#0f6e46;
+          --fc-grid:rgba(15,110,70,.13);
+          --fc-grid-5:rgba(15,110,70,.24);
+        }
+
+        /* ── canvas the book is lying on ── */
+        .fc-desk{
+          position:relative;min-height:100vh;
+          display:flex;flex-direction:column;align-items:center;justify-content:center;
+          padding:34px 14px 22px;
+          background:radial-gradient(ellipse at 50% 32%,#2c3a2c 0%,#1c261d 60%,#121a13 100%);
+        }
+        .fc-lang{position:fixed;top:14px;right:14px;z-index:30}
+
+        /* ── the book ── */
+        .fc-book{
+          position:relative;width:100%;max-width:430px;
+          border-radius:6px 6px 16px 16px;
+          box-shadow:0 26px 60px rgba(0,0,0,.55),0 3px 0 #cdd2c4,0 6px 0 #b5bbab;
+          animation:fcIn .5s ease both;
+        }
+        @keyframes fcIn{
+          from{opacity:0;transform:translateY(16px) scale(.985)}
+          to{opacity:1;transform:none}
+        }
+
+        /* spiral: rings arch over the top edge */
+        .fc-rings{
+          position:absolute;top:-15px;left:0;right:0;z-index:4;
+          display:flex;justify-content:space-between;padding:0 20px;
+          pointer-events:none;
+        }
+        .fc-rings i{
+          width:19px;height:31px;border:3px solid #c3cad3;border-radius:50%;
+          background:transparent;
+          box-shadow:inset 0 -3px 0 rgba(0,0,0,.18),0 1px 2px rgba(0,0,0,.45);
+        }
+
+        /* kraft cover flap */
+        .fc-cover{
+          position:relative;overflow:hidden;
+          border-radius:6px 6px 0 0;
+          padding:20px 18px 15px;
+          background:
+            repeating-linear-gradient(114deg,rgba(255,255,255,.055) 0 2px,transparent 2px 6px),
+            linear-gradient(#c89a62,#b07f4a 60%,#9d6f3f);
+          box-shadow:inset 0 -4px 10px rgba(0,0,0,.22);
+        }
+        .fc-holes{
+          position:absolute;top:6px;left:0;right:0;
+          display:flex;justify-content:space-between;padding:0 24px;
+        }
+        .fc-holes i{
+          width:11px;height:7px;border-radius:50%;
+          background:rgba(48,32,17,.75);
+          box-shadow:inset 0 1px 1px rgba(0,0,0,.6),0 1px 0 rgba(255,255,255,.18);
+        }
+        .fc-cover-in{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+        .fc-brand{
+          font-size:9.5px;font-weight:900;letter-spacing:.3em;text-transform:uppercase;
+          color:rgba(52,32,14,.62);
+        }
+        .fc-title{
+          font-family:var(--fc-hand);
+          font-size:33px;line-height:1.05;color:#33200e;margin-top:2px;
+        }
+        .fc-sub{
+          font-size:9.5px;font-weight:900;letter-spacing:.24em;text-transform:uppercase;
+          color:rgba(52,32,14,.55);margin-top:3px;
+        }
+        /* the red 555 sticker, stuck on slightly crooked */
+        .fc-555{
+          flex:0 0 auto;text-align:center;
+          background:linear-gradient(#d0202f,#a5121f);
+          color:#ffe9b8;border:2px solid rgba(255,233,184,.6);
+          border-radius:5px;padding:6px 10px 5px;
+          transform:rotate(4.5deg);
+          box-shadow:1px 2px 6px rgba(0,0,0,.35);
+        }
+        .fc-555 b{display:block;font-size:19px;font-weight:900;letter-spacing:.06em;line-height:1}
+        .fc-555 i{
+          display:block;font-style:normal;font-size:7px;font-weight:700;
+          letter-spacing:.22em;margin-top:2px;color:rgba(255,233,184,.75);
+        }
+
+        /* graph paper */
+        .fc-page{
+          padding:20px 18px 24px;
+          border-radius:0 0 16px 16px;
+          background-color:#fbfdf6;
+          background-image:
+            linear-gradient(var(--fc-grid) 1px,transparent 1px),
+            linear-gradient(90deg,var(--fc-grid) 1px,transparent 1px),
+            linear-gradient(var(--fc-grid-5) 1px,transparent 1px),
+            linear-gradient(90deg,var(--fc-grid-5) 1px,transparent 1px);
+          background-size:22px 22px,22px 22px,110px 110px,110px 110px;
+        }
+
+        .fc-label{
+          display:block;
+          font-family:var(--fc-hand);
+          font-size:18px;color:var(--fc-ink);
+          margin:0 0 3px 2px;
+        }
+        .fc-label:not(:first-child){margin-top:12px}
+
+        /* boxes drawn by hand, not printed */
+        .fc-input{
+          width:100%;padding:11px 14px;
+          font-family:var(--fc-hand);font-size:20px;color:#12281f;
+          background:rgba(255,255,255,.75);
+          border:2px solid #40573f;
+          border-radius:15px 9px 16px 8px / 9px 16px 8px 15px;
+          outline:none;-webkit-appearance:none;
+          transition:box-shadow .15s,border-color .15s;
+        }
+        .fc-input:focus{
+          border-color:var(--fc-green);
+          box-shadow:3px 3px 0 rgba(15,110,70,.22);
+        }
+
+        .fc-btn{
+          width:100%;margin-top:18px;padding:14px;
+          background:var(--fc-green);color:#f1fff7;
+          border:2px solid #0a4a2f;
+          border-radius:15px 9px 16px 8px / 9px 16px 8px 15px;
+          box-shadow:4px 4px 0 rgba(10,74,47,.32);
+          font-weight:900;font-size:12px;letter-spacing:.17em;text-transform:uppercase;
+          cursor:pointer;transition:transform .12s,box-shadow .12s,background .15s;
+        }
+        .fc-btn:hover{background:#128052}
+        .fc-btn:active{transform:translate(4px,4px);box-shadow:0 0 0 rgba(10,74,47,.32)}
+        .fc-btn:disabled{opacity:.6;cursor:default;transform:none}
+
+        .fc-links{display:flex;align-items:baseline;margin-top:14px}
+        .fc-link{
+          font-family:var(--fc-hand);font-size:17px;
+          color:var(--fc-ink);background:none;border:none;
+          border-bottom:1.5px dashed rgba(23,58,43,.45);
+          padding:0 1px;cursor:pointer;
+        }
+        .fc-link:hover{color:var(--fc-green);border-bottom-color:rgba(15,110,70,.65)}
+        .fc-link-right{margin-left:auto}
+
+        /* notes written in the margin */
+        .fc-note{
+          font-family:var(--fc-hand);font-size:18px;line-height:1.2;
+          padding:4px 2px 6px;margin-bottom:12px;
+          border-bottom:2px solid;
+        }
+        .fc-note-err{color:#b3261e;border-bottom-color:rgba(179,38,30,.45)}
+        .fc-note-ok{color:#0f6e46;border-bottom-color:rgba(15,110,70,.45)}
+        .fc-note-warn{color:#9a6206;border-bottom-color:rgba(154,98,6,.45)}
+
+        .fc-foot{
+          margin-top:22px;
+          font-family:var(--fc-hand);font-size:15px;
+          color:rgba(240,255,240,.3);text-align:center;
+        }
+
+        @media (max-width:360px){
+          .fc-title{font-size:29px}
+          .fc-rings{padding:0 14px}
+          .fc-rings i{width:16px;height:27px}
+        }
       `}</style>
     </div>
   );
