@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
-import { canBarcode, canDo, canMaintain, canPalms, canPlotStatus } from '../lib/access.js';
+import { canBarcode, canDo, canMaintain, canPalms } from '../lib/access.js';
 import { useLang } from '../context/LanguageContext.jsx';
 import TopNav from './TopNav.jsx';
 import CollectionBoard from './CollectionBoard.jsx';
@@ -10,19 +10,16 @@ export default function Dashboard() {
   const { staffName, permissions } = useAuth();
   const { t } = useLang();
 
-  // Order: Scan Barcode Counter first, then Issue Collection DO, Plot Status,
-  // Maintenance, PALMS. Every one of them is hidden for anyone whose FC Scan
-  // Portal User Access has that module switched off; someone who has never
-  // been through that screen still sees all five.
+  // Order: Scan Barcode Counter first, then Issue Collection DO, Maintenance,
+  // PALMS, Culling Calculator. Every one of them is hidden for anyone whose
+  // FC Portal User Access has that module switched off; someone who has never
+  // been through that screen still sees all of them.
   const modules = [
     ...(canBarcode(permissions, 'view')
       ? [{ to: '/scan', icon: '📷', tint: 'bg-blue-100', title: t('dash.scanTitle') }]
       : []),
     ...(canDo(permissions, 'view')
       ? [{ to: '/do', icon: '📋', tint: 'bg-emerald-100', title: t('dash.doTitle') }]
-      : []),
-    ...(canPlotStatus(permissions, 'view')
-      ? [{ to: '/plot-status', icon: '🚦', tint: 'bg-amber-100', title: t('dash.plotStatusTitle') }]
       : []),
     ...(canMaintain(permissions, 'view')
       ? [{ to: '/maintenance', icon: '🛠️', tint: 'bg-teal-100', title: t('dash.maintTitle') }]
