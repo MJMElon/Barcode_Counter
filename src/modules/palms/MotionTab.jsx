@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ACTIVITIES, INCENTIVE, NURSERIES, keyLabel, nurseryOfPlot, prettyD, todayStr } from './data.js';
 import { buildCullingReport, cullingReportFileName } from './cullingReport.js';
 import {
@@ -56,6 +56,130 @@ const CULL_TO = 9; // Transplanting
 function monthLabel(m) {
   const [y, mo] = m.split('-').map(Number);
   return new Date(y, mo - 1, 15).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+}
+
+/* ================= MONTH CALENDAR =================
+   A month is picked off a calendar rather than out of a list: twelve tiles
+   under a year, the way somebody thinks about "August" — not as the
+   fourteenth entry in a dropdown of every month that happens to have data.
+
+   Months with nothing logged are still drawn, just dead. A dropdown that
+   silently omitted them hid the shape of the record; here a gap in the year
+   is a gap you can see. The year arrows stop at the first and last year with
+   anything in them, so there is no wandering off into empty decades. */
+export function MonthCalendar({ value, months, onChange, t }) {
+  const [open, setOpen] = useState(false);
+  const startYear = () =>
+    Number((value || months[0] || '').slice(0, 4)) || new Date().getFullYear();
+  const [year, setYear] = useState(startYear);
+  const box = useRef(null);
+
+  // Open on the year being looked at, not on wherever it was left last time.
+  useEffect(() => {
+    if (open) setYear(startYear());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  // Click away or press Escape to close, the two things every other picker on
+  // the phone does.
+  useEffect(() => {
+    if (!open) return;
+    const away = (e) => {
+      if (box.current && !box.current.contains(e.target)) setOpen(false);
+    };
+    const esc = (e) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', away);
+    document.addEventListener('keydown', esc);
+    return () => {
+      document.removeEventListener('mousedown', away);
+      document.removeEventListener('keydown', esc);
+    };
+  }, [open]);
+
+  const years = [...new Set(months.map((m) => Number(m.slice(0, 4))))].sort((a, b) => a - b);
+  const lo = years.length ? years[0] : year;
+  const hi = years.length ? years[years.length - 1] : year;
+  const short = t('ms.monthsShort').split(',');
+
+  const pick = (m) => {
+    onChange(m);
+    setOpen(false);
+  };
+
+  const arrow =
+    'w-7 h-7 rounded-lg text-slate-600 text-lg leading-none font-black disabled:opacity-30 ' +
+    'disabled:cursor-default enabled:hover:bg-slate-100 enabled:cursor-pointer';
+
+  return (
+    <div className="relative" ref={box}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-2 bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-800 outline-none hover:border-emerald-500 cursor-pointer"
+      >
+        {/* A calendar page: the control says what it is before it is opened. */}
+        <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0 text-slate-400" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect x="3" y="5" width="18" height="16" rx="2" />
+          <path d="M3 10h18M8 3v4M16 3v4" strokeLinecap="round" />
+        </svg>
+        {value ? monthLabel(value) : t('ms.allMonths')}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 mt-1.5 z-50 w-[232px] bg-white border border-slate-200 rounded-2xl shadow-[0_12px_32px_rgba(0,0,0,.16)] p-3">
+          <div className="flex items-center justify-between mb-2">
+            <button type="button" className={arrow} disabled={year <= lo} onClick={() => setYear((y) => y - 1)}>
+              ‹
+            </button>
+            <span className="font-black text-slate-800 text-[13px] tabular-nums">{year}</span>
+            <button type="button" className={arrow} disabled={year >= hi} onClick={() => setYear((y) => y + 1)}>
+              ›
+            </button>
+          </div>
+
+          <div className="grid grid-cols-3 gap-1.5">
+            {short.map((name, i) => {
+              const key = `${year}-${String(i + 1).padStart(2, '0')}`;
+              const has = months.includes(key);
+              const on = value === key;
+              return (
+                <button
+                  type="button"
+                  key={key}
+                  disabled={!has}
+                  onClick={() => pick(key)}
+                  // A month with work in it is a button and looks like one; a
+                  // month with nothing is left as flat grey text. Without the
+                  // border the two sat too close to tell apart at a glance.
+                  className={`h-9 rounded-lg text-[12px] font-black transition-colors border ${
+                    on
+                      ? 'bg-emerald-600 border-emerald-600 text-white'
+                      : has
+                        ? 'bg-white border-slate-200 text-slate-700 hover:border-emerald-400 hover:bg-emerald-50 hover:text-emerald-700 cursor-pointer'
+                        : 'border-transparent text-slate-300 cursor-default'
+                  }`}
+                >
+                  {name}
+                </button>
+              );
+            })}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => pick('')}
+            className={`mt-2 w-full rounded-lg py-2 text-[12px] font-black cursor-pointer ${
+              value ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' : 'bg-emerald-600 text-white'
+            }`}
+          >
+            {t('ms.allMonths')}
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }
 
 /* ================= REPORT DIALOG =================
@@ -331,18 +455,12 @@ export default function MotionTab({ db, t, nurseryKeys, staffName }) {
               </option>
             ))}
           </select>
-          <select
+          <MonthCalendar
             value={months.includes(month) ? month : ''}
-            onChange={(e) => setMonth(e.target.value)}
-            className="bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-800 outline-none focus:border-emerald-500"
-          >
-            <option value="">{t('ms.allMonths')}</option>
-            {months.map((m) => (
-              <option key={m} value={m}>
-                {monthLabel(m)}
-              </option>
-            ))}
-          </select>
+            months={months}
+            onChange={setMonth}
+            t={t}
+          />
         </div>
       </div>
 
