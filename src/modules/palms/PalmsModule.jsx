@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import CullingTab from './CullingTab.jsx';
 import EntryTab from './EntryTab.jsx';
 import MotionTab from './MotionTab.jsx';
@@ -73,6 +74,11 @@ const TAB_ICON = {
   ),
 };
 
+// The tab row, in the order a Field Conductor works through it. Settings is
+// not here — it lives on the cog in the bar — but it is still a valid ?tab=
+// value, so it is checked separately against the settings permission.
+const TAB_IDS = ['entry', 'dash', 'cull', 'motion'];
+
 // A funnel, shown on anything that filters the board. Without it a stat card
 // is a rectangle with a number in it and nothing suggests it can be tapped.
 function FunnelIcon({ on }) {
@@ -134,7 +140,15 @@ export default function PalmsModule() {
   const [, setTick] = useState(0);
   const refresh = () => setTick((n) => n + 1);
 
-  const [tab, setTab] = useState('entry');
+  // Which tab is open is kept in the URL (?tab=cull), not just in state, so a
+  // tab is something you can link to, bookmark and land on. The Culling
+  // Calculator in particular is reached from its own dashboard card and from
+  // the old /culling link, both of which have to open the calculator itself
+  // rather than dropping the Field Conductor on the daily status screen.
+  const [params, setParams] = useSearchParams();
+  const wanted = params.get('tab');
+  const tab = TAB_IDS.includes(wanted) || (wanted === 'set' && maySetUp) ? wanted : 'entry';
+  const setTab = (id) => setParams(id === 'entry' ? {} : { tab: id }, { replace: true });
   const [toast, setToast] = useState(null);
   const flash = (msg) => {
     setToast(msg);
@@ -167,11 +181,11 @@ export default function PalmsModule() {
       <div className="bg-white border-b border-slate-200">
         <div className="max-w-[1000px] mx-auto px-3 sm:px-6 flex gap-1">
           {[
-            ['entry', t('pm.tabEntry')],
-            ['dash', t('pm.tabDash')],
-            ['cull', t('cull.title')],
-            ['motion', t('ms.title')],
-          ].map(([id, label]) => (
+            ['entry', t('pm.tabEntry'), t('pm.tabEntryShort')],
+            ['dash', t('pm.tabDash'), t('pm.tabDashShort')],
+            ['cull', t('cull.title'), t('cull.tabShort')],
+            ['motion', t('ms.title'), t('ms.tabShort')],
+          ].map(([id, label, short]) => (
             <button
               key={id}
               onClick={() => setTab(id)}
@@ -183,7 +197,13 @@ export default function PalmsModule() {
                   : 'border-transparent text-slate-400 hover:text-slate-600'
               }`}
             >
-              <span className="sm:hidden">{TAB_ICON[id]}</span>
+              {/* A phone gets the icon with a short word under it. Four bare
+                  glyphs in a row said nothing about which one was which, and
+                  the Culling Calculator in particular went unnoticed. */}
+              <span className="sm:hidden flex flex-col items-center gap-0.5">
+                {TAB_ICON[id]}
+                <span className="text-[9px] leading-none tracking-normal">{short}</span>
+              </span>
               <span className="hidden sm:inline">{label}</span>
             </button>
           ))}

@@ -144,8 +144,10 @@ export default function App() {
           </Protected>
         }
       />
-      {/* The Culling Calculator now lives inside PALMS; keep old links working. */}
-      <Route path="/culling" element={<Navigate to="/palms" replace />} />
+      {/* The Culling Calculator now lives inside PALMS. Send old links at the
+          calculator's own tab — landing on /palms opened the daily status
+          screen instead, with nothing to say the calculator was still there. */}
+      <Route path="/culling" element={<Navigate to="/palms?tab=cull" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
