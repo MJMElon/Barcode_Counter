@@ -7,6 +7,7 @@ export const LANGS = { en: 'English', ms: 'Bahasa Melayu' };
 const en = {
   // common
   'common.loading': 'Loading…',
+  'common.saving': 'Saving…',
   'common.active': 'Active',
   'common.cancel': 'Cancel',
   'common.ok': 'OK',
@@ -486,6 +487,7 @@ const en = {
 const ms = {
   // common
   'common.loading': 'Memuatkan…',
+  'common.saving': 'Menyimpan…',
   'common.active': 'Aktif',
   'common.cancel': 'Batal',
   'common.ok': 'OK',
