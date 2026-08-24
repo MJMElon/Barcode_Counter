@@ -54,6 +54,7 @@ const en = {
 
   // culling calculator (PALMS tab)
   'cull.title': 'Culling Calculator',
+  'cull.tabShort': 'Culling',
   'cull.balance': 'Balance',
   'cull.rate': 'Culling Rate',
   'cull.action': 'Action',
@@ -100,6 +101,7 @@ const en = {
   // PALMS
   // motion study
   'ms.title': 'Motion Study',
+  'ms.tabShort': 'Motion',
   'ms.spanTitle': 'A run of activities',
   'ms.cullRun': 'Saringan Anak Bibit → Transplanting',
   'ms.oneActivity': 'Activities',
@@ -147,7 +149,9 @@ const en = {
   'ms.cycles': '{n} cycle(s)',
   'ms.noData': 'not finished yet',
   'pm.tabEntry': 'Update Status',
+  'pm.tabEntryShort': 'Status',
   'pm.tabDash': 'Monitoring Board',
+  'pm.tabDashShort': 'Board',
   'pm.nursery': 'Nursery',
   'pm.save': 'Save Status',
   'pm.railHint': 'Open only the plots that changed, then save once',
@@ -615,6 +619,7 @@ const ms = {
 
   // culling calculator (PALMS tab)
   'cull.title': 'Kalkulator Culling',
+  'cull.tabShort': 'Culling',
   'cull.balance': 'Baki',
   'cull.rate': 'Kadar Culling',
   'cull.action': 'Tindakan',
@@ -661,6 +666,7 @@ const ms = {
   // PALMS
   // motion study
   'ms.title': 'Motion Study',
+  'ms.tabShort': 'Motion',
   'ms.spanTitle': 'Beberapa aktiviti',
   'ms.cullRun': 'Saringan Anak Bibit → Transplanting',
   'ms.oneActivity': 'Aktiviti',
@@ -708,7 +714,9 @@ const ms = {
   'ms.cycles': '{n} kitaran',
   'ms.noData': 'belum selesai',
   'pm.tabEntry': 'Kemas Kini Status',
+  'pm.tabEntryShort': 'Status',
   'pm.tabDash': 'Papan Pemantauan',
+  'pm.tabDashShort': 'Papan',
   'pm.nursery': 'Semaian',
   'pm.save': 'Simpan Status',
   'pm.railHint': 'Buka plot yang berubah sahaja, kemudian simpan sekali',
