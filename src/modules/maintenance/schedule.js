@@ -38,6 +38,44 @@ export function monthRank(lbl) {
 }
 
 /**
+ * Two shapes the office still reads, and so must this.
+ *
+ * Manuring and inter-row were once planned as a single round, and payloads
+ * saved then are still in the database. The office page migrates them the
+ * moment it loads one (migrateManuringShape / migrateInterrowShape in
+ * plot_maintenance_script.js); without the same step here a schedule saved
+ * the old way links to nothing at all, and the field is told a plot has no
+ * work when the office can see that it does.
+ *
+ * Returns a new payload; the caller's is untouched.
+ */
+export function normalisePayload(payload) {
+  if (!payload) return payload;
+  const s = JSON.parse(JSON.stringify(payload));
+
+  // Manuring: one flat row of columns becomes round 1 of many.
+  if (Array.isArray(s.manuringConfig) && s.manuringConfig.length && !Array.isArray(s.manuringConfig[0])) {
+    s.manuringConfig = [s.manuringConfig];
+    Object.keys(s.manuring || {}).forEach((p) => {
+      const v = s.manuring[p];
+      if (Array.isArray(v) && (v.length === 0 || typeof v[0] === 'boolean')) s.manuring[p] = [v];
+    });
+  }
+
+  // Inter-row: an object keyed by round becomes an array of rounds, each with
+  // a single column.
+  if (s.interrowConfig && !Array.isArray(s.interrowConfig)) {
+    const keys = Object.keys(s.interrowConfig).sort();
+    s.interrowConfig = keys.map((k) => [s.interrowConfig[k]]);
+    Object.keys(s.interrow || {}).forEach((p) => {
+      const v = s.interrow[p];
+      if (v && !Array.isArray(v)) s.interrow[p] = keys.map((k) => [!!v[k]]);
+    });
+  }
+  return s;
+}
+
+/**
  * The schedule that applies to a month, per nursery.
  *
  * The office page carries the previous month's plan forward on screen and
@@ -55,8 +93,8 @@ export function applicableSchedules(rows, monthLbl) {
     if (rank < 0 || rank > want) return;         // never a future month's plan
     const cur = best.get(r.nursery);
     if (!cur || monthRank(cur.month) < rank) {
-      best.set(r.nursery, { nursery: r.nursery, payload: r.payload, month: r.month,
-                            carried: rank !== want });
+      best.set(r.nursery, { nursery: r.nursery, payload: normalisePayload(r.payload),
+                            month: r.month, carried: rank !== want });
     }
   });
   return [...best.values()];
@@ -96,6 +134,11 @@ export function weekOfDate(dateStr) {
   if (!day) return 0;
   return Math.min(WEEKS.length, Math.ceil(day / 7));
 }
+
+/* A round's ticks. Tolerates a payload shape nobody has migrated: a bare
+   boolean counts as one ticked column rather than throwing .some is not a
+   function and taking the whole week's list down with it. */
+const ticked = (v) => (Array.isArray(v) ? v.some(Boolean) : !!v);
 
 const dose = (name, amount, unit) =>
   name && name !== '—' ? `${name}${amount ? ` ${amount}${unit || ''}` : ''}` : '';
@@ -145,7 +188,7 @@ export function weekTasks(payload, week) {
   // ── Manuring ──
   const mCfg = (s.manuringConfig || [])[ri] || [];
   out.manuring = Object.keys(s.manuring || {})
-    .filter((plot) => ((s.manuring[plot] || [])[ri] || []).some(Boolean))
+    .filter((plot) => ticked((s.manuring[plot] || [])[ri]))
     .sort(plotCmp)
     .map((plot) => ({
       plot,
@@ -165,7 +208,7 @@ export function weekTasks(payload, week) {
   // ── Inter-row spraying ──
   const iCfg = (s.interrowConfig || [])[ri] || [];
   out.interrow = Object.keys(s.interrow || {})
-    .filter((plot) => ((s.interrow[plot] || [])[ri] || []).some(Boolean))
+    .filter((plot) => ticked((s.interrow[plot] || [])[ri]))
     .sort(plotCmp)
     .map((plot) => ({
       plot,
