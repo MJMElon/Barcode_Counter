@@ -21,6 +21,7 @@ import {
   tickedToday,
   todayStr,
 } from './data.js';
+import { syncPalms } from './sync.js';
 
 // Update Status — the plots of a nursery are drawn as a train, one carriage
 // per plot, each carriage showing what that plot is on right now. Nothing has
@@ -208,6 +209,13 @@ export default function EntryTab({ db, t, staffName, refresh, flash, nurseryKeys
     const ts = nowClock();
     allKeys.forEach((k) => applyDailySelection(db, k, draft[k] || [], staffName || 'FC', today, ts));
     saveDB(db);
+    /* Straight up to the server, so the office sees the day within seconds
+       rather than whenever this phone next opens PALMS. Deliberately not
+       awaited and never blocking the save: the record is already safe on the
+       device, and a Field Conductor with no signal must not be left watching
+       a spinner. syncPalms swallows its own failures and the next open
+       retries. */
+    syncPalms(db).then((r) => { if (r) refresh(); });
     refresh();
     setDraft(seedDraft(db, allKeys));
     setConfirming(false);

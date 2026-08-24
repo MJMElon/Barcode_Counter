@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import EntryTab from './EntryTab.jsx';
 import SettingsTab from './SettingsTab.jsx';
 import { clearAll, seedDemo } from './demo.js';
+import { syncPalms } from './sync.js';
 import TopNav from '../../components/TopNav.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { canPalms, visibleNurseries } from '../../lib/access.js';
@@ -29,18 +30,29 @@ export default function PalmsModule() {
 
   // The DB is a plain mutable object persisted to localStorage; a tick
   // counter re-renders after each mutation (same pattern as the source app's
-  // re-render calls). A device with no data yet gets randomly generated
-  // stages (same generator as the "Isi data contoh" demo tool) so there is
-  // something to check straight away.
+  // re-render calls).
   const dbRef = useRef(null);
-  if (!dbRef.current) {
-    let d = loadDB();
-    if (!Object.keys(d.logs || {}).length) d = seedDemo();
-    dbRef.current = d;
-  }
+  if (!dbRef.current) dbRef.current = loadDB();
   const db = dbRef.current;
   const [, setTick] = useState(0);
   const refresh = () => setTick((n) => n + 1);
+
+  /* PALMS is no longer only this phone's. Everything local goes up and
+     everybody else's comes down, into the very object the screens are
+     holding, so the merge shows without a reload.
+     A device with nothing gets the real plots this way. Only if the server
+     has nothing either — the tables are new, or this is a demo — does it
+     fall back to generated stages, so there is still something to look at.
+     Demo entries are flagged and never sent (see sync.js). */
+  useEffect(() => {
+    let live = true;
+    syncPalms(db).then((r) => {
+      if (!live) return;
+      if (r) refresh();
+      if (!Object.keys(dbRef.current.logs || {}).length) replaceDB(seedDemo());
+    });
+    return () => { live = false; };
+  }, []);
 
   // seedDemo() and clearAll() persist for themselves and hand back the new
   // DB; this only has to point at it and redraw.

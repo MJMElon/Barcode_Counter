@@ -1,9 +1,14 @@
+import { newUid } from '../../lib/outbox.js';
 import { loadSettings } from './settings.js';
 
 // PALMS — Plot Activity Log Monitoring System, data layer.
-// Ported from the standalone NurseryPALMS app. Data stays offline on the
-// device in localStorage under the SAME key the standalone app used, so
-// anything already recorded on a device carries over.
+// Ported from the standalone NurseryPALMS app. localStorage under the SAME
+// key the standalone app used stays what the screens read and write — they do
+// it synchronously, and there is no safe way to make a working field app
+// async all at once — so anything already on a device carries over.
+//
+// sync.js is the layer either side of it: what is here goes up to
+// fcportal_palms_plot_logs, and what other people recorded comes back down.
 
 export const NURSERIES = {
   BNN: { label: 'BNN', prefix: 'B', count: 14 },
@@ -402,14 +407,24 @@ export function applyDailySelection(db, key, selected, by, date, ts) {
 
 export function startEntry(db, pid, actN, dateStr, by) {
   db.logs[pid] = db.logs[pid] || [];
-  db.logs[pid].push({ no: ++db.seq, actN, start: dateStr, end: null, ideal: durFor(pid, activityByN(actN)), by });
+  /* uid is minted here, on the device, before the entry has been anywhere.
+     It is what the server matches a row on, so an entry keyed with no signal
+     and sent three days later cannot be saved twice. */
+  db.logs[pid].push({
+    uid: newUid(), no: ++db.seq, actN, start: dateStr, end: null,
+    ideal: durFor(pid, activityByN(actN)), by,
+  });
 }
 
 // Every save is appended here, so "show me what was keyed in on 3 Aug" is an
 // exact answer rather than a guess reconstructed from the logs.
-export function recordHistory(db, { key, actN, acts, by, at }) {
+export function recordHistory(db, { key, actN, acts, by, at, demo }) {
   db.history = db.history || [];
   const row = { at, key, acts: acts || (actN != null ? [actN] : []), by };
+  // Same flag as the log entries: generated for a fresh install to have
+  // something to show, and never sent to the server. A demo plot that later
+  // gets a real entry would otherwise carry its invented days up with it.
+  if (demo) row.demo = true;
   // A day holds one report per unit. Saving the nursery twice — a correction
   // an hour later — rewrites that day's row instead of stacking a second one.
   const i = db.history.findIndex((h) => h.key === key && h.at === at);
@@ -505,8 +520,12 @@ function seedUnit(db, key, actN, mood, by) {
   all.forEach((e) => {
     e.no = ++db.seq;
     e.by = by;
+    /* Made up on this device to give a fresh install something to look at.
+       Flagged so sync.js can refuse to send it: demo plots reaching the
+       server would show the office activity that never happened. */
+    e.demo = true;
   });
-  entries.forEach((e) => recordHistory(db, { key, actN: e.actN, by, at: e.start }));
+  entries.forEach((e) => recordHistory(db, { key, actN: e.actN, by, at: e.start, demo: true }));
   db.logs[key] = all;
 }
 
@@ -547,7 +566,7 @@ export function seedSample() {
         // worth opening: one green, the rest still to do.
         const doneToday = a ? ai === 0 : n % 3 === 0;
         db.updated[key] = { by: 'Contoh', at: doneToday ? today : yest, ts: '07:30' };
-        if (doneToday) recordHistory(db, { key, actN, by: 'Contoh', at: today });
+        if (doneToday) recordHistory(db, { key, actN, by: 'Contoh', at: today, demo: true });
         n++;
       });
     })
