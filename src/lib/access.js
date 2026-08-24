@@ -2,9 +2,8 @@
  * Who may see what in the FC Scan Portal.
  *
  * One definition, imported by every module and by the dashboard. The nursery
- * rule used to be written out twice — once in plotstatus/helpers.js and once
- * in maintenance/helpers.js — which is exactly how two copies of a rule drift
- * apart and one screen quietly stops matching the other.
+ * rule used to be written out once per module, which is exactly how two copies
+ * of a rule drift apart and one screen quietly stops matching the other.
  *
  * All of it is set on the main portal: FC Scan Portal → User Access, saved to
  * shared_profiles.permissions.
@@ -17,11 +16,11 @@
  *  - permissions.plot_status_nurseries absent/null → null, meaning ALL
  *  - array → exactly those (an empty array means none)
  *
- * One setting governs every nursery-aware screen — Plot Status, Maintenance
- * and PALMS — which is how the User Access screen presents it. The key still
- * carries its original plot_status_ name so that access already saved for
- * people keeps working; renaming it would silently open the portal back up
- * for everyone who had been narrowed down.
+ * One setting governs every nursery-aware screen — Maintenance and PALMS —
+ * which is how the User Access screen presents it. The key still carries its
+ * original plot_status_ name, from the retired Plot Status module, so that
+ * access already saved for people keeps working; renaming it would silently
+ * open the portal back up for everyone who had been narrowed down.
  */
 export function allowedNurseries(permissions) {
   const v = permissions && permissions.plot_status_nurseries;
@@ -97,5 +96,4 @@ export function isModuleAdmin(permissions, moduleName = 'operation') {
 export const canBarcode    = (permissions, action) => canScan(permissions, 'barcode', action);
 export const canDo         = (permissions, action) => canScan(permissions, 'do', action);
 export const canMaintain   = (permissions, action) => canScan(permissions, 'maintenance', action);
-export const canPlotStatus = (permissions, action) => canScan(permissions, 'plot_status', action);
 export const canPalms      = (permissions, action) => canScan(permissions, 'palms', action);

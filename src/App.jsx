@@ -11,7 +11,6 @@ import { canScan } from './lib/access.js';
 // on demand so the initial app shell stays small.
 const ScanModule = lazy(() => import('./modules/scan/ScanModule.jsx'));
 const DoModule = lazy(() => import('./modules/do/DoModule.jsx'));
-const PlotStatusModule = lazy(() => import('./modules/plotstatus/PlotStatusModule.jsx'));
 const MaintenanceModule = lazy(() => import('./modules/maintenance/MaintenanceModule.jsx'));
 const PalmsModule = lazy(() => import('./modules/palms/PalmsModule.jsx'));
 
@@ -103,20 +102,6 @@ export default function App() {
         }
       />
       <Route
-        path="/plot-status"
-        element={
-          <Protected>
-            <PageGate page="plot_status">
-              <ErrorBoundary>
-                <Suspense fallback={<Loading />}>
-                  <PlotStatusModule />
-                </Suspense>
-              </ErrorBoundary>
-            </PageGate>
-          </Protected>
-        }
-      />
-      <Route
         path="/maintenance"
         element={
           <Protected>
@@ -148,6 +133,9 @@ export default function App() {
           calculator's own tab — landing on /palms opened the daily status
           screen instead, with nothing to say the calculator was still there. */}
       <Route path="/culling" element={<Navigate to="/palms?tab=cull" replace />} />
+      {/* Plot Status was retired — PALMS does the same job and more. Old
+          bookmarks land on the dashboard rather than a blank screen. */}
+      <Route path="/plot-status" element={<Navigate to="/" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

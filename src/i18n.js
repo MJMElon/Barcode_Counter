@@ -48,7 +48,6 @@ const en = {
   'dash.doDesc': 'Issue, sign & print Delivery Orders against approval letters.',
   'dash.scanTitle': 'Scan Barcode Counter',
   'dash.scanDesc': 'Scan seals/barcodes and count them against a target quantity.',
-  'dash.plotStatusTitle': 'Plot Status',
   'dash.maintTitle': 'Maintenance',
   'dash.palmsTitle': 'PALMS',
 
@@ -373,34 +372,18 @@ const en = {
   'mt.pickPlot': '— Choose plot —',
   'mt.by': 'by {name}',
 
-  'ps.title': 'Plot Status',
-  'ps.searchPlot': '🔎 Search plot…',
-  'ps.allNurseries': 'All nurseries',
-  'ps.updateStatus': 'Update Status',
-  'ps.currentStatus': 'Current status',
-  'ps.noStatus': 'No status keyed in yet',
-  'ps.dayLine': 'Day {n}{ideal}',
-  'ps.ofIdeal': ' of ideal {d}',
-  'ps.idealShort': 'ideal {d}d',
-  'ps.today': 'Today',
-  'ps.stage': 'Status stage',
-  'ps.statusDate': 'Date',
-  'ps.remark': 'Remark (optional)',
-  'ps.saveStatus': 'Save Status',
-  'ps.savedToast': '{plot} status saved!',
-  'ps.saveErr': 'Save failed: {msg}',
-  'ps.loadErr': 'Load failed: {msg}',
-  'ps.noPlots': 'No plots found.',
-  'ps.noNurseryAccess': 'You have no nursery access for Plot Status yet — ask an admin to set it in User Access.',
-  'ps.noReportAccess': 'You can view plot status but not report it. Ask an admin to enable it in User Access.',
-  'ps.noStages': 'No status stages set up yet. An admin must create them in Nursery Operation Management → Life of Plot → Status Stages.',
-
   // top nav / offline
   'nav.online': 'Online',
   'nav.offline': 'Offline',
   'nav.fcPortal': 'MJM Nursery — FC Portal',
 
   // collection board ("TV")
+  'board.title': "Today's Collections",
+  'board.empty': 'No collections booked today',
+  'board.footer': 'Collection Time Booking',
+  'board.updated': 'Updated {time}',
+  'board.offline': 'Offline · cached',
+
   // maintenance board (dashboard summary)
   'mtb.title': 'Maintenance Status',
   'mtb.donePct': '{pct}% done',
@@ -408,12 +391,6 @@ const en = {
   'mtb.footer': 'This month · weekly plan',
   'mtb.cached': 'Offline · cached',
   'mtb.unavailable': 'Schedule unavailable',
-
-  'board.title': "Today's Collections",
-  'board.empty': 'No collections booked today',
-  'board.footer': 'Collection Time Booking',
-  'board.updated': 'Updated {time}',
-  'board.offline': 'Offline · cached',
 
   // scan module
   'scan.brandTitle': 'Signed Consents',
@@ -621,7 +598,6 @@ const ms = {
   'dash.doDesc': 'Keluar, tandatangan & cetak Delivery Order berdasarkan surat kelulusan.',
   'dash.scanTitle': 'Pengira Imbas Barkod',
   'dash.scanDesc': 'Imbas seal/barkod dan kira mengikut kuantiti sasaran.',
-  'dash.plotStatusTitle': 'Status Plot',
   'dash.maintTitle': 'Penyelenggaraan',
   'dash.palmsTitle': 'PALMS',
 
@@ -942,34 +918,18 @@ const ms = {
   'mt.pickPlot': '— Pilih plot —',
   'mt.by': 'oleh {name}',
 
-  'ps.title': 'Status Plot',
-  'ps.searchPlot': '🔎 Cari plot…',
-  'ps.allNurseries': 'Semua nurseri',
-  'ps.updateStatus': 'Kemas Kini Status',
-  'ps.currentStatus': 'Status semasa',
-  'ps.noStatus': 'Belum ada status direkod',
-  'ps.dayLine': 'Hari {n}{ideal}',
-  'ps.ofIdeal': ' daripada ideal {d}',
-  'ps.idealShort': 'ideal {d}h',
-  'ps.today': 'Hari ini',
-  'ps.stage': 'Peringkat status',
-  'ps.statusDate': 'Tarikh',
-  'ps.remark': 'Catatan (pilihan)',
-  'ps.saveStatus': 'Simpan Status',
-  'ps.savedToast': 'Status {plot} disimpan!',
-  'ps.saveErr': 'Gagal simpan: {msg}',
-  'ps.loadErr': 'Gagal muat: {msg}',
-  'ps.noPlots': 'Tiada plot dijumpai.',
-  'ps.noNurseryAccess': 'Anda belum ada akses nurseri untuk Status Plot — minta admin tetapkan dalam User Access.',
-  'ps.noReportAccess': 'Anda boleh lihat status plot tetapi tidak boleh melaporkannya. Minta admin membukanya dalam User Access.',
-  'ps.noStages': 'Peringkat status belum ditetapkan. Admin perlu cipta dalam Nursery Operation Management → Life of Plot → Status Stages.',
-
   // top nav / offline
   'nav.online': 'Dalam talian',
   'nav.offline': 'Luar talian',
   'nav.fcPortal': 'MJM Nursery — FC Portal',
 
   // collection board ("TV")
+  'board.title': 'Kutipan Hari Ini',
+  'board.empty': 'Tiada kutipan ditempah hari ini',
+  'board.footer': 'Tempahan Masa Kutipan',
+  'board.updated': 'Dikemas kini {time}',
+  'board.offline': 'Luar talian · cache',
+
   // maintenance board (dashboard summary)
   'mtb.title': 'Status Penyelenggaraan',
   'mtb.donePct': '{pct}% siap',
@@ -977,12 +937,6 @@ const ms = {
   'mtb.footer': 'Bulan ini · jadual mingguan',
   'mtb.cached': 'Luar talian · cache',
   'mtb.unavailable': 'Jadual tiada',
-
-  'board.title': 'Kutipan Hari Ini',
-  'board.empty': 'Tiada kutipan ditempah hari ini',
-  'board.footer': 'Tempahan Masa Kutipan',
-  'board.updated': 'Dikemas kini {time}',
-  'board.offline': 'Luar talian · cache',
 
   // scan module
   'scan.brandTitle': 'Persetujuan Bertandatangan',
