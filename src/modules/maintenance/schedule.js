@@ -254,12 +254,6 @@ export function mergeWeekTasks(entries, week) {
   return out;
 }
 
-/** How many plots each job covers in a week — the badge on the timeline. */
-export function weekCounts(payload, week) {
-  const tasks = weekTasks(payload, week);
-  return Object.keys(tasks).reduce((acc, k) => { acc[k] = tasks[k].length; return acc; }, {});
-}
-
 /**
  * Has this plot's job already been recorded for this week?
  * Matched on the month's week rather than the exact day, because the schedule

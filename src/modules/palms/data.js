@@ -79,22 +79,11 @@ export function plotPhoto(pid) {
   return SHIPPED_PHOTOS[pid] || null;
 }
 
-// Older name, kept for the legacy band rendering.
-export function areaMapUrl(pid) {
-  return plotPhoto(pid) || '';
-}
-
 export function isMulti(pid) {
   return !!MULTI[pid];
 }
-export function areasOf(pid) {
-  return isMulti(pid) ? MULTI[pid].areas : [];
-}
 export function aKey(pid, area) {
   return pid + '#' + area;
-}
-export function keyLabel(k) {
-  return k.includes('#') ? k.replace('#', ' · ') : k;
 }
 
 /**
@@ -262,38 +251,11 @@ export function computeStatus(db, pid) {
     })[0];
 }
 
-// Every activity open on this unit right now.
-export function openActivities(db, pid) {
-  return currentEntries(db, pid)
-    .map((e) => activityByN(e.actN))
-    .filter(Boolean)
-    .sort((a, b) => a.n - b.n);
-}
-
-export function estEndDate(db, pid) {
-  const open = currentEntries(db, pid);
-  if (!open.length) return null;
-  // The plot is finished when its slowest running activity has worked through
-  // the rest of the sequence.
-  const ends = open.map((e) => {
-    let s = 0;
-    for (let n = e.actN; n <= 11; n++) s += durFor(pid, activityByN(n));
-    return addDays(e.start, s);
-  });
-  return ends.sort()[ends.length - 1];
-}
-
 /* ---------- multi-area derivation ---------- */
 function bucket(p) {
   if (p < 40) return 30;
   if (p < 60) return 50;
   return 70;
-}
-function areaCategory(db, key) {
-  const ns = currentEntries(db, key).map((e) => e.actN);
-  if (ns.includes(11)) return 'Pengambilan';
-  if (ns.includes(10)) return 'Membesar';
-  return 'Kosong';
 }
 export function worstArea(db, pid) {
   const rank = { overdue: 0, soon: 1, ontrack: 2, none: 3 };
@@ -311,67 +273,8 @@ export function worstArea(db, pid) {
 export function multiStatus(db, pid) {
   return worstArea(db, pid).st;
 }
-// A plot split into areas is described by what share of it is at each
-// category — "30% Kosong, 70% Pengambilan" — using each area's weight.
-//
-// Kosong counts towards that mix. It used to be excluded: any area at an
-// early stage sent the whole plot down the fallback below, so a plot with
-// 70% at Pengambilan reported only the early area's activity and the
-// collection went unmentioned. The Kosong share was computed and then never
-// shown.
-export function combinedLabel(db, pid) {
-  const cfg = MULTI[pid];
-  const cats = cfg.areas.map((a) => areaCategory(db, aKey(pid, a)));
-
-  // Nothing growing anywhere: the activity name is more use than "100% Kosong".
-  if (cats.every((c) => c === 'Kosong')) {
-    const w = worstArea(db, pid);
-    return w.st.state === 'none' ? '—' : w.st.act.name;
-  }
-
-  const pct = { Kosong: 0, Pengambilan: 0, Membesar: 0 };
-  cfg.areas.forEach((a) => {
-    pct[areaCategory(db, aKey(pid, a))] += cfg.weights[a];
-  });
-  const order = ['Kosong', 'Pengambilan', 'Membesar'];
-  const nz = order.filter((c) => pct[c] > 0);
-  if (nz.length === 0) return '—';
-  if (nz.length === 1) return nz[0];
-  return nz.map((c) => `${bucket(pct[c])}% ${c}`).join(', ');
-}
 export function effStatus(db, p) {
   return isMulti(p) ? multiStatus(db, p) : computeStatus(db, p);
-}
-export function effActivityName(db, p) {
-  if (isMulti(p)) return combinedLabel(db, p);
-  const st = computeStatus(db, p);
-  return st.state === 'none' ? '—' : st.act.name;
-}
-export function effEstEnd(db, p) {
-  if (isMulti(p)) {
-    const s = multiStatus(db, p);
-    return s.key ? estEndDate(db, s.key) : null;
-  }
-  return estEndDate(db, p);
-}
-export function plotInActivity(db, p, n) {
-  const keys = isMulti(p) ? MULTI[p].areas.map((a) => aKey(p, a)) : [p];
-  return keys.some((k) => currentEntries(db, k).some((e) => e.actN === n));
-}
-
-/* ---------- entry grid units ---------- */
-export function entryUnits(nk) {
-  const units = [];
-  plotsOf(nk).forEach((pid) => {
-    if (isMulti(pid)) {
-      MULTI[pid].areas.forEach((a, i) =>
-        units.push({ key: aKey(pid, a), label: `${pid} · ${a}`, pid, area: a, info: i === 0 })
-      );
-    } else {
-      units.push({ key: pid, label: pid, pid, area: null, info: false });
-    }
-  });
-  return units;
 }
 
 // Record one unit's activities for a day.
@@ -434,16 +337,6 @@ export function recordHistory(db, { key, actN, acts, by, at, demo }) {
   // them so the device's storage does not creep upwards forever.
   const CAP = 20000;
   if (db.history.length > CAP) db.history = db.history.slice(-CAP);
-}
-
-// Activity numbers a history row covers, tolerating rows written before a
-// plot could run two activities at once.
-export function historyActs(h) {
-  if (Array.isArray(h.acts)) return h.acts;
-  return h.actN != null ? [h.actN] : [];
-}
-export function historyOn(db, dateStr) {
-  return (db.history || []).filter((h) => h.at === dateStr);
 }
 
 /* ---------- sample data ----------
@@ -595,8 +488,4 @@ export function cullingScopePlots() {
     })
   );
   return set;
-}
-export function palmsHasData() {
-  const db = loadDB();
-  return Object.keys(db.logs || {}).length > 0;
 }

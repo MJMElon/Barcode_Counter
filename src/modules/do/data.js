@@ -168,20 +168,6 @@ export async function persistDO({ payload, photoBase64, al, sigDataUrl, staff })
   return { queued: true, payload };
 }
 
-// Build the plot_n / breed_n / qty_n columns from item rows, mapping a typed
-// nursery name back to its plot_name when one matches.
-export function buildItemColumns(items, plots) {
-  const cols = {};
-  items.slice(0, 5).forEach((it, i) => {
-    const n = i + 1;
-    const matched = plots.find((p) => p.nursery_name?.toLowerCase() === it.nursery?.toLowerCase());
-    cols[`plot_${n}`] = matched ? matched.plot_name : it.nursery || null;
-    cols[`breed_${n}`] = it.breed || null;
-    cols[`qty_${n}`] = it.qty || null;
-  });
-  return cols;
-}
-
 // ── Offline support ──────────────────────────────────────────────────
 // A unique DO number for DOs created while offline (avoids collisions with the
 // server sequence until they sync). Distinguishable by the "OFF" marker in the

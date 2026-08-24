@@ -27,13 +27,6 @@ import { ensureAudio, beepSuccess, beepDuplicate, beepComplete, beepAlarm, vibra
 const DEDUPE_DEBOUNCE_MS = 800;
 const OVER_REPEAT_MS = 1200;
 
-const STATUS_PILL = {
-  done: 'scan.statusDone',
-  over: 'scan.statusOver',
-  progress: 'scan.statusProgress',
-  pending: 'scan.statusPending',
-};
-
 export default function ScanModule() {
   const { t } = useLang();
   const { staffName } = useAuth();

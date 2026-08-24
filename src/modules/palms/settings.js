@@ -90,21 +90,6 @@ export function defaultSettings() {
   };
 }
 
-// Evenly spaced areas are the wrong default: an area worth 30% of the plot
-// usually occupies about 30% of the photo. Bands follow the shares.
-export function bandsFromWeights(areas, weights) {
-  const total = areas.reduce((s, a) => s + (Number(weights[a]) || 0), 0) || 100;
-  const band = {};
-  let acc = 0;
-  areas.forEach((a, i) => {
-    const from = Math.round((acc / total) * 100);
-    acc += Number(weights[a]) || 0;
-    const to = i === areas.length - 1 ? 100 : Math.round((acc / total) * 100);
-    band[a] = [from, to];
-  });
-  return band;
-}
-
 // Scaling a photo before it is kept now lives in lib/image.js, shared with
 // the maintenance module. Re-exported here so this module's own callers —
 // and its 1280px / 0.82 defaults — are untouched.

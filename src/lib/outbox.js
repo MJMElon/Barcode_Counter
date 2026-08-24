@@ -69,10 +69,6 @@ export async function listJobs() {
   return (all || []).sort((a, b) => a.createdAt - b.createdAt);
 }
 
-export async function countJobs() {
-  return (await listJobs()).length;
-}
-
 export async function removeJob(uid) {
   await tx('readwrite', (s) => s.delete(uid));
 }

@@ -52,10 +52,6 @@ export function seedRequests(list) {
   return list;
 }
 
-export function requestsForPlot(list, plot) {
-  return list.filter((r) => r.plot === plot);
-}
-
 // Whether this plot has already been sent to this destination today. Keyed on
 // the destination as well as the plot: an auditor request must not make the
 // plot look as though HQ has been told.
