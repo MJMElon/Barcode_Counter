@@ -114,7 +114,9 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
   async function raise() {
     if (!action || !row || busy) return;
     setBusy(true);
-    const title = `${t(action.titleKey)} — ${row.plot}`;
+    // The case's own sentence, not the button's label: see caseTitle in
+    // cullingActions.js for why it does not follow the language picker.
+    const title = action.caseTitle(row.plot);
     const { data: c, error, deduped } = await raiseCase({
       title,
       description: caseBody({

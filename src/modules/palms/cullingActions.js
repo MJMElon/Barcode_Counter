@@ -12,6 +12,12 @@ import { fmtNum, fmtPct } from './cullingData.js';
  * Rules are tried in order and the first match wins, so they may overlap and
  * the specific ones go first. Each one carries everything the case needs, so
  * the screen never has to know what "drone flight" means.
+ *
+ * titleKey is the wording on the button, and changes with the language.
+ * caseTitle is the wording the CASE carries, and does not: a case is read by
+ * whoever picks it up, days later, in whatever language they use, so its
+ * title is one fixed sentence rather than whatever the raiser's phone was
+ * set to.
  */
 
 /** The line the whole thing turns on. One place, so the calculator, the case
@@ -25,6 +31,7 @@ export const CULLING_ACTIONS = [
     // records it having got there.
     when: (rate) => rate <= CULL_LIMIT,
     titleKey: 'cull.actDrone',
+    caseTitle: (plot) => `Request drone flight for culling at plot "${plot}"`,
     category: 'Culling — Drone Flight',
     priority: 'normal',
     tone: 'ok',
@@ -35,6 +42,7 @@ export const CULLING_ACTIONS = [
     // at the plot before it can be signed off.
     when: (rate) => rate > CULL_LIMIT,
     titleKey: 'cull.actRecheck',
+    caseTitle: (plot) => `Request auditor to plot "${plot}" for high culling rate audit`,
     category: 'Culling — Final Check',
     priority: 'high',
     tone: 'warn',
