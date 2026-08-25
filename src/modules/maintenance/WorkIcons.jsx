@@ -67,34 +67,40 @@ export function ManuringIcon({ className = 'w-7 h-7' }) {
   );
 }
 
-/* Weeding — RUMPUT under the knife that cuts it. */
+/* Weeding — RUMPUT under the knife that cuts it.
+   A real chopping knife rather than a wedge: straight spine, the tip low and
+   forward, the belly curving back to the heel, then a bolster and a handle.
+   The earlier wedge-and-three-bars read as a megaphone. */
 export function WeedingIcon({ className = 'w-7 h-7' }) {
   return (
     <svg {...svg} className={className}>
-      {/* the blade, laid across the top */}
-      <path d="M2.6 8.4 14.8 5.9v2.9L2.8 9.8a.7.7 0 0 1-.2-1.4Z" />
-      {/* the fist round the handle — three fingers across it */}
-      <rect x="14.6" y="4.9" width="1.7" height="4.8" rx=".85" />
-      <rect x="17" y="4.9" width="1.7" height="4.8" rx=".85" />
-      <rect x="19.4" y="4.9" width="1.7" height="4.8" rx=".85" />
+      {/* the blade — spine down to the tip, belly curving back to the heel */}
+      <path d="M14 4.2 2.4 7.1c3.4 2.4 7.5 3.1 11.6 2.5Z" />
+      {/* the bolster, where the blade meets the handle */}
+      <rect x="14" y="4.1" width="1.5" height="5.6" rx=".5" />
+      {/* the handle */}
+      <path d="M15.5 4.8h4.2a1.9 1.9 0 0 1 1.9 1.9v.3a1.9 1.9 0 0 1-1.9 1.9h-4.2Z" />
       <Word text="RUMPUT" y={16.8} size={7.6} w={21.5} />
     </svg>
   );
 }
 
-/* Inter-row — RUMPUT under the spray head that wets it. */
+/* Inter-row — RUMPUT under the spray head that wets it.
+   The head hangs off a length of pipe. Sitting straight on the frame it read
+   as a hat; the drop of pipe above it is what makes it a spray head. */
 export function InterrowIcon({ className = 'w-7 h-7' }) {
   return (
     <svg {...svg} className={className}>
+      {/* the pipe it hangs from */}
+      <rect x="11.1" y="0.6" width="1.8" height="3.6" rx=".9" />
       {/* the head */}
-      <rect x="10.9" y="1.2" width="2.2" height="1.8" rx="1.1" />
-      <path d="M6.6 3h10.8a1 1 0 0 1 .9 1.5l-.8 1.6a1 1 0 0 1-.9.6H7.4a1 1 0 0 1-.9-.6l-.8-1.6A1 1 0 0 1 6.6 3Z" />
+      <path d="M6.6 4h10.8a1 1 0 0 1 .9 1.5l-.9 1.7a1 1 0 0 1-.9.6H7.5a1 1 0 0 1-.9-.6l-.9-1.7A1 1 0 0 1 6.6 4Z" />
       {/* the spray coming off it */}
-      <path {...line} strokeWidth="1.3" d="M8.4 8.1 7.7 9.8" />
-      <path {...line} strokeWidth="1.3" d="M11.4 8.2 11.1 10" />
-      <path {...line} strokeWidth="1.3" d="M14.1 8.2l.3 1.8" />
-      <path {...line} strokeWidth="1.3" d="M16.8 8.1l.7 1.7" />
-      <Word text="RUMPUT" y={17.4} size={7.6} w={21.5} />
+      <path {...line} strokeWidth="1.3" d="M8.5 9 7.8 10.7" />
+      <path {...line} strokeWidth="1.3" d="M11.4 9.1 11.1 10.9" />
+      <path {...line} strokeWidth="1.3" d="M14.1 9.1l.3 1.8" />
+      <path {...line} strokeWidth="1.3" d="M16.7 9l.7 1.7" />
+      <Word text="RUMPUT" y={17.6} size={7.6} w={21.5} />
     </svg>
   );
 }
