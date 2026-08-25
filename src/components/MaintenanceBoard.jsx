@@ -118,6 +118,7 @@ export default function MaintenanceBoard() {
   // plots they are not allowed to see.
   // Opens on the week you are actually in; stepping is per-visit, not saved.
   const [week, setWeek] = useState(() => weekOfDate(todayStr()) || 1);
+  const [showInfo, setShowInfo] = useState(false);
 
   const allowed = allowedNurseries(permissions);
   const allowedSig = allowed === null ? '*' : [...allowed].sort().join('|');
@@ -209,17 +210,17 @@ export default function MaintenanceBoard() {
           </span>
           <div className="flex items-center gap-2 shrink-0">
             <span className="text-[10px] font-black text-teal-700">{month}</span>
-            {/* The programme schedule. Points at the Maintenance module, which
-                is where the month's plan actually lives today — repoint it at
-                a schedule view here once there is one. */}
-            <Link
-              to="/maintenance"
+            {/* The programme schedule. Nothing to show yet — it says so
+                rather than going somewhere, so the button means the same
+                thing on the day it starts listing programmes. */}
+            <button
+              onClick={() => setShowInfo(true)}
               title={t('mtb.schedule')}
               aria-label={t('mtb.schedule')}
-              className="grid place-items-center w-6 h-6 rounded-full border border-teal-300 text-teal-700 text-[11px] font-black italic no-underline hover:bg-teal-100 transition-colors"
+              className="grid place-items-center w-6 h-6 rounded-full border border-teal-300 text-teal-700 text-[11px] font-black italic hover:bg-teal-100 transition-colors cursor-pointer shrink-0"
             >
               i
-            </Link>
+            </button>
           </div>
         </div>
 
@@ -314,6 +315,38 @@ export default function MaintenanceBoard() {
           </Link>
         </>
       )}
+
+      {showInfo && <SchedulePopover t={t} month={month} week={week} onClose={() => setShowInfo(false)} />}
+    </div>
+  );
+}
+
+/** What the i button opens. There is no programme feed behind it yet, so it
+    says so plainly instead of showing an empty list that looks broken. */
+function SchedulePopover({ t, month, week, onClose }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white w-full sm:max-w-xs rounded-t-3xl sm:rounded-3xl p-5 pb-7 shadow-2xl">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <h3 className="font-black text-slate-800 text-[14px] uppercase tracking-wide">
+            {t('mtb.schedule')}
+          </h3>
+          <button
+            onClick={onClose}
+            aria-label={t('common.cancel')}
+            className="w-8 h-8 rounded-full hover:bg-slate-100 text-slate-500 text-xl leading-none cursor-pointer shrink-0"
+          >
+            ×
+          </button>
+        </div>
+        <div className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-2">
+          {month} · {t('mt.weekN', { n: week })}
+        </div>
+        <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-[12px] font-bold text-slate-400">
+          {t('mtb.noProgram')}
+        </div>
+      </div>
     </div>
   );
 }
