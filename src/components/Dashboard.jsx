@@ -38,7 +38,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-slate-100 fade-enter">
-      <TopNav title="MJM Nursery" subtitle="FC Portal" user={staffName} portal />
+      <TopNav title="MJM Nursery" subtitle="FC Portal" user={staffName} portal book />
       <div className="max-w-[900px] mx-auto px-3 sm:px-6 py-4 sm:py-6">
         {/* "TV" board: who is coming today to collect seedlings */}
         <CollectionBoard />

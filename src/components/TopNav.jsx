@@ -38,6 +38,8 @@ function CogIcon() {
 // - `onSettings`: show a cog beside the staff name; `settingsOn` marks it as
 //   the page currently open
 // - `theme`: 'light' (default) or 'dark' to match a dark page background
+// - `book`: stack the title the way the 555 book cover on the login screen
+//   reads — house name, 555, then the portal. Dashboard only
 export default function TopNav({
   title,
   subtitle,
@@ -47,6 +49,7 @@ export default function TopNav({
   onSettings,
   settingsOn,
   theme = 'light',
+  book,
 }) {
   const { signOut } = useAuth();
   const { t } = useLang();
@@ -128,7 +131,24 @@ export default function TopNav({
         )}
         {subtitle ? (
           <div className="leading-tight min-w-0">
-            <div className={`font-black ${titleCls} text-sm sm:text-lg truncate`}>{title}</div>
+            {/* `book` stacks the bar the way the login cover reads: the house
+                name, the 555 book, then the portal it opens. Only the
+                dashboard asks for it — an inner page puts its own name on the
+                top line so a Field Conductor can see which screen they are
+                on, and a third row there would push the page title down on
+                every screen for branding they have already seen. */}
+            <div
+              className={`font-black ${titleCls} truncate ${
+                book ? 'text-[13px] sm:text-base tracking-[0.14em] uppercase' : 'text-sm sm:text-lg'
+              }`}
+            >
+              {title}
+            </div>
+            {book && (
+              <div className="font-black italic text-[#e23b4b] text-[15px] sm:text-[18px] leading-none tracking-tight my-0.5">
+                555
+              </div>
+            )}
             {/* nowrap: the wide tracking used to break "FC PORTAL" onto two
                 lines on a phone, which then collided with the staff name */}
             <div className="font-black text-emerald-600 text-[10px] uppercase tracking-[0.18em] sm:tracking-[0.25em] leading-none mt-0.5 whitespace-nowrap truncate">
