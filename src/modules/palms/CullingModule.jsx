@@ -19,7 +19,8 @@ export default function CullingModule() {
   const { staffName, permissions } = useAuth();
   // Same nursery scoping as every other nursery-aware screen, from
   // FC Scan Portal → User Access.
-  const nurseryKeys = visibleNurseries(permissions, Object.keys(NURSERIES));
+  // The calculator's own nursery list — set separately from PALMS.
+  const nurseryKeys = visibleNurseries(permissions, Object.keys(NURSERIES), null, 'culling');
   const { t } = useLang();
 
   const [toast, setToast] = useState(null);

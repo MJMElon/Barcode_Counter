@@ -120,7 +120,7 @@ export default function MaintenanceBoard() {
   const [week, setWeek] = useState(() => weekOfDate(todayStr()) || 1);
   const [showInfo, setShowInfo] = useState(false);
 
-  const allowed = allowedNurseries(permissions);
+  const allowed = allowedNurseries(permissions, 'maintenance');
   const allowedSig = allowed === null ? '*' : [...allowed].sort().join('|');
 
   useEffect(() => {

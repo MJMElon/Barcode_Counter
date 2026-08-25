@@ -26,10 +26,10 @@ export default function PalmsBody({ header, onDayChange }) {
   const { staffName, permissions } = useAuth();
   const { t } = useLang();
 
-  // Which nurseries this person may see, from 555 FC Portal → User Access.
-  // The names are matched loosely — shared_plots writes "UNN 1" where PALMS
-  // says "UNN1".
-  const nurseryKeys = visibleNurseries(permissions, Object.keys(NURSERIES));
+  // Which nurseries this person may see ON PALMS — nursery access is set per
+  // page now, so Maintenance may well be a different list. The names are
+  // matched loosely: shared_plots writes "UNN 1" where PALMS says "UNN1".
+  const nurseryKeys = visibleNurseries(permissions, Object.keys(NURSERIES), null, 'palms');
   // Settings is its own tick: it configures the module, not one person's view.
   const maySetUp = canPalms(permissions, 'settings');
 

@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
-import { canBarcode, canDo, canMaintain, canPalms } from '../lib/access.js';
+import { canBarcode, canCulling, canDo, canMaintain } from '../lib/access.js';
 import { useLang } from '../context/LanguageContext.jsx';
 import TopNav from './TopNav.jsx';
 import CollectionBoard from './CollectionBoard.jsx';
@@ -26,9 +26,9 @@ export default function Dashboard() {
       : []),
     // The Culling Calculator is a tab inside PALMS, but it is a job of its
     // own — a Field Conductor going out to count pokok inang should not have
-    // to know it is filed under PALMS to find it. Same permission as PALMS,
-    // since it is the same module underneath.
-    ...(canPalms(permissions, 'view')
+    // to know it is filed under PALMS to find it. Its own tick and its own
+    // nursery list too, for the same reason.
+    ...(canCulling(permissions, 'view')
       ? [{ to: '/culling', icon: '🧮', tint: 'bg-rose-100', title: t('cull.title') }]
       : []),
   ];

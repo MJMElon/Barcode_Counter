@@ -86,7 +86,8 @@ export default function MaintenanceModule() {
   const [syncing, setSyncing] = useState(false);
   const online = useOnline();
 
-  const allowed = allowedNurseries(permissions);
+  // This page's own nursery list — Maintenance and PALMS are set separately.
+  const allowed = allowedNurseries(permissions, 'maintenance');
   const mayRecord = canMaintain(permissions, 'record');
   // Changing or removing a record already made is an admin's job. A Field
   // Conductor records the work; correcting the books is not the same act, and

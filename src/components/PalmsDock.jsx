@@ -61,7 +61,7 @@ function defaultPos() {
     a plot split in three is three things to key in, not one. */
 function todayProgress(permissions) {
   const db = loadDB();
-  const keys = visibleNurseries(permissions, Object.keys(NURSERIES))
+  const keys = visibleNurseries(permissions, Object.keys(NURSERIES), null, 'palms')
     .flatMap((nk) => plotsOf(nk))
     .flatMap(keysOfPlot);
   const done = keys.filter((k) => tickedToday(db, k)).length;
@@ -152,7 +152,7 @@ export default function PalmsDock() {
      context hands out a fresh object on every render, so depending on it made
      this callback — and anything listing it as a dependency — new every time.
      That is what put the button back where it started mid-drag. */
-  const scopeSig = (visibleNurseries(permissions, Object.keys(NURSERIES)) || []).join('|');
+  const scopeSig = (visibleNurseries(permissions, Object.keys(NURSERIES), null, 'palms') || []).join('|');
   const refresh = useCallback(
     () => setProgress(todayProgress(permissions)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
