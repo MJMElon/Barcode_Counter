@@ -11,7 +11,6 @@
 
 import { freshDB, saveDB, seedSample } from './data.js';
 import { resetSessionData } from './cullingData.js';
-import { seedRequests } from './requests.js';
 
 export function seedDemo() {
   const db = seedSample();
@@ -19,11 +18,6 @@ export function seedDemo() {
   saveDB(db);
 
   resetSessionData();
-
-  // No requests are seeded. "Sent today" has to mean the Field Conductor
-  // actually sent it, so the queue is cleared instead — which also drops
-  // anything raised against an earlier, now-replaced set of plot figures.
-  seedRequests([]);
 
   return db;
 }
@@ -35,6 +29,5 @@ export function clearAll() {
   const db = freshDB();
   saveDB(db);
   resetSessionData();
-  seedRequests([]);
   return db;
 }

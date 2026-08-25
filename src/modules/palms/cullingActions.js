@@ -1,0 +1,69 @@
+import { fmtNum, fmtPct } from './cullingData.js';
+
+/**
+ * What to do about a culling rate.
+ *
+ * The Field Conductor counts pokok inang, the calculator works out where that
+ * leaves the rate, and this decides what happens next. Today there are two
+ * answers, and more are expected — so they are a LIST OF RULES rather than an
+ * if/else: adding a third band is adding an entry here, and nothing in the
+ * calculator screen changes.
+ *
+ * Rules are tried in order and the first match wins, so they may overlap and
+ * the specific ones go first. Each one carries everything the case needs, so
+ * the screen never has to know what "drone flight" means.
+ */
+
+/** The line the whole thing turns on. One place, so the calculator, the case
+    and any future rule cannot disagree about where 10% is. */
+export const CULL_LIMIT = 0.1;
+
+export const CULLING_ACTIONS = [
+  {
+    key: 'drone',
+    // At or under the limit the plot is ready — the drone flight is what
+    // records it having got there.
+    when: (rate) => rate <= CULL_LIMIT,
+    titleKey: 'cull.actDrone',
+    category: 'Culling — Drone Flight',
+    priority: 'normal',
+    tone: 'ok',
+  },
+  {
+    key: 'recheck',
+    // Still above the limit after the count, so somebody has to go and look
+    // at the plot before it can be signed off.
+    when: (rate) => rate > CULL_LIMIT,
+    titleKey: 'cull.actRecheck',
+    category: 'Culling — Final Check',
+    priority: 'high',
+    tone: 'warn',
+  },
+];
+
+/** The rule that applies to a rate, or null when there is nothing to say. */
+export function actionFor(rate) {
+  if (!Number.isFinite(rate)) return null;
+  return CULLING_ACTIONS.find((a) => a.when(rate)) || null;
+}
+
+/**
+ * What the case says.
+ *
+ * The figures go in the body because the case IS the record — nothing the
+ * calculator does touches stock. Whoever picks the case up has to be able to
+ * see what was counted and what it left the rate at, without opening the
+ * calculator or taking the Field Conductor's word for it.
+ */
+export function caseBody({ t, plot, nursery, balance, inang, rate, terms, by, date }) {
+  const lines = [
+    `${t('cull.plot')}: ${plot}${nursery ? ` (${nursery})` : ''}`,
+    `${t('cull.balance')}: ${fmtNum(balance)}`,
+    // The separate counts are kept, not just their total: "300 + 250 + 180"
+    // is a walk round the plot in three goes, and a single 730 hides that.
+    `${t('cull.inangCounted')}: ${fmtNum(inang)}${terms && terms.length > 1 ? `  (${terms.map(fmtNum).join(' + ')})` : ''}`,
+    `${t('cull.estRate')}: ${fmtPct(rate)}`,
+    `${t('cull.raisedBy')}: ${by || '—'} · ${date}`,
+  ];
+  return lines.join('\n');
+}
