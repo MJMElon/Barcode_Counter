@@ -86,6 +86,14 @@ export function aKey(pid, area) {
   return pid + '#' + area;
 }
 
+/* Every storage key belonging to a plot — one per area once it is split.
+   Lives here rather than in the screen that first needed it, because the
+   floating dock counts the same keys to decide whether the day is done, and
+   two answers to "what is a plot made of" is how they would disagree. */
+export function keysOfPlot(pid) {
+  return isMulti(pid) ? MULTI[pid].areas.map((a) => aKey(pid, a)) : [pid];
+}
+
 /**
  * Carry a plot's history onto its areas when it is split.
  *

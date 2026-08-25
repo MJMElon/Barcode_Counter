@@ -258,6 +258,10 @@ const en = {
 
   // top nav / offline
 
+  // PALMS floating dock (the train)
+  'dock.done': 'Plot status all keyed in for today',
+  'dock.left': '{n} of {total} plots still to key in today',
+
   // collection board ("TV")
   'board.title': "Today's Collections",
   'board.empty': 'No collections booked today',
@@ -688,6 +692,10 @@ const ms = {
   // top nav / offline
 
   // collection board ("TV")
+  // PALMS floating dock (the train)
+  'dock.done': 'Status plot hari ini sudah lengkap',
+  'dock.left': '{n} daripada {total} plot belum dikemas kini hari ini',
+
   'board.title': 'Kutipan Hari Ini',
   'board.empty': 'Tiada kutipan ditempah hari ini',
   'board.footer': 'Tempahan Masa Kutipan',

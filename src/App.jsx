@@ -4,6 +4,7 @@ import { useAuth } from './context/AuthContext.jsx';
 import AuthScreen from './components/AuthScreen.jsx';
 import Dashboard from './components/Dashboard.jsx';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
+import PalmsDock from './components/PalmsDock.jsx';
 import { useLang } from './context/LanguageContext.jsx';
 import { canScan } from './lib/access.js';
 
@@ -50,7 +51,8 @@ export default function App() {
   const { session, loading, allowed } = useAuth();
 
   return (
-    <Routes>
+    <>
+      <Routes>
       <Route
         path="/"
         element={
@@ -150,6 +152,13 @@ export default function App() {
           bookmarks land on the dashboard rather than a blank screen. */}
       <Route path="/plot-status" element={<Navigate to="/" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+      </Routes>
+
+      {/* The PALMS train. Outside the routes on purpose: keying the day in is
+          the first job of the morning, and a control that only exists on the
+          dashboard is one a Field Conductor can walk past all day. It hides
+          itself inside PALMS and for anyone without the module. */}
+      <PalmsDock />
+    </>
   );
 }

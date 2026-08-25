@@ -14,6 +14,7 @@ import {
   diffDays,
   effStatus,
   isMulti,
+  keysOfPlot,
   nowClock,
   plotsOf,
   prettyD,
@@ -126,11 +127,6 @@ function Locomotive() {
       <Track />
     </div>
   );
-}
-
-// Every storage key belonging to a plot (one per area for multi-area plots).
-export function keysOfPlot(pid) {
-  return isMulti(pid) ? MULTI[pid].areas.map((a) => aKey(pid, a)) : [pid];
 }
 
 /* ---------- the day's draft ----------
