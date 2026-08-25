@@ -236,9 +236,18 @@ export default function AuthScreen() {
 
         /* The house name, above the book. Sized to read as a heading and
            still be plainly subordinate to the 555 under it. */
+        /* A centred, letter-spaced line is NOT centred: CSS puts the space
+           after the last letter too, so the ink sits half a letter-space
+           left of the box. An equal text-indent puts it back — indent and
+           trailing space cancel, and the ink lands on the real centre.
+           Both come off one --ls so a breakpoint cannot change one and
+           forget the other. */
         .bk-brand{
+          --ls:.26em;
           text-align:center;
-          font-size:19px;font-weight:900;letter-spacing:.26em;text-transform:uppercase;
+          font-size:19px;font-weight:900;
+          letter-spacing:var(--ls);text-indent:var(--ls);
+          text-transform:uppercase;
           color:var(--bk-quiet);
           margin-bottom:2px;
         }
@@ -265,15 +274,18 @@ export default function AuthScreen() {
              the middle 5 up with the centre of MJM NURSERY above it.
 
              Measured on the built page by diffing renders (the cover is
-             textured, so "not the background" does not isolate ink): with no
-             translate the middle 5's face sits 3.2px right at a 90px logo and
-             4.5px right at 116px. Linear in font size, hence the calc — it
-             holds across the whole clamp() range, within 0.3px. */
-          transform:translateX(calc(1.3px - .05em)) rotate(-1.2deg);
+             textured, so "not the background" does not isolate ink). Once the
+             two lines above and below sit on the cover's true centre, so does
+             this: the offset is linear in font size, hence the calc, and it
+             holds across the whole clamp() range within a third of a pixel. */
+          transform:translateX(calc(1.73px - .025em)) rotate(-1.2deg);
         }
         .bk-portal{
           margin-top:14px;text-align:center;
-          font-size:14px;font-weight:900;letter-spacing:.3em;text-transform:uppercase;
+          --ls:.3em;
+          font-size:14px;font-weight:900;
+          letter-spacing:var(--ls);text-indent:var(--ls);
+          text-transform:uppercase;
           color:var(--bk-quiet);
         }
 
@@ -339,8 +351,8 @@ export default function AuthScreen() {
           .bk-cover{padding:26px 20px 22px}
           /* Narrower cover, so ease the ceiling — the 555 still fills it. */
           .bk-logo{font-size:clamp(76px,28vw,96px)}
-          .bk-brand{font-size:17px;letter-spacing:.22em}
-          .bk-portal{letter-spacing:.24em;font-size:12.5px}
+          .bk-brand{font-size:17px;--ls:.22em}
+          .bk-portal{--ls:.24em;font-size:12.5px}
         }
         @media (min-height:800px){
           .bk-lines{margin-top:48px}
