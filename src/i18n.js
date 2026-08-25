@@ -274,6 +274,7 @@ const en = {
   // maintenance board (dashboard summary)
   'mtb.title': 'Maintenance Status',
   'mtb.schedule': 'Programme schedule',
+  'mtb.noProgram': 'No programme listed yet.',
   'mtb.prevWeek': 'Previous week',
   'mtb.nextWeek': 'Next week',
   'mtb.donePct': '{pct}% done',
@@ -712,6 +713,7 @@ const ms = {
   // maintenance board (dashboard summary)
   'mtb.title': 'Status Penyelenggaraan',
   'mtb.schedule': 'Jadual program',
+  'mtb.noProgram': 'Tiada program disenaraikan lagi.',
   'mtb.prevWeek': 'Minggu sebelum',
   'mtb.nextWeek': 'Minggu seterusnya',
   'mtb.donePct': '{pct}% siap',
