@@ -105,24 +105,24 @@ export default function TopNav({
     ? 'text-slate-400 hover:text-red-400 bg-[#111821] border-[#1f2a38]'
     : 'text-slate-500 hover:text-red-500 bg-slate-50 border-slate-200';
 
-  /* The 555 wordmark: the house name opens out around the book, so it reads
-     MJM 555 Nursery on one line with 555 the biggest thing in the bar. The
-     words come from `title` rather than being written in here, so the house
-     name stays one prop and the mark follows it. */
-  const [houseFirst, ...houseRest] = String(title).split(' ');
-  const wordCls = `font-black ${titleCls} text-[12px] sm:text-[16px] tracking-[0.1em] uppercase`;
+  /* The 555 mark, stacked: the book on top and biggest, the house name under
+     it, then the portal it opens. Centred as a block on the bar.
+
+     Every line is leading-none with its own small margin rather than relying
+     on line-height, because three stacked lines of very different sizes are
+     where default leading quietly adds 10px of air and pushes a sticky bar
+     down the page. */
   const wordmark = (
-    <div className="min-w-0">
-      <div className="flex items-baseline justify-center gap-[3px] sm:gap-1.5">
-        <span className={wordCls}>{houseFirst}</span>
-        <span className="font-black italic text-[#065f46] text-[26px] sm:text-[34px] leading-none tracking-tight">
-          555
-        </span>
-        <span className={wordCls}>{houseRest.join(' ')}</span>
+    <div className="min-w-0 text-center">
+      <div className="font-black italic text-[#065f46] text-[27px] sm:text-[34px] leading-none tracking-tight">
+        555
+      </div>
+      <div className={`font-black ${titleCls} text-[11px] sm:text-[13px] tracking-[0.14em] uppercase leading-none mt-1 whitespace-nowrap`}>
+        {title}
       </div>
       {/* nowrap: the wide tracking used to break "FC PORTAL" onto two lines
           on a phone, which then collided with the staff name */}
-      <div className="font-black text-emerald-600 text-[10px] uppercase tracking-[0.18em] sm:tracking-[0.25em] leading-none mt-1 whitespace-nowrap text-center">
+      <div className="font-black text-emerald-600 text-[9px] sm:text-[10px] uppercase tracking-[0.18em] sm:tracking-[0.25em] leading-none mt-1 whitespace-nowrap">
         {subtitle}
       </div>
     </div>

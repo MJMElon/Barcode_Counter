@@ -1,22 +1,20 @@
 /**
  * The four maintenance jobs, drawn.
  *
- * Emoji were standing in for these and read as decoration; a Field Conductor
- * picking a job on a phone should recognise the work at a glance, without
- * reading. Each one is the job as it is actually done:
+ * Each one is the job as it is actually done, and each is drawn as the ONE
+ * thing that separates it from the other three:
  *
- *   weeding   a hand pulling a weed, roots and all, out of the ground
- *   manuring  a sack of fertiliser
- *   pd        a knapsack sprayer aimed at the seedling — the plants themselves
- *   interrow  a knapsack sprayer aimed at the grass BETWEEN the polybags
+ *   pd        the letters P & D — the name everyone already uses for it
+ *   weeding   grass, and the knife going through it
+ *   manuring  a hand tipping fertiliser out onto the ground
+ *   interrow  a spray head over grass, wetting the ground between the bags
  *
- * P & D and inter-row are deliberately the same man with the same tank; the
- * only difference is what the lance points at, because in the field that is
- * the only difference.
+ * These are read as small as 17px on a phone held at arm's length, so they
+ * are solid shapes and few of them: an earlier set drew a whole man carrying
+ * a knapsack tank for two of the jobs, which at that size was a grey smudge
+ * and identical between the two. One object each, filling the frame.
  *
- * Solid shapes rather than thin outlines: these are read at 28px on a phone
- * held at arm's length, where a 1.5px stroke turns to mush. Everything
- * inherits currentColor, so one set works wherever it is dropped.
+ * Everything inherits currentColor, so one set works wherever it is dropped.
  */
 
 const svg = {
@@ -24,128 +22,107 @@ const svg = {
   fill: 'currentColor',
   'aria-hidden': true,
 };
-// Strokes that are genuinely lines — a lance, a stem, a leg.
+// Strokes that are genuinely lines — a blade of grass, a jet of spray.
 const line = { stroke: 'currentColor', fill: 'none', strokeLinecap: 'round', strokeLinejoin: 'round' };
 
-/* Weeding — a fist closed round a weed, pulled up with its roots.
-   The fist is three finger bars and a thumb rather than one silhouette: at
-   28px a solid mitten reads as a hammer, and the gaps are what say "hand". */
-export function WeedingIcon({ className = 'w-7 h-7' }) {
-  return (
-    <svg {...svg} className={className}>
-      {/* the weed, splayed the way a pulled one is */}
-      <path {...line} strokeWidth="1.8"
-        d="M9.6 7.9C8.3 6.2 7.7 4.3 7.9 2.3M11.5 7.9c.4-2 1.6-3.6 3.4-4.6M10.5 7.8c0-1.8-.5-3.4-1.6-4.7" />
-      {/* the fingers, wrapped round the stems */}
-      <rect x="7.1" y="8.2" width="7.1" height="1.9" rx=".95" />
-      <rect x="6.6" y="10.6" width="7.6" height="1.9" rx=".95" />
-      <rect x="7.1" y="13" width="6.7" height="1.9" rx=".95" />
-      {/* the thumb, across the front of them */}
-      <rect x="5" y="10.9" width="2.9" height="3.3" rx="1.45" />
-      {/* the roots, still hanging out of the fist */}
-      <path {...line} strokeWidth="1.5"
-        d="M10.6 15.1v2.9M10.6 16.7c-1 .5-1.8 1.1-2.4 2M10.6 16.7c1 .5 1.9 1.2 2.5 2.1" />
-      {/* the crumbs of soil dropping off them */}
-      <circle cx="7.4" cy="16.6" r=".75" />
-      <circle cx="9" cy="18.8" r=".6" />
-      {/* the ground it came out of */}
-      <path d="M2.6 21c0-1 4.2-1.9 9.4-1.9s9.4.8 9.4 1.9-4.2 1.9-9.4 1.9S2.6 22 2.6 21Z" />
-    </svg>
-  );
-}
-
-/* Manuring — a sack of fertiliser, tied at the neck, sprout on the front. */
-export function ManuringIcon({ className = 'w-7 h-7' }) {
-  return (
-    <svg {...svg} className={className}>
-      {/* the gathered top */}
-      <path {...line} strokeWidth="1.6"
-        d="M7.2 6.1c.5-1.7 2-2.8 3.5-2.5 1.1-1.4 3.1-1.3 4.1.2 1.6-.3 2.9.8 3.1 2.3" />
-      {/* the band, solid so the sack reads as tied */}
-      <rect x="6" y="6.1" width="12" height="2.4" rx=".8" />
-      {/* the body */}
-      <path {...line} strokeWidth="1.6"
-        d="M7.1 8.5c0 2.5-2.1 4.3-2.1 7.8 0 3.1 1.7 4.8 3.8 4.8h6.4c2.1 0 3.8-1.7 3.8-4.8 0-3.5-2.1-5.3-2.1-7.8" />
-      {/* what is in it */}
-      <path d="M12 11.6c1 .8 1 2.3 0 3.1-1-.8-1-2.3 0-3.1Z" />
-      <rect x="10.4" y="15.8" width="3.2" height="1.1" rx=".55" />
-      <rect x="9.2" y="18" width="5.6" height="1.1" rx=".55" />
-    </svg>
-  );
-}
-
-/* The man with the knapsack sprayer, facing right. Shared by both spraying
-   jobs so they are recognisably the same work with a different target. */
-function Sprayer({ lance, spray }) {
-  return (
-    <>
-      {/* hat, head */}
-      <rect x="3.5" y="4.5" width="6.4" height="1" rx=".5" />
-      <path d="M5.2 4.5V3.9a1.5 1.5 0 0 1 3 0v.6Z" />
-      <circle cx="6.7" cy="7" r="1.6" />
-      {/* torso */}
-      <path d="M5.4 8.7h2.9a1.2 1.2 0 0 1 1.2 1.2v3.4a1.2 1.2 0 0 1-1.2 1.2H5.4a1.2 1.2 0 0 1-1.2-1.2V9.9a1.2 1.2 0 0 1 1.2-1.2Z" />
-      {/* the tank on his back, and the strap over the shoulder */}
-      <rect x="9.6" y="7.6" width="3.4" height="5.4" rx="1.3" />
-      <rect x="10.9" y="6.4" width="1" height="1.4" rx=".5" />
-      <path {...line} strokeWidth="1.3" d="M8.6 8.9c.5-.7 1.2-1.1 2-1.2" />
-      {/* legs, striding */}
-      <path {...line} strokeWidth="1.9" d="M5.7 14.5 4 20.4M7.9 14.5l1.9 5.9" />
-      {/* the arm that holds the lance */}
-      <path {...line} strokeWidth="1.5" d="M5 10.2 3.4 12" />
-      {lance}
-      {spray}
-    </>
-  );
-}
-
-/* P & D — the lance is raised, aimed at the seedling's leaves. */
+/* P & D — the letters, not a picture.
+   Spraying for pest and disease and spraying between the rows are the same
+   man with the same tank pointed at a different target, so any drawing of
+   the two is a pair of near-identical smudges at icon size. The abbreviation
+   is what the office writes on the schedule and what the Field Conductor
+   says out loud, and it cannot be confused with anything else. */
 export function PdIcon({ className = 'w-7 h-7' }) {
   return (
     <svg {...svg} className={className}>
-      <Sprayer
-        lance={<path {...line} strokeWidth="1.5" d="M3.4 12 15 9.4" />}
-        spray={
-          <>
-            <circle cx="16.9" cy="9.6" r=".55" />
-            <circle cx="17.6" cy="11" r=".45" />
-            <circle cx="16.4" cy="11.4" r=".4" />
-          </>
-        }
-      />
-      {/* the seedling being sprayed */}
-      <path {...line} strokeWidth="1.6" d="M18.6 20.2v-4.6" />
-      <path d="M18.6 16.3c-.4-1.8-1.7-2.8-3.4-2.8.1 1.8 1.5 2.8 3.4 2.8Z" />
-      <path d="M18.6 16.6c.4-1.9 1.8-3 3.6-3-.1 1.9-1.7 3-3.6 3Z" />
-      <rect x="14.9" y="20.2" width="7.4" height="1.2" rx=".6" />
+      <text
+        x="12"
+        y="12.5"
+        textAnchor="middle"
+        dominantBaseline="central"
+        fontSize="10.5"
+        fontWeight="900"
+        letterSpacing="-.5"
+        fill="currentColor"
+      >
+        P&amp;D
+      </text>
     </svg>
   );
 }
 
-/* Inter-row — the lance is level, aimed at the grass BETWEEN the polybags.
-   The bags are set back so the grass in the gap is what the eye lands on:
-   that gap is the whole difference between this job and P & D. */
+/* Weeding — the knife going through the grass.
+   The blade crosses the blades of grass rather than hovering over them, and
+   one cut blade is already falling, so the picture is the cutting and not a
+   knife next to a lawn. */
+export function WeedingIcon({ className = 'w-7 h-7' }) {
+  return (
+    <svg {...svg} className={className}>
+      {/* the grass, standing up to where the blade is */}
+      <path {...line} strokeWidth="1.9" d="M6.4 20.2v-7.6" />
+      <path {...line} strokeWidth="1.9" d="M10.2 20.2v-8.2" />
+      <path {...line} strokeWidth="1.9" d="M14 20.2v-7.7" />
+      {/* the tops already off, tipping away above the cut */}
+      <path {...line} strokeWidth="1.7" d="M7.9 8.6 6.6 5.2" />
+      <path {...line} strokeWidth="1.7" d="M11.6 8.2v-3.6" />
+      {/* the knife, drawn last so it lies across the stems it is cutting */}
+      <path d="M2.9 12.4 15.1 9.9v3.1L3.1 13.9a.75.75 0 0 1-.2-1.5Z" />
+      <rect x="14.9" y="9.5" width="5.6" height="3.9" rx="1.5" />
+      {/* the ground */}
+      <rect x="2.8" y="20.2" width="18.4" height="1.6" rx=".8" />
+    </svg>
+  );
+}
+
+/* Manuring — a hand tipping fertiliser out.
+   The hand is cupped and tilted, the granules are already falling in a
+   spread, and there is a small heap where they land: a hand on its own says
+   nothing about what it is holding. */
+export function ManuringIcon({ className = 'w-7 h-7' }) {
+  return (
+    <svg {...svg} className={className}>
+      {/* the back of the hand, tipped so the fingers point down-left */}
+      <rect x="9.6" y="5.2" width="9" height="5" rx="1.9" transform="rotate(26 14.1 7.7)" />
+      {/* the thumb, up over the top edge */}
+      <rect x="9.9" y="2.9" width="3.8" height="1.8" rx=".9" transform="rotate(26 11.8 3.8)" />
+      {/* three fingers off the front of it — the gaps are what say "hand"
+          rather than "scoop" at 17px */}
+      <rect x="4.6" y="8.6" width="5" height="1.7" rx=".85" transform="rotate(26 7.1 9.45)" />
+      <rect x="4.5" y="10.7" width="4.6" height="1.6" rx=".8" transform="rotate(26 6.8 11.5)" />
+      <rect x="5.1" y="12.7" width="3.8" height="1.5" rx=".75" transform="rotate(26 7 13.45)" />
+      {/* the fertiliser running off the fingertips */}
+      <circle cx="6.4" cy="16" r=".85" />
+      <circle cx="9.4" cy="16.9" r=".7" />
+      <circle cx="7.7" cy="18.4" r=".7" />
+      <circle cx="11.4" cy="18.6" r=".65" />
+      {/* the heap it is landing in */}
+      <path d="M4.9 21.7c.9-2 2.5-3 4.8-3s3.9 1 4.8 3Z" />
+      <rect x="2.8" y="21.7" width="18.4" height="1.5" rx=".75" />
+    </svg>
+  );
+}
+
+/* Inter-row — the spray head over the grass between the bags.
+   A wide head throwing a fan of spray straight down, and the grass under it
+   taking the wetting. What makes this job itself is that the spray lands on
+   the ground between the polybags, never on the seedlings, so no seedling
+   appears in it at all. */
 export function InterrowIcon({ className = 'w-7 h-7' }) {
   return (
     <svg {...svg} className={className}>
-      <Sprayer
-        lance={<path {...line} strokeWidth="1.5" d="M3.4 12 12.8 16" />}
-        spray={
-          <>
-            <circle cx="14.4" cy="16.8" r=".55" />
-            <circle cx="14.8" cy="18.3" r=".45" />
-            <circle cx="15.9" cy="17.5" r=".4" />
-          </>
-        }
-      />
-      {/* the two polybags, quieter than the grass between them */}
-      <path d="M13.1 20.1l.6-3.3h2.4l.6 3.3Z" opacity=".6" />
-      <path d="M20.2 20.1l.6-3.3h2.4l.6 3.3Z" opacity=".6" />
-      {/* the grass in the gap — taller, solid, and where the spray lands */}
-      <path {...line} strokeWidth="1.5"
-        d="M18.4 20.1c-1-1-1.4-2.1-1.3-3.4M18.4 20.1v-3.6M18.4 20.1c1-.9 1.4-2 1.4-3.2" />
-      {/* the ground */}
-      <rect x="12.6" y="20.1" width="10.8" height="1" rx=".5" />
+      {/* the neck and the head */}
+      <rect x="10.9" y="1.6" width="2.2" height="2.6" rx="1.1" />
+      <path d="M5.9 4.4h12.2a1 1 0 0 1 1 1.5l-1 1.9a1 1 0 0 1-.9.5H6.8a1 1 0 0 1-.9-.5l-1-1.9a1 1 0 0 1 1-1.5Z" />
+      {/* the fan of spray coming out of it */}
+      <path {...line} strokeWidth="1.4" d="M7.6 9.7 6.3 12.4" />
+      <path {...line} strokeWidth="1.4" d="M10.4 9.8 9.8 12.7" />
+      <path {...line} strokeWidth="1.4" d="M13.6 9.8l.6 2.9" />
+      <path {...line} strokeWidth="1.4" d="M16.4 9.7l1.3 2.7" />
+      {/* the grass in the gap, taking it */}
+      <path {...line} strokeWidth="1.7" d="M7.7 20.3c-1-1.7-1.2-3.4-.5-5.1" />
+      <path {...line} strokeWidth="1.7" d="M12 20.3v-5.6" />
+      <path {...line} strokeWidth="1.7" d="M16.3 20.3c1-1.7 1.2-3.3.5-5" />
+      {/* the ground between the bags */}
+      <rect x="2.8" y="20.3" width="18.4" height="1.6" rx=".8" />
     </svg>
   );
 }

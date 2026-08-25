@@ -26,6 +26,36 @@ import WorkIcon from '../modules/maintenance/WorkIcons.jsx';
 const CACHE_KEY = 'maintenance_board_month';
 
 /**
+ * A job's completion as the ring around its icon.
+ *
+ * The percentage is the ring itself rather than a number beside it — four of
+ * these in a row are read as a glance at how full each dial is, which is the
+ * question ("what is behind?") without anyone doing arithmetic. The track
+ * stays visible underneath so an empty ring reads as nothing done rather
+ * than as a missing dial.
+ *
+ * Rotated -90deg so the arc starts at twelve o'clock; a ring that fills from
+ * three o'clock looks broken even when the number is right.
+ */
+function ProgressDial({ pct, ringCls, children }) {
+  const R = 26;
+  const C = 2 * Math.PI * R;
+  return (
+    <div className="relative w-[58px] h-[58px] sm:w-[68px] sm:h-[68px]">
+      <svg viewBox="0 0 60 60" className="w-full h-full -rotate-90" aria-hidden="true">
+        <circle cx="30" cy="30" r={R} fill="none" strokeWidth="5" className="text-slate-100" stroke="currentColor" />
+        <circle
+          cx="30" cy="30" r={R} fill="none" strokeWidth="5" strokeLinecap="round"
+          className={ringCls} stroke="currentColor"
+          strokeDasharray={C} strokeDashoffset={C * (1 - Math.min(100, Math.max(0, pct)) / 100)}
+        />
+      </svg>
+      <div className="absolute inset-0 grid place-items-center">{children}</div>
+    </div>
+  );
+}
+
+/**
  * The month's maintenance, on the portal's front page.
  *
  * The Maintenance module already answers "how much of this job is done" — but
@@ -146,7 +176,10 @@ export default function MaintenanceBoard() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-2 p-3">
+          {/* All four jobs on one row. Four dials fit a 360px phone at ~78px
+              a column, which keeps the ring readable and the whole board
+              shorter than the stack of bars it replaced. */}
+          <div className="grid grid-cols-4 gap-1.5 sm:gap-3 p-3">
             {WORK_TYPES.map((wt) => {
               const total = (sum.totals[wt.key] || 0);
               const doneN = (sum.done[wt.key] || 0);
@@ -154,38 +187,37 @@ export default function MaintenanceBoard() {
               const clear = total > 0 && doneN >= total;
               const tint = tintOf(wt.key);
               return (
-                <div key={wt.key}
-                  className={`rounded-xl border px-2.5 py-2 ${
-                    total ? 'border-slate-200' : 'border-dashed border-slate-200 opacity-60'}`}>
-                  {/* Two lines reserved for the name so all four tiles line
+                <div key={wt.key} className={`flex flex-col items-center ${total ? '' : 'opacity-50'}`}>
+                  <ProgressDial
+                    pct={pct}
+                    ringCls={clear ? 'text-emerald-500' : total ? tint.ring : 'text-slate-200'}
+                  >
+                    <WorkIcon
+                      workKey={wt.key}
+                      className={`w-[26px] h-[26px] sm:w-8 sm:h-8 ${total ? tint.fg : 'text-slate-300'}`}
+                    />
+                  </ProgressDial>
+
+                  {/* Two lines reserved for the name so all four columns line
                       their numbers up, and clamped there so the Malay names —
                       "Penyemburan Racun Kulat & Serangga" — cannot push one
-                      tile taller than the rest. */}
-                  <div className="flex items-start gap-1.5 min-w-0 min-h-[26px]">
-                    <WorkIcon workKey={wt.key}
-                      className={`w-[18px] h-[18px] shrink-0 ${total ? tint.fg : 'text-slate-300'}`} />
-                    <span className="text-[10px] font-black uppercase tracking-wide text-slate-500 leading-[1.25] line-clamp-2">
-                      {workTypeLabel(wt, lang)}
-                    </span>
-                  </div>
-                  <div className="flex items-baseline gap-1 mt-1">
-                    <span className={`text-[17px] font-black tabular-nums leading-none ${
-                      clear ? 'text-emerald-600' : total ? 'text-slate-800' : 'text-slate-300'}`}>
-                      {clear ? '✓' : doneN}
-                    </span>
-                    {!clear && (
-                      <span className="text-[12px] font-black text-slate-400 tabular-nums leading-none">
-                        /{total}
-                      </span>
+                      column taller than the rest. */}
+                  <span className="mt-1.5 text-[9px] sm:text-[10px] font-black uppercase tracking-wide text-slate-500 leading-[1.2] text-center line-clamp-2 min-h-[22px]">
+                    {workTypeLabel(wt, lang)}
+                  </span>
+
+                  <span className="text-[10px] sm:text-[11px] font-black tabular-nums leading-none text-slate-400">
+                    {total ? (
+                      <>
+                        <span className={clear ? 'text-emerald-600' : 'text-slate-700'}>
+                          {clear ? '✓' : doneN}
+                        </span>
+                        {!clear && `/${total}`}
+                      </>
+                    ) : (
+                      t('mtb.none')
                     )}
-                    <span className="ml-auto text-[9px] font-black uppercase tracking-widest text-slate-400">
-                      {total ? t('mtb.donePct', { pct }) : t('mtb.none')}
-                    </span>
-                  </div>
-                  <div className="mt-1.5 h-1.5 rounded-full bg-slate-100 overflow-hidden">
-                    <div className={`h-full rounded-full ${clear ? 'bg-emerald-500' : tint.bar}`}
-                      style={{ width: `${pct}%` }} />
-                  </div>
+                  </span>
                 </div>
               );
             })}
