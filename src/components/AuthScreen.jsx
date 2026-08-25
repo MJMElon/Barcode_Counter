@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { useAuth } from '../context/AuthContext.jsx';
-import { useLang, LangToggle } from '../context/LanguageContext.jsx';
+import { useLang } from '../context/LanguageContext.jsx';
 
 // Login / Sign-up / Forgot-password / Recovery screen, on the shared Supabase
 // project — the same accounts as ai.mjmnursery.com.
@@ -12,6 +12,10 @@ import { useLang, LangToggle } from '../context/LanguageContext.jsx';
 //
 // The Auditor Portal wears the same cover in pink. Only the colour differs,
 // exactly like the books themselves.
+//
+// Nothing on this screen but signing in — no language toggle, no controls.
+// Everything the app does appears once you are through the door; the
+// toggle lives in TopNav, on every screen behind it.
 export default function AuthScreen() {
   const { recovering, setRecovering, allowed } = useAuth();
   const { t } = useLang();
@@ -75,9 +79,6 @@ export default function AuthScreen() {
 
   return (
     <div className="bk-page">
-      <div className="bk-lang">
-        <LangToggle dark />
-      </div>
 
       <div className="bk-book">
         {/* the inside pages, showing past the cover */}
@@ -195,7 +196,6 @@ export default function AuthScreen() {
           padding:26px 16px 20px;
           background:radial-gradient(ellipse at 50% 34%,#3a322b 0%,#221d19 62%,#14100e 100%);
         }
-        .bk-lang{position:fixed;top:14px;right:14px;z-index:30}
 
         .bk-book{position:relative;width:100%;max-width:400px;animation:bkIn .5s ease both}
         @keyframes bkIn{from{opacity:0;transform:translateY(16px) scale(.985)}to{opacity:1;transform:none}}
