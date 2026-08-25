@@ -138,7 +138,7 @@ function Train({ steaming }) {
 }
 
 export default function PalmsDock() {
-  const { permissions } = useAuth();
+  const { session, allowed, permissions } = useAuth();
   const { t } = useLang();
   const location = useLocation();
 
@@ -228,6 +228,14 @@ export default function PalmsDock() {
     });
   }
 
+  // Nothing but signing in belongs on the login screen. canScan() fails
+  // OPEN by design — no permissions loaded reads as "not restricted" — so
+  // without this the train steams away over the 555 cover, badge and all,
+  // before anybody has said who they are. The same test App uses to decide
+  // between the app and the login, so the two cannot disagree: this also
+  // keeps the train off the "no operations access yet" screen, which is
+  // still outside the door.
+  if (!session || allowed === false) return null;
   // Not for someone without PALMS, and not on top of PALMS itself.
   if (!canPalms(permissions, 'view')) return null;
   if (location.pathname.startsWith('/palms')) return null;
