@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import EntryTab from './EntryTab.jsx';
 import SettingsTab from './SettingsTab.jsx';
 import { clearAll, seedDemo } from './demo.js';

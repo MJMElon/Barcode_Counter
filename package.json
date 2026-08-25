@@ -3,11 +3,13 @@
   "private": true,
   "version": "2.0.0",
   "type": "module",
-  "description": "MJM Nursery FC Portal — Scan, Issue Collection DO, Plot Status, Maintenance, PALMS (React + Supabase)",
+  "description": "MJM Nursery FC Portal \u2014 Scan, Issue Collection DO, Plot Status, Maintenance, PALMS (React + Supabase)",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "check:hooks": "node scripts/check-hooks.mjs",
+    "prebuild": "node scripts/check-hooks.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",
