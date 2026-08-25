@@ -10,10 +10,13 @@ import { loadSettings } from './settings.js';
 // sync.js is the layer either side of it: what is here goes up to
 // fcportal_palms_plot_logs, and what other people recorded comes back down.
 
+/* The nurseries and, once the office has been read, the exact plots in each.
+   `count` is only the fallback shape used before shared_plots has answered —
+   see applyOfficeConfig() and officeConfig.js. */
 export const NURSERIES = {
-  BNN: { label: 'BNN', prefix: 'B', count: 14 },
-  UNN1: { label: 'UNN1', prefix: 'U', count: 18 },
-  UNN2: { label: 'UNN2', prefix: 'N', count: 20 },
+  BNN: { label: 'BNN', prefix: 'B', count: 14, plots: null },
+  UNN1: { label: 'UNN1', prefix: 'U', count: 18, plots: null },
+  UNN2: { label: 'UNN2', prefix: 'N', count: 20, plots: null },
 };
 
 // Activity names are nursery domain vocabulary and stay as-is in both
@@ -84,6 +87,14 @@ export function isMulti(pid) {
 }
 export function aKey(pid, area) {
   return pid + '#' + area;
+}
+
+/* Every storage key belonging to a plot — one per area once it is split.
+   Lives here rather than in the screen that first needed it, because the
+   floating dock counts the same keys to decide whether the day is done, and
+   two answers to "what is a plot made of" is how they would disagree. */
+export function keysOfPlot(pid) {
+  return isMulti(pid) ? MULTI[pid].areas.map((a) => aKey(pid, a)) : [pid];
 }
 
 /**
@@ -158,7 +169,46 @@ export function saveDB(db) {
 /* ---------- helpers ---------- */
 export function plotsOf(nk) {
   const n = NURSERIES[nk];
+  if (!n) return [];
+  // The office's list once it has been read; the generated one until then, so
+  // a portal that cannot reach the server still has plots to show.
+  if (n.plots && n.plots.length) return n.plots;
   return Array.from({ length: n.count }, (_, i) => n.prefix + (i + 1));
+}
+
+/** The last stage of the cycle, whatever the office has called it. */
+export const lastAct = () => ACTIVITIES[ACTIVITIES.length - 1] || null;
+/** The first. Both are read rather than assumed, because the office decides
+    how many stages there are now. */
+export const firstAct = () => ACTIVITIES[0] || null;
+
+/**
+ * Take the plot list and the stage list from Nursery Operation Management.
+ *
+ * Which plots exist (shared_plots, kept in Seedling Stock Management) and
+ * which statuses can be chosen (nops_plot_status_stages, kept on Life of
+ * Plot) are the office's to decide — they were hardcoded here, so adding a
+ * plot or renaming a stage meant a code change and a deploy.
+ *
+ * Mutated in place, exactly as applySettings() does, so every screen already
+ * holding a reference to NURSERIES or ACTIVITIES picks the change up on its
+ * next render instead of needing to be re-imported.
+ *
+ * Anything the office has not filled in is left alone. An empty stage table
+ * must not empty the picker a Field Conductor is standing in a plot using.
+ */
+export function applyOfficeConfig(cfg) {
+  const c = cfg || {};
+  if (c.plots) {
+    Object.keys(NURSERIES).forEach((nk) => {
+      const list = c.plots[nk];
+      NURSERIES[nk].plots = list && list.length ? list : null;
+    });
+  }
+  if (c.activities && c.activities.length) {
+    ACTIVITIES.length = 0;
+    c.activities.forEach((a) => ACTIVITIES.push(a));
+  }
 }
 export function nurseryOfPlot(p) {
   for (const k in NURSERIES) if (p.startsWith(NURSERIES[k].prefix)) return k;
@@ -167,8 +217,12 @@ export function nurseryOfPlot(p) {
 export function activityByN(n) {
   return ACTIVITIES.find((a) => a.n === n);
 }
+/* Every ideal-days read goes through here, so this is where a stage the
+   office has since removed or renumbered stops being a crash. An entry keeps
+   the ideal it was started with (log entries carry their own `ideal`); this
+   is only for starting a new one, and one day is a safe floor. */
 export function durFor(pid, act) {
-  return act.days;
+  return act && act.days != null ? act.days : 1;
 }
 
 function fmt(d) {
@@ -340,14 +394,24 @@ export function recordHistory(db, { key, actN, acts, by, at, demo }) {
 }
 
 /* ---------- sample data ----------
-   Built to be checked rather than to look plausible: every activity from 1 to
-   11 is represented, and the three statuses (on schedule, needs attention,
-   overdue) all appear, so the pipeline, the stat cards and the filters each
-   have something to show. Prior stages are back-filled with sensible dates and
-   written into the history, giving the date filter about a month to look
-   through. */
+   Built to be checked rather than to look plausible: every stage the office
+   has configured is represented, and the three statuses (on schedule, needs
+   attention, overdue) all appear, so the pipeline, the stat cards and the
+   filters each have something to show. Prior stages are back-filled with
+   sensible dates and written into the history, giving the date filter about a
+   month to look through. */
 function randInt(a, b) {
   return a + Math.floor(Math.random() * (b - a + 1));
+}
+
+/* The last two stage numbers — growing on, and collection. "Needs attention"
+   only means anything on those two: an earlier stage is measured in days and
+   is simply on schedule or late. Read rather than written as 10 and 11,
+   because how many stages there are is the office's to decide. */
+function lastTwo() {
+  const n = ACTIVITIES.length;
+  return [(ACTIVITIES[n - 2] || ACTIVITIES[n - 1] || { n: -1 }).n,
+          (ACTIVITIES[n - 1] || { n: -1 }).n];
 }
 
 // mood: 'ontrack' | 'overdue' | 'soon'
@@ -359,8 +423,8 @@ function seedUnit(db, key, actN, mood, by) {
   let curStart;
   if (mood === 'overdue') {
     curStart = addDays(today, -(idealC + randInt(1, 6)));
-  } else if (mood === 'soon' && (actN === 10 || actN === 11)) {
-    const window = actN === 11 ? 7 : 30;
+  } else if (mood === 'soon' && (actN === lastTwo()[0] || actN === lastTwo()[1])) {
+    const window = actN === lastTwo()[1] ? 7 : 30;
     curStart = addDays(today, -(idealC - randInt(1, window - 1)));
   } else {
     curStart = addDays(today, -randInt(0, Math.max(0, Math.min(20, idealC - 1))));
@@ -394,7 +458,7 @@ function seedUnit(db, key, actN, mood, by) {
     // gets a spare day so the fast cycles are not all identical, which still
     // leaves them inside 15.
     const bonusOn = randInt(1, 9);
-    for (let n = 11; n >= 1; n--) {
+    for (let n = (lastAct() || { n: 11 }).n; n >= 1; n--) {
       const ideal = durFor(key, activityByN(n));
       // Spread the durations either side of the ideal so shortest and longest
       // are actually different figures.
@@ -425,11 +489,20 @@ function seedUnit(db, key, actN, mood, by) {
 // Fixed stages for the multi-area plots so the weighted label has something
 // to show: B1 and U8 land on a Kosong/Pengambilan mix, B4 on Membesar with
 // Pengambilan.
-const MULTI_PLAN = {
-  B1: { A: 5, B: 11 },
-  B4: { A: 10, B: 11 },
-  U8: { A: 11, B: 11, C: 4 },
+/* Fixed stages for the multi-area demo plots, as positions in whatever list
+   the office has configured: `last` is collection, `mid` something growing,
+   `early` something at the start. Written as names rather than the numbers
+   5/10/11, which only meant anything while the list was fixed at eleven. */
+const demoN = (which) => {
+  const n = ACTIVITIES.length;
+  const pick = { last: n - 1, mid: Math.max(0, n - 2), early: Math.min(3, n - 1) }[which];
+  return (ACTIVITIES[pick] || ACTIVITIES[n - 1] || { n: 1 }).n;
 };
+const MULTI_PLAN = () => ({
+  B1: { A: demoN('early'), B: demoN('last') },
+  B4: { A: demoN('mid'),   B: demoN('last') },
+  U8: { A: demoN('last'),  B: demoN('last'), C: demoN('early') },
+});
 
 export function seedSample() {
   const db = freshDB();
@@ -445,8 +518,9 @@ export function seedSample() {
         const key = a ? aKey(pid, a) : pid;
         // Cycle the activities so all eleven are covered, and bias the
         // "needs attention" mood onto the two stages that can show it.
-        const planned = a && MULTI_PLAN[pid] ? MULTI_PLAN[pid][a] : null;
-        const actN = planned || (n % 11) + 1;
+        const plan = MULTI_PLAN();
+        const planned = a && plan[pid] ? plan[pid][a] : null;
+        const actN = planned || ACTIVITIES[n % ACTIVITIES.length].n;
         let mood = moods[n % 3];
         if (mood === 'soon' && actN < 10) mood = 'ontrack';
         if (actN >= 10 && n % 4 === 0) mood = 'soon';
@@ -468,7 +542,7 @@ export function seedSample() {
 }
 
 /* ---------- link for the Culling Calculator ----------
-   A plot reaches the calculator when PALMS says it is at Pengambilan (11) —
+   A plot reaches the calculator when PALMS says it is at Pengambilan —
    collection — and not before. Counting pokok inang is a job done against
    what is being taken out of the plot, so the earlier culling-ish stages
    (Saringan Anak Bibit, Tunggu buat culling, Culling) used to widen this and
@@ -476,10 +550,18 @@ export function seedSample() {
 
    For a multi-area plot, ANY area at Pengambilan brings the plot in: the
    collection is happening on the plot even if only part of it is ready. */
-const PENGAMBILAN = 11;
+/* Matched by NAME, not by the number 11. The office can rename, reorder and
+   add stages now, so "the collection stage" has to be found rather than
+   assumed to be eleventh. Falls back to the last stage of the cycle, which is
+   what collection is. */
+function pengambilanN() {
+  const named = ACTIVITIES.find((a) => /pengambilan/i.test(a.name || ''));
+  return (named || lastAct() || { n: 11 }).n;
+}
 export function cullingScopePlots() {
   const db = loadDB();
-  const inScope = (key) => currentEntries(db, key).some((e) => e.actN === PENGAMBILAN);
+  const target = pengambilanN();
+  const inScope = (key) => currentEntries(db, key).some((e) => e.actN === target);
   const set = new Set();
   Object.keys(NURSERIES).forEach((nk) =>
     plotsOf(nk).forEach((pid) => {

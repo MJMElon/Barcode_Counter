@@ -19,11 +19,66 @@ import {
   isDone as isJobDone,
   mergeWeekTasks,
   monthLabelOf,
+  weekDates,
+  weekOfDate,
 } from '../modules/maintenance/schedule.js';
 import { tintOf } from '../modules/maintenance/tints.js';
 import WorkIcon from '../modules/maintenance/WorkIcons.jsx';
 
-const CACHE_KEY = 'maintenance_board_month';
+const CACHE_KEY = 'maintenance_board_month_v2';
+
+/** One week-stepper arrow. Greys out at the ends of the month instead of
+    disappearing, so the control does not change shape as you move. */
+function NavArrow({ dir, disabled, onClick, label }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={label}
+      aria-label={label}
+      className={`grid place-items-center w-7 h-7 rounded-full border shrink-0 transition-colors ${
+        disabled
+          ? 'border-teal-100 text-teal-200 cursor-default'
+          : 'border-teal-300 text-teal-700 hover:bg-teal-100 cursor-pointer'
+      }`}
+    >
+      <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="3"
+        strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        {dir === 'prev' ? <path d="m15 5-7 7 7 7" /> : <path d="m9 5 7 7-7 7" />}
+      </svg>
+    </button>
+  );
+}
+
+/**
+ * A job's completion as the ring around its icon.
+ *
+ * The percentage is the ring itself rather than a number beside it — four of
+ * these in a row are read as a glance at how full each dial is, which is the
+ * question ("what is behind?") without anyone doing arithmetic. The track
+ * stays visible underneath so an empty ring reads as nothing done rather
+ * than as a missing dial.
+ *
+ * Rotated -90deg so the arc starts at twelve o'clock; a ring that fills from
+ * three o'clock looks broken even when the number is right.
+ */
+function ProgressDial({ pct, ringCls, children }) {
+  const R = 26;
+  const C = 2 * Math.PI * R;
+  return (
+    <div className="relative w-[58px] h-[58px] sm:w-[68px] sm:h-[68px]">
+      <svg viewBox="0 0 60 60" className="w-full h-full -rotate-90" aria-hidden="true">
+        <circle cx="30" cy="30" r={R} fill="none" strokeWidth="5" className="text-slate-100" stroke="currentColor" />
+        <circle
+          cx="30" cy="30" r={R} fill="none" strokeWidth="5" strokeLinecap="round"
+          className={ringCls} stroke="currentColor"
+          strokeDasharray={C} strokeDashoffset={C * (1 - Math.min(100, Math.max(0, pct)) / 100)}
+        />
+      </svg>
+      <div className="absolute inset-0 grid place-items-center">{children}</div>
+    </div>
+  );
+}
 
 /**
  * The month's maintenance, on the portal's front page.
@@ -61,6 +116,10 @@ export default function MaintenanceBoard() {
   // A restricted user must be summed over their own nurseries only, exactly
   // as the module scopes them — otherwise the front page quotes a total for
   // plots they are not allowed to see.
+  // Opens on the week you are actually in; stepping is per-visit, not saved.
+  const [week, setWeek] = useState(() => weekOfDate(todayStr()) || 1);
+  const [showInfo, setShowInfo] = useState(false);
+
   const allowed = allowedNurseries(permissions);
   const allowedSig = allowed === null ? '*' : [...allowed].sort().join('|');
 
@@ -90,23 +149,27 @@ export default function MaintenanceBoard() {
         const schedule = await loadSchedules(keys, month);
         const all = withQueued(records, queued);
 
-        const totals = {};
-        const done = {};
-        WORK_TYPES.forEach((wt) => { totals[wt.key] = 0; done[wt.key] = 0; });
+        // Kept week by week rather than summed. The board shows one week at
+        // a time and you step between them, so a month-wide total would have
+        // to be un-summed again to answer "what is due now".
+        const byWeek = {};
         WEEKS.forEach((w) => {
           const tasks = mergeWeekTasks(schedule, w);
+          const totals = {};
+          const done = {};
           WORK_TYPES.forEach((wt) => {
             const list = tasks[wt.key] || [];
-            totals[wt.key] += list.length;
-            done[wt.key] += list.filter((x) =>
+            totals[wt.key] = list.length;
+            done[wt.key] = list.filter((x) =>
               isJobDone(all, {
                 workTypeKey: wt.key, plot: x.plot, chemical: x.chemical, week: w, month,
               })
             ).length;
           });
+          byWeek[w] = { totals, done };
         });
 
-        const next = { totals, done, month, scheduled: schedule.length > 0 };
+        const next = { byWeek, month, scheduled: schedule.length > 0 };
         if (!live) return;
         setSum(next);
         setUpdatedAt(Date.now());
@@ -126,18 +189,64 @@ export default function MaintenanceBoard() {
   // nothing to report — and an empty widget is worse than no widget. Keep it
   // out of the way until there is a number to show.
   const anyWork = useMemo(
-    () => !!sum && WORK_TYPES.some((wt) => (sum.totals[wt.key] || 0) > 0),
+    () =>
+      !!sum &&
+      WEEKS.some((w) =>
+        WORK_TYPES.some((wt) => ((sum.byWeek?.[w]?.totals || {})[wt.key] || 0) > 0)
+      ),
     [sum]
   );
   if (sum && !anyWork) return null;
 
+  const thisWeek = weekOfDate(todayStr());
+  const wk = (sum && sum.byWeek && sum.byWeek[week]) || { totals: {}, done: {} };
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden mb-4 shadow-[0_4px_16px_rgba(0,0,0,.06)]">
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-200 bg-teal-50">
-        <span className="font-black uppercase tracking-widest text-[11px] sm:text-xs text-teal-800 truncate">
-          🛠️ {t('mtb.title')}
-        </span>
-        <span className="text-[10px] font-black text-teal-700 shrink-0">{month}</span>
+      <div className="px-4 py-2.5 border-b border-slate-200 bg-teal-50">
+        <div className="flex items-center justify-between gap-2">
+          <span className="font-black uppercase tracking-widest text-[11px] sm:text-xs text-teal-800 truncate">
+            🛠️ {t('mtb.title')}
+          </span>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-[10px] font-black text-teal-700">{month}</span>
+            {/* The programme schedule. Nothing to show yet — it says so
+                rather than going somewhere, so the button means the same
+                thing on the day it starts listing programmes. */}
+            <button
+              onClick={() => setShowInfo(true)}
+              title={t('mtb.schedule')}
+              aria-label={t('mtb.schedule')}
+              className="grid place-items-center w-6 h-6 rounded-full border border-teal-300 text-teal-700 text-[11px] font-black italic hover:bg-teal-100 transition-colors cursor-pointer shrink-0"
+            >
+              i
+            </button>
+          </div>
+        </div>
+
+        {/* Which week. The arrows stop at the ends rather than wrapping —
+            week 4 rolling round to week 1 reads as the month having changed. */}
+        <div className="flex items-center justify-between gap-2 mt-2">
+          <NavArrow
+            dir="prev"
+            disabled={week <= WEEKS[0]}
+            onClick={() => setWeek((w) => Math.max(WEEKS[0], w - 1))}
+            label={t('mtb.prevWeek')}
+          />
+          <div className="text-center leading-tight min-w-0">
+            <div className="text-[12px] font-black text-teal-800 uppercase tracking-wide">
+              {t('mt.weekN', { n: week })}
+              {week === thisWeek && <span className="text-teal-600"> · {t('mt.thisWeek')}</span>}
+            </div>
+            <div className="text-[10px] font-bold text-teal-600">{weekDates(week, month)}</div>
+          </div>
+          <NavArrow
+            dir="next"
+            disabled={week >= WEEKS[WEEKS.length - 1]}
+            onClick={() => setWeek((w) => Math.min(WEEKS[WEEKS.length - 1], w + 1))}
+            label={t('mtb.nextWeek')}
+          />
+        </div>
       </div>
 
       {!sum ? (
@@ -146,46 +255,48 @@ export default function MaintenanceBoard() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-2 p-3">
+          {/* All four jobs on one row. Four dials fit a 360px phone at ~78px
+              a column, which keeps the ring readable and the whole board
+              shorter than the stack of bars it replaced. */}
+          <div className="grid grid-cols-4 gap-1.5 sm:gap-3 p-3">
             {WORK_TYPES.map((wt) => {
-              const total = (sum.totals[wt.key] || 0);
-              const doneN = (sum.done[wt.key] || 0);
+              const total = wk.totals[wt.key] || 0;
+              const doneN = wk.done[wt.key] || 0;
               const pct = total ? Math.round((doneN / total) * 100) : 0;
               const clear = total > 0 && doneN >= total;
               const tint = tintOf(wt.key);
               return (
-                <div key={wt.key}
-                  className={`rounded-xl border px-2.5 py-2 ${
-                    total ? 'border-slate-200' : 'border-dashed border-slate-200 opacity-60'}`}>
-                  {/* Two lines reserved for the name so all four tiles line
+                <div key={wt.key} className={`flex flex-col items-center ${total ? '' : 'opacity-50'}`}>
+                  <ProgressDial
+                    pct={pct}
+                    ringCls={clear ? 'text-emerald-500' : total ? tint.ring : 'text-slate-200'}
+                  >
+                    <WorkIcon
+                      workKey={wt.key}
+                      className={`w-[26px] h-[26px] sm:w-8 sm:h-8 ${total ? tint.fg : 'text-slate-300'}`}
+                    />
+                  </ProgressDial>
+
+                  {/* Two lines reserved for the name so all four columns line
                       their numbers up, and clamped there so the Malay names —
                       "Penyemburan Racun Kulat & Serangga" — cannot push one
-                      tile taller than the rest. */}
-                  <div className="flex items-start gap-1.5 min-w-0 min-h-[26px]">
-                    <WorkIcon workKey={wt.key}
-                      className={`w-[18px] h-[18px] shrink-0 ${total ? tint.fg : 'text-slate-300'}`} />
-                    <span className="text-[10px] font-black uppercase tracking-wide text-slate-500 leading-[1.25] line-clamp-2">
-                      {workTypeLabel(wt, lang)}
-                    </span>
-                  </div>
-                  <div className="flex items-baseline gap-1 mt-1">
-                    <span className={`text-[17px] font-black tabular-nums leading-none ${
-                      clear ? 'text-emerald-600' : total ? 'text-slate-800' : 'text-slate-300'}`}>
-                      {clear ? '✓' : doneN}
-                    </span>
-                    {!clear && (
-                      <span className="text-[12px] font-black text-slate-400 tabular-nums leading-none">
-                        /{total}
-                      </span>
+                      column taller than the rest. */}
+                  <span className="mt-1.5 text-[9px] sm:text-[10px] font-black uppercase tracking-wide text-slate-500 leading-[1.2] text-center line-clamp-2 min-h-[22px]">
+                    {workTypeLabel(wt, lang)}
+                  </span>
+
+                  <span className="text-[10px] sm:text-[11px] font-black tabular-nums leading-none text-slate-400">
+                    {total ? (
+                      <>
+                        <span className={clear ? 'text-emerald-600' : 'text-slate-700'}>
+                          {clear ? '✓' : doneN}
+                        </span>
+                        {!clear && `/${total}`}
+                      </>
+                    ) : (
+                      t('mtb.none')
                     )}
-                    <span className="ml-auto text-[9px] font-black uppercase tracking-widest text-slate-400">
-                      {total ? t('mtb.donePct', { pct }) : t('mtb.none')}
-                    </span>
-                  </div>
-                  <div className="mt-1.5 h-1.5 rounded-full bg-slate-100 overflow-hidden">
-                    <div className={`h-full rounded-full ${clear ? 'bg-emerald-500' : tint.bar}`}
-                      style={{ width: `${pct}%` }} />
-                  </div>
+                  </span>
                 </div>
               );
             })}
@@ -204,6 +315,38 @@ export default function MaintenanceBoard() {
           </Link>
         </>
       )}
+
+      {showInfo && <SchedulePopover t={t} month={month} week={week} onClose={() => setShowInfo(false)} />}
+    </div>
+  );
+}
+
+/** What the i button opens. There is no programme feed behind it yet, so it
+    says so plainly instead of showing an empty list that looks broken. */
+function SchedulePopover({ t, month, week, onClose }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white w-full sm:max-w-xs rounded-t-3xl sm:rounded-3xl p-5 pb-7 shadow-2xl">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <h3 className="font-black text-slate-800 text-[14px] uppercase tracking-wide">
+            {t('mtb.schedule')}
+          </h3>
+          <button
+            onClick={onClose}
+            aria-label={t('common.cancel')}
+            className="w-8 h-8 rounded-full hover:bg-slate-100 text-slate-500 text-xl leading-none cursor-pointer shrink-0"
+          >
+            ×
+          </button>
+        </div>
+        <div className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-2">
+          {month} · {t('mt.weekN', { n: week })}
+        </div>
+        <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-[12px] font-bold text-slate-400">
+          {t('mtb.noProgram')}
+        </div>
+      </div>
     </div>
   );
 }

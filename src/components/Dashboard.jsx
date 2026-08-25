@@ -24,9 +24,6 @@ export default function Dashboard() {
     ...(canMaintain(permissions, 'view')
       ? [{ to: '/maintenance', icon: '🛠️', tint: 'bg-teal-100', title: t('dash.maintTitle') }]
       : []),
-    ...(canPalms(permissions, 'view')
-      ? [{ to: '/palms', icon: '🪴', tint: 'bg-violet-100', title: t('dash.palmsTitle') }]
-      : []),
     // The Culling Calculator is a tab inside PALMS, but it is a job of its
     // own — a Field Conductor going out to count pokok inang should not have
     // to know it is filed under PALMS to find it. Same permission as PALMS,

@@ -177,6 +177,8 @@ const en = {
   'set.addRule': 'Add activity',
   'set.removeRule': 'Remove',
   'set.attnNote': 'Now: {list}',
+  'set.officeOwned': 'Which plots exist, and which statuses you can choose, are set by the office — not on this phone. One list has to be true for everybody.',
+  'set.officeWhere': 'MJM AI System → Nursery Operation Management → Life of Plot → Status Stages (plots: Seedling Stock Management)',
   'set.resetAll': 'Reset settings to default',
   'set.reset': 'Settings reset to default',
 
@@ -258,6 +260,10 @@ const en = {
 
   // top nav / offline
 
+  // PALMS floating dock (the train)
+  'dock.done': 'Plot status all keyed in for today',
+  'dock.left': '{n} of {total} plots still to key in today',
+
   // collection board ("TV")
   'board.title': "Today's Collections",
   'board.empty': 'No collections booked today',
@@ -267,9 +273,13 @@ const en = {
 
   // maintenance board (dashboard summary)
   'mtb.title': 'Maintenance Status',
+  'mtb.schedule': 'Programme schedule',
+  'mtb.noProgram': 'No programme listed yet.',
+  'mtb.prevWeek': 'Previous week',
+  'mtb.nextWeek': 'Next week',
   'mtb.donePct': '{pct}% done',
   'mtb.none': 'Not due',
-  'mtb.footer': 'This month · weekly plan',
+  'mtb.footer': 'Open the weekly plan',
   'mtb.cached': 'Offline · cached',
   'mtb.unavailable': 'Schedule unavailable',
 
@@ -606,6 +616,8 @@ const ms = {
   'set.addRule': 'Tambah aktiviti',
   'set.removeRule': 'Buang',
   'set.attnNote': 'Sekarang: {list}',
+  'set.officeOwned': 'Plot yang wujud, dan status yang boleh dipilih, ditetapkan oleh pejabat — bukan pada telefon ini. Satu senarai mesti sama untuk semua orang.',
+  'set.officeWhere': 'MJM AI System → Nursery Operation Management → Life of Plot → Status Stages (plot: Seedling Stock Management)',
   'set.resetAll': 'Set semula tetapan asal',
   'set.reset': 'Tetapan diset semula',
 
@@ -688,6 +700,10 @@ const ms = {
   // top nav / offline
 
   // collection board ("TV")
+  // PALMS floating dock (the train)
+  'dock.done': 'Status plot hari ini sudah lengkap',
+  'dock.left': '{n} daripada {total} plot belum dikemas kini hari ini',
+
   'board.title': 'Kutipan Hari Ini',
   'board.empty': 'Tiada kutipan ditempah hari ini',
   'board.footer': 'Tempahan Masa Kutipan',
@@ -696,9 +712,13 @@ const ms = {
 
   // maintenance board (dashboard summary)
   'mtb.title': 'Status Penyelenggaraan',
+  'mtb.schedule': 'Jadual program',
+  'mtb.noProgram': 'Tiada program disenaraikan lagi.',
+  'mtb.prevWeek': 'Minggu sebelum',
+  'mtb.nextWeek': 'Minggu seterusnya',
   'mtb.donePct': '{pct}% siap',
   'mtb.none': 'Tiada',
-  'mtb.footer': 'Bulan ini · jadual mingguan',
+  'mtb.footer': 'Buka jadual mingguan',
   'mtb.cached': 'Luar talian · cache',
   'mtb.unavailable': 'Jadual tiada',
 
