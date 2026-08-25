@@ -1,622 +1,312 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  NURSERIES as CULL_NURSERIES,
   cullingRate,
   fmtNum,
   fmtPct,
   getSessionData,
   hasFigures,
-  persistSessionData,
   refreshFigures,
-  videoNeeded,
 } from './cullingData.js';
-import { cullingScopePlots, prettyD, todayStr } from './data.js';
-import { PURPOSE_CULLING, TO_AUDITOR, TO_HQ, addRequest, loadRequests, sentToday } from './requests.js';
-import { pushRequests, syncRequests } from './requestsSync.js';
+import { CULL_LIMIT, actionFor, caseBody } from './cullingActions.js';
+import { cullingScopePlots, todayStr } from './data.js';
+import { syncPalms } from './sync.js';
+import { raiseCase } from '../../lib/nelos.js';
 
-// Culling Calculator — lives inside PALMS as its third tab (it used to be a
-// standalone module). A plot is listed here once PALMS says it is at
-// Pengambilan, and not before — see cullingScopePlots().
-// Flow: tap Pokok Inang to record amounts — Field Conductor first; a Site
-// Auditor second entry unlocks while the rate stays above 10%; video
-// evidence is requested when even the Auditor amount leaves it above 10%.
-export default function CullingTab({ t, staffName, flash, nurseryKeys }) {
+/**
+ * The Culling Calculator.
+ *
+ * A calculator, deliberately: one plot at a time, a keypad, and a running
+ * sum. Counting pokok inang is done walking the plot in several goes — "300
+ * here, 250 there" — so the entry has to add up as you go rather than make
+ * somebody total it on paper first and key in one number.
+ *
+ * Nothing here writes to stock. What the Field Conductor counts feeds the
+ * rate and goes into a Nelos case, and the case is the record — so the
+ * figures behind a decision are readable by whoever picks the work up,
+ * without any of it moving a seedling in the ledger.
+ *
+ * The case is also the whole handoff. There is no second entry step for the
+ * Site Auditor here: the auditor does the work and closes the case in Nelos,
+ * rather than doing it, closing it, and coming back to key the same result
+ * into this screen as well.
+ */
+export default function CullingTab({ t, staffName, userId, flash, nurseryKeys }) {
   const data = useMemo(() => getSessionData(), []);
-  const [nursery, setNursery] = useState(() => nurseryKeys[0] || 'BNN');
-  const [editing, setEditing] = useState(null); // plot row index in the modal
-  const [asking, setAsking] = useState(null); // plot awaiting send confirmation
-  const [reqs, setReqs] = useState(() => loadRequests());
-  const [, setTick] = useState(0); // re-render after mutating session data
+  const [, setTick] = useState(0);
   const refresh = () => setTick((n) => n + 1);
-  const today = todayStr();
 
-  /* Transplant and Baki come off the Seedling Stock ledger, so they are read
-     when the tab opens rather than dealt in the browser. Whatever is cached
-     stays on screen while this runs and if it fails — a calculator with no
-     signal still has to show the amounts already keyed in. */
+  /* Every plot the FC may see that PALMS says is at Pengambilan. No nursery
+     picker: which nurseries a person works is on their user access now, so
+     asking them again on this screen was asking a question already answered.
+
+     PALMS is pulled first. While the calculator was a tab inside PALMS it
+     inherited the module's sync — you could not reach the tab without PALMS
+     having already read the server. On its own page nothing did, so the plot
+     list was whatever happened to be on this phone: a stale copy from the
+     last visit, and never a status somebody else keyed in this morning. */
+  const [scope, setScope] = useState(() => cullingScopePlots());
+  const plots = useMemo(() => {
+    const out = [];
+    nurseryKeys.forEach((nk) => (data[nk] || []).forEach((r) => {
+      if (scope.has(r.plot)) out.push({ ...r, nursery: nk });
+    }));
+    return out;
+  }, [data, nurseryKeys, scope]);
+
+  const [plotId, setPlotId] = useState(null);
+  const [picking, setPicking] = useState(false);
+  const [terms, setTerms] = useState([]);      // the counts already entered
+  const [typing, setTyping] = useState('');    // the one being keyed now
+  const [busy, setBusy] = useState(false);
+
+  // Both reads are best effort: with no signal the calculator still runs on
+  // whatever was cached last time rather than showing an empty screen.
   useEffect(() => {
     let live = true;
+    syncPalms().then(() => { if (live) setScope(cullingScopePlots()); });
     refreshFigures().then((ok) => { if (live && ok) refresh(); });
     return () => { live = false; };
   }, []);
 
-  /* Requests raised on another phone, and whatever the office has since done
-     with the ones raised on this one. Without this the row still reads "sent"
-     from the local copy, which is true but is not the whole answer — an
-     auditor who has already been out is what the FC needs to see. Silent and
-     best effort: the tab is already usable from the device's own copy. */
-  useEffect(() => {
-    let live = true;
-    syncRequests().then((r) => { if (live && r) setReqs(r.list); });
-    return () => { live = false; };
-  }, []);
+  const row = plots.find((p) => p.plot === plotId) || plots[0] || null;
+  useEffect(() => { if (!plotId && row) setPlotId(row.plot); }, [row, plotId]);
 
-  // Plots PALMS has moved to Pengambilan.
-  const scope = useMemo(() => cullingScopePlots(), [nursery]);
-  const rows = data[nursery].filter((r) => scope.has(r.plot));
+  const known = hasFigures(row);
+  const inang = terms.reduce((a, b) => a + b, 0) + (typing === '' ? 0 : Number(typing));
+  const rateNow = known ? cullingRate(row.balance, 0, 0, row.transplant) : NaN;
+  const rateAfter = known ? cullingRate(row.balance, inang, 0, row.transplant) : NaN;
+  const left = known ? row.balance - inang : 0;
+  const action = known && inang > 0 ? actionFor(rateAfter) : null;
+
+  const press = (k) => {
+    if (k === 'AC') { setTerms([]); setTyping(''); return; }
+    if (k === 'DEL') { setTyping((s) => s.slice(0, -1)); return; }
+    if (k === '+') {
+      if (typing !== '') { setTerms((ts) => [...ts, Number(typing)]); setTyping(''); }
+      return;
+    }
+    if (k === '=') {
+      // Fold what is being typed into the list. The total is the same either
+      // way — this just makes "10 + 15 + 16 =" settle into one figure the
+      // way a calculator does.
+      if (typing !== '') { setTerms((ts) => [...ts, Number(typing)]); setTyping(''); }
+      return;
+    }
+    // A count cannot start with a zero, and nothing sane needs seven digits.
+    setTyping((s) => (s === '' && k === '0' ? '' : (s + k).slice(0, 6)));
+  };
+
+  async function raise() {
+    if (!action || !row || busy) return;
+    setBusy(true);
+    const title = `${t(action.titleKey)} — ${row.plot}`;
+    const { data: c, error, deduped } = await raiseCase({
+      title,
+      description: caseBody({
+        t, plot: row.plot, nursery: row.nursery, balance: row.balance,
+        inang, rate: rateAfter, terms, by: staffName, date: todayStr(),
+      }),
+      category: action.category,
+      priority: action.priority,
+      source: 'fc_portal',
+      nursery: row.nursery,
+      plot: row.plot,
+      by: staffName,
+      byId: userId,
+      // Pressed twice, or the same plot revisited while the first case is
+      // still open, must not queue a second identical job for the auditor.
+      dedupe: true,
+    });
+    setBusy(false);
+    if (error) { flash(t('cull.raiseFailed')); return; }
+    flash(deduped ? t('cull.alreadyOpen', { n: c.case_no || '' }) : t('cull.raised', { n: c.case_no || '' }));
+    setTerms([]); setTyping('');
+  }
+
+  if (!plots.length) {
+    return (
+      <div className="bg-[#111821] border border-[#1f2a38] text-slate-400 rounded-3xl px-4 py-10 text-center text-sm font-bold">
+        {t('cull.noPlots')}
+      </div>
+    );
+  }
 
   return (
-    <>
-      {/* Header: title + nursery picker, like the entry tab */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <h2 className="font-black text-slate-800 text-[15px]">{t('cull.title')}</h2>
-          <span className="text-[10px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2.5 py-1">
-            {rows.length} plot
+    <div className="max-w-[420px] mx-auto">
+      <div className="bg-black rounded-[2rem] overflow-hidden shadow-2xl border border-[#1f2a38] p-3 space-y-2.5">
+        {/* Which plot, and where its rate stands before any of today's
+            counting. Apple puts the clock here; the plot is what this
+            calculator is always about, so it takes that place. */}
+        <div className="flex items-center justify-between px-2 pt-1">
+          <button
+            onClick={() => setPicking(true)}
+            className="flex items-center gap-1.5 text-white font-black text-[15px] cursor-pointer"
+          >
+            {row ? row.plot : '—'}
+            <span className="text-[10px] text-slate-500">▼</span>
+          </button>
+          <div className="text-[13px] font-black tabular-nums">
+            <span className="text-slate-500 mr-1">{t('cull.cullShort')} :</span>
+            <span className={known && rateNow > CULL_LIMIT ? 'text-rose-400' : 'text-emerald-400'}>
+              {known ? fmtPct(rateNow) : '—'}
+            </span>
+          </div>
+        </div>
+
+        {/* Two blocks, because there are two numbers and they are not the
+            same kind of thing: what the plot is holding, and what has been
+            counted off it. Told apart by a panel each rather than a rule
+            between them — a hard border here made the screen busier without
+            making it clearer. */}
+        <div className="bg-[#101013] rounded-2xl px-4 py-3 text-right">
+          <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+            {t('cull.balance')}
+          </div>
+          <div className="text-slate-300 text-[28px] font-light tabular-nums leading-tight">
+            {known ? fmtNum(row.balance) : '—'}
+          </div>
+        </div>
+
+        <div className="bg-[#101013] rounded-2xl pt-3 pb-2">
+          <div className="px-4 text-right">
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+              {t('cull.selected')}
+            </div>
+            <div className="text-slate-500 text-[13px] font-mono min-h-[18px] truncate">
+              {[...terms, ...(typing === '' ? [] : [typing])].join(' + ') || ' '}
+            </div>
+            <div className="text-white text-[42px] font-light tabular-nums leading-none truncate">
+              {inang ? fmtNum(inang) : '0'}
+            </div>
+          </div>
+
+          {/* The keypad belongs to the count, so it sits inside its panel
+              rather than floating under the whole card. */}
+          <Keypad onPress={press} />
+        </div>
+
+        {/* What the count leaves, and what that means. A strip rather than a
+            third panel: it is the consequence of the two above, not a number
+            of its own. */}
+        <div className="flex items-center justify-between px-4 py-1 text-[12px] font-black tabular-nums">
+          <span>
+            <span className="text-slate-500 uppercase tracking-widest text-[10px] mr-1.5">{t('cull.left')}</span>
+            <span className="text-slate-300">{known ? fmtNum(left) : '—'}</span>
+          </span>
+          <span>
+            <span className="text-slate-500 uppercase tracking-widest text-[10px] mr-1.5">{t('cull.estRate')}</span>
+            <span className={!known || !inang ? 'text-slate-600' : rateAfter > CULL_LIMIT ? 'text-rose-400' : 'text-emerald-400'}>
+              {known && inang ? fmtPct(rateAfter) : '—'}
+            </span>
           </span>
         </div>
-        <label className="flex items-center gap-2 text-[11px] font-bold text-slate-500">
-          {t('pm.nursery')}
-          <select
-            value={nursery}
-            onChange={(e) => setNursery(e.target.value)}
-            className="bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-800 outline-none focus:border-emerald-500"
-          >
-            {nurseryKeys.map((k) => (
-              <option key={k} value={k}>
-                {k}
-              </option>
-            ))}
-          </select>
-        </label>
+
+        {/* The one button that acts on it. The wording comes from the rule
+            that matched, so a new band added to cullingActions.js appears
+            here with nothing changed. */}
+        <button
+          onClick={raise}
+          disabled={!action || busy}
+          className={`w-full rounded-2xl py-4 font-black text-[13px] uppercase tracking-widest transition-colors ${
+            !action
+              ? 'bg-[#1c1c1e] text-slate-600 cursor-default'
+              : action.tone === 'ok'
+              ? 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer'
+              : 'bg-amber-500 hover:bg-amber-400 text-black cursor-pointer'
+          }`}
+        >
+          {busy ? t('common.saving') : action ? t(action.titleKey) : t('cull.enterCount')}
+        </button>
       </div>
 
-      {rows.length === 0 ? (
-        <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-2xl px-4 py-6 text-center text-sm font-bold">
-          {t('cull.noPalmsPlots')}
-        </div>
-      ) : (
-        <>
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
-          {/* One layout everywhere. The columns are percentages and the
-              padding and type scale down on a phone, so the same table fits
-              360px without scrolling sideways. */}
-          <div>
-            <table className="w-full table-fixed text-sm">
-              <colgroup>
-                <col className="w-[14%]" />
-                <col className="w-[26%]" />
-                <col className="w-[22%]" />
-                <col className="w-[38%]" />
-              </colgroup>
-              <thead>
-                <tr className="bg-slate-50 text-[9px] sm:text-[10px] font-black text-slate-500 uppercase tracking-wide sm:tracking-widest">
-                  {/* Transplant and Baki stay in the data (the rate needs
-                      them) but are deliberately not shown to the user. */}
-                  <th className="px-1.5 sm:px-5 py-2.5 sm:py-3.5 text-left">Plot</th>
-                  <th className="px-1 sm:px-5 py-2.5 sm:py-3.5 text-center">Pokok Inang</th>
-                  <th className="px-1 sm:px-5 py-2.5 sm:py-3.5 text-center">{t('cull.rate')}</th>
-                  <th className="px-1 sm:px-5 py-2.5 sm:py-3.5 text-center">{t('cull.action')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row, idx) => {
-                  const { rate, hot, act, sendTo, sent } = derive(row, reqs, today, t);
-                  return (
-                    <tr key={row.plot} className="border-t border-slate-100 hover:bg-slate-50/60 transition-colors">
-                      <td className="px-1.5 sm:px-5 py-2.5 sm:py-3.5 align-middle font-black text-slate-800 text-[13px] sm:text-sm">
-                        {row.plot}
-                      </td>
-                      <td className="px-1 sm:px-5 py-2.5 sm:py-3.5 align-middle text-center">
-                        <button
-                          onClick={() => setEditing(idx)}
-                          className={`w-full sm:w-auto sm:min-w-[92px] rounded-lg sm:rounded-xl px-1.5 sm:px-3 py-1.5 text-[11px] sm:text-[12px] font-black tabular-nums leading-tight transition-colors cursor-pointer ${
-                            row.pokok === null
-                              ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                              : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200'
-                          }`}
-                        >
-                          {row.pokok === null ? (
-                            <>
-                              <span className="sm:hidden">{t('cull.fillInShort')}</span>
-                              <span className="hidden sm:inline">{t('cull.fillIn')}</span>
-                            </>
-                          ) : (
-                            fmtNum((row.pokok || 0) + (row.pokokAuditor || 0))
-                          )}
-                        </button>
-                      </td>
-                      <td className="px-1 sm:px-5 py-2.5 sm:py-3.5 align-middle text-center">
-                        <span
-                          className={`inline-block sm:min-w-[68px] rounded-full px-1.5 sm:px-2.5 py-1 text-[10px] sm:text-[11px] font-black tabular-nums border ${
-                            rate === null
-                              ? 'bg-slate-50 text-slate-400 border-slate-200'
-                              : hot
-                              ? 'bg-rose-50 text-rose-700 border-rose-200'
-                              : 'bg-teal-50 text-teal-700 border-teal-200'
-                          }`}
-                          title={rate === null ? t('cull.noFigures') : undefined}
-                        >
-                          {rate === null ? '—' : fmtPct(rate)}
-                        </span>
-                      </td>
-                      <td className="px-1 sm:px-5 py-2.5 sm:py-3.5 align-middle text-center">
-                        {act}
-                        {sendTo &&
-                          (sent ? (
-                            /* Once the office has answered, the answer is what
-                               this cell is for. "Sent today" is only news until
-                               somebody has acted on it. */
-                            sent.status && sent.status !== 'open' ? (
-                              <div className="mt-1 text-[10px] font-black text-blue-600 uppercase tracking-wide">
-                                ✓ {sent.status === 'closed' ? t('cull.reqClosed') : t('cull.reqDone')}
-                                {sent.actionedBy ? ` · ${sent.actionedBy}` : ''}
-                              </div>
-                            ) : (
-                              <div className="mt-1 text-[10px] font-black text-emerald-600 uppercase tracking-wide">
-                                ✓ {sendTo === TO_HQ ? t('cull.sentHQ') : t('cull.sent')}
-                              </div>
-                            )
-                          ) : (
-                            <button
-                              onClick={() => setAsking({ row, to: sendTo })}
-                              className={`mt-1.5 w-full text-white text-[9px] sm:text-[10px] font-black uppercase tracking-wide sm:tracking-wider rounded-lg px-1 sm:px-2 py-1.5 cursor-pointer ${
-                                sendTo === TO_HQ
-                                  ? 'bg-amber-600 hover:bg-amber-700'
-                                  : 'bg-slate-800 hover:bg-slate-900'
-                              }`}
-                            >
-                              <span className="sm:hidden">
-                                {sendTo === TO_HQ ? t('cull.sendHQShort') : t('cull.sendAuditorShort')}
-                              </span>
-                              <span className="hidden sm:inline">
-                                {sendTo === TO_HQ ? t('cull.sendHQ') : t('cull.sendAuditor')}
-                              </span>
-                            </button>
-                          ))}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-        </>
-      )}
-
-      {/* What has been raised for the Site Auditor */}
-      {reqs.length > 0 && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] overflow-hidden">
-          <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100">
-            <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-wide">{t('cull.reqTitle')}</h3>
-          </div>
-          {/* Phone: one stacked line per request, so nothing scrolls sideways */}
-          <div className="sm:hidden divide-y divide-slate-100">
-            {reqs.slice(0, 12).map((r) => (
-              <div key={r.id} className="px-4 py-2.5 flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="font-black text-slate-800 text-[13px]">
-                    {r.plot} · {r.to === TO_HQ ? t('cull.toHQ') : t('cull.toAuditor')}
-                  </div>
-                  <div className="text-[11px] font-semibold text-slate-500 truncate">
-                    {r.purpose} · {r.by || '—'}
-                  </div>
-                </div>
-                <div className="shrink-0 text-[11px] font-bold text-slate-500">{prettyD(r.at)}</div>
-              </div>
-            ))}
-          </div>
-
-          <div className="hidden sm:block overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-slate-50 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                  <th className="px-3 sm:px-5 py-2 sm:py-3">{t('cull.reqDate')}</th>
-                  <th className="px-3 sm:px-5 py-2 sm:py-3">Plot</th>
-                  <th className="px-3 sm:px-5 py-2 sm:py-3">{t('cull.reqTo')}</th>
-                  <th className="px-3 sm:px-5 py-2 sm:py-3">{t('cull.reqPurpose')}</th>
-                  <th className="px-3 sm:px-5 py-2 sm:py-3">{t('cull.reqBy')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {reqs.slice(0, 12).map((r) => (
-                  <tr key={r.id} className="border-t border-slate-100">
-                    <td className="px-3 sm:px-5 py-2 sm:py-3 font-semibold text-slate-600">{prettyD(r.at)}</td>
-                    <td className="px-3 sm:px-5 py-2 sm:py-3 font-black text-slate-800">{r.plot}</td>
-                    <td className="px-3 sm:px-5 py-2 sm:py-3 font-semibold text-slate-600">
-                      {r.to === TO_HQ ? t('cull.toHQ') : t('cull.toAuditor')}
-                    </td>
-                    <td className="px-3 sm:px-5 py-2 sm:py-3 font-semibold text-slate-600">{r.purpose}</td>
-                    <td className="px-3 sm:px-5 py-2 sm:py-3 font-semibold text-slate-500">{r.by || '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {asking && (
-        <SendRequestModal
-          row={asking.row}
-          to={asking.to}
-          nurseryKey={nursery}
-          date={today}
-          by={staffName}
+      {picking && (
+        <PlotPicker
+          plots={plots}
+          current={plotId}
           t={t}
-          onClose={() => setAsking(null)}
-          onConfirm={() => {
-            const r = asking.row;
-            const rate = cullingRate(r.balance, r.pokok, r.pokokAuditor, r.transplant);
-            const { list, added } = addRequest({
-              plot: r.plot,
-              nursery,
-              purpose: PURPOSE_CULLING,
-              to: asking.to,
-              by: staffName || 'FC',
-              at: today,
-              // HQ needs the figures behind the decision, not just the plot.
-              details:
-                asking.to === TO_HQ
-                  ? { transplant: r.transplant, balance: r.balance, rate: fmtPct(rate), video: r.video || null }
-                  : null,
-            });
-            setReqs(list);
-            setAsking(null);
-            /* Straight up, rather than waiting for the next time PALMS is
-               opened — the whole point of the request is that somebody else
-               is waiting on it. If there is no signal it stays queued on the
-               device and the next sync sends it. */
-            if (added) pushRequests(list).catch(() => {});
-            if (flash) flash(added ? t('cull.sentToast', { p: r.plot }) : t('cull.alreadySent', { p: r.plot }));
-          }}
+          onPick={(p) => { setPlotId(p); setTerms([]); setTyping(''); setPicking(false); }}
+          onClose={() => setPicking(false)}
         />
       )}
-
-      {editing !== null && rows[editing] && (
-        <CullingEntryModal
-          nurseryKey={nursery}
-          row={rows[editing]}
-          onClose={() => {
-            setEditing(null);
-            refresh();
-          }}
-          t={t}
-        />
-      )}
-    </>
-  );
-}
-
-// Rate, colour and the action wording for one plot.
-//  rate <= 10%                         -> green  (transfer seedling + drone)
-//  rate > 10% AND auditor has entered  -> amber  (tell HQ)
-//  rate > 10% AND only FC has entered  -> red    (wait for Site Auditor)
-//  rate > 10% AND nothing entered yet  -> neutral placeholder
-//
-// Two things can be raised, and neither happens on its own — both need the
-// Field Conductor to press the button and confirm:
-//   the drone request goes to the Site Auditor,
-//   'Sila bagitahu HQ' goes to HQ, carrying the plot's figures and video.
-// "Tunggu Site Auditor" raises nothing: the auditor still has to come and do
-// their own count. Once that count brings the rate under 10% the plot moves
-// to the drone request and becomes sendable again.
-function derive(row, reqs, today, t) {
-  const rate = cullingRate(row.balance, row.pokok, row.pokokAuditor, row.transplant);
-  const hot = rate > 0.1;
-  let act;
-  let sendTo = null;
-  /* No figures for this plot in the ledger — nothing transplanted in that the
-     batches standing there can be measured against. 0.00% would read as a
-     clean plot and send a drone request off the back of a number nobody
-     worked out, so the row says it cannot say and offers no action. */
-  if (!hasFigures(row)) {
-    return { rate: null, hot: false, act: <span className="text-slate-300 font-bold">—</span>,
-             sendTo: null, sent: false };
-  }
-  if (!hot) {
-    sendTo = TO_AUDITOR;
-    act = (
-      <span className="text-emerald-700 font-bold text-[10px] sm:text-[11px] leading-snug">
-        {row.pokok === null ? (
-          t('cull.actDrone')
-        ) : (
-          <>
-            {t('cull.actMove')}
-            <br />
-            {t('cull.actDrone')}
-          </>
-        )}
-      </span>
-    );
-  } else if (row.pokokAuditor !== null) {
-    sendTo = TO_HQ;
-    act = <span className="text-amber-600 font-bold text-[10px] sm:text-[11px] leading-snug">{t('cull.actHQ')}</span>;
-  } else if (row.pokok !== null) {
-    act = <span className="text-rose-600 font-bold text-[10px] sm:text-[11px] leading-snug">{t('cull.actWait')}</span>;
-  } else {
-    act = <span className="text-slate-300 font-bold">—</span>;
-  }
-  const sent = sendTo ? sentToday(reqs, row.plot, today, sendTo) : null;
-  return { rate, hot, act, sendTo, sent };
-}
-
-// Confirmation before anything reaches the Site Auditor: it shows exactly
-// what will be sent — the request date, the plot and the purpose, which for
-// anything raised here is always culling.
-function SendRequestModal({ row, to, nurseryKey, date, by, t, onClose, onConfirm }) {
-  const hq = to === TO_HQ;
-  const rate = cullingRate(row.balance, row.pokok, row.pokokAuditor, row.transplant);
-  // HQ is being asked to make a judgement, so it gets the figures behind the
-  // rate and the video, not just the plot number.
-  const lines = [
-    [t('cull.reqDate'), prettyD(date)],
-    ['Plot', row.plot],
-    [t('cull.reqPurpose'), PURPOSE_CULLING],
-    [t('cull.reqBy'), by || 'FC'],
-  ];
-  if (hq) {
-    lines.push(
-      [t('cull.transplant'), fmtNum(row.transplant)],
-      [t('cull.balance'), fmtNum(row.balance)],
-      [t('cull.rate'), fmtPct(rate)],
-      [t('cull.videoField'), row.video || t('cull.noVideo')]
-    );
-  }
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl p-5 pb-7 shadow-2xl">
-        <h3 className="font-black text-slate-800 text-[15px] uppercase tracking-wide mb-3">
-          {hq ? t('cull.confirmSendHQTitle') : t('cull.confirmSendTitle')}
-        </h3>
-
-        <dl className="bg-slate-50 border border-slate-200 rounded-xl divide-y divide-slate-200 mb-4">
-          {lines.map(([k, v]) => (
-            <div key={k} className="flex items-center justify-between gap-3 px-3.5 py-2.5">
-              <dt className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">{k}</dt>
-              <dd className="text-[13px] font-black text-slate-800 text-right">{v}</dd>
-            </div>
-          ))}
-        </dl>
-
-        <div className="flex gap-2">
-          <button
-            onClick={onClose}
-            className="flex-1 bg-white border border-slate-300 text-slate-600 font-black text-[12px] uppercase tracking-widest rounded-xl py-3 cursor-pointer"
-          >
-            {t('common.cancel')}
-          </button>
-          <button
-            onClick={onConfirm}
-            className={`flex-1 text-white font-black text-[12px] uppercase tracking-widest rounded-xl py-3 cursor-pointer ${
-              hq ? 'bg-amber-600 hover:bg-amber-700' : 'bg-emerald-600 hover:bg-emerald-700'
-            }`}
-          >
-            {t('cull.confirmSend')}
-          </button>
-        </div>
-      </div>
     </div>
   );
 }
 
-function parseAmount(raw) {
-  return raw === '' ? null : Math.max(0, parseInt(raw, 10) || 0);
+/* The keypad.
+   Digits fill the left; the two things you can do to a running count sit in
+   the orange column, + above =. Both are two rows tall — + reaching from the
+   9 down to the 6 and = from the 3 down to the 00 — so the column is two
+   even halves rather than one small key and one long one. There is no ×, ÷
+   or −: you are only ever adding up counts. */
+function Keypad({ onPress }) {
+  const grey = 'bg-[#333336] hover:bg-[#4a4a4d] text-white';
+  const dark = 'bg-[#1c1c1e] hover:bg-[#2c2c2e] text-white';
+  const amber = 'bg-amber-500 hover:bg-amber-400 text-white';
+  const key = (label, k, cls, span) => (
+    <button
+      key={k}
+      onClick={() => onPress(k)}
+      className={`${cls} ${span || ''} rounded-2xl text-[22px] font-medium tabular-nums transition-colors cursor-pointer active:scale-95`}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div className="grid grid-cols-4 grid-rows-5 gap-2 px-3 pb-1 pt-2 auto-rows-[54px] [&>button]:h-[54px]">
+      {key('AC', 'AC', grey, 'col-span-2')}
+      {key('⌫', 'DEL', grey, 'col-span-2')}
+      {['7', '8', '9'].map((d) => key(d, d, dark))}
+      {key('+', '+', amber, 'row-span-2 !h-[116px]')}
+      {['4', '5', '6'].map((d) => key(d, d, dark))}
+      {['1', '2', '3'].map((d) => key(d, d, dark))}
+      {key('=', '=', amber, 'row-span-2 !h-[116px]')}
+      {key('0', '0', dark, 'col-span-2')}
+      {key('00', '00', dark)}
+    </div>
+  );
 }
 
-// Pokok Inang entry pop-up. Field Conductor keys in first; when the saved FC
-// amount still leaves the rate above 10% the modal reopens in the Auditor
-// stage. Saved amounts lock and need a confirmation before they can change.
-// The culling rate itself is deliberately not shown while keying in.
-function CullingEntryModal({ nurseryKey, row, onClose, t }) {
-  const cfg = CULL_NURSERIES[nurseryKey];
-
-  // Auditor stage: FC has already saved AND the rate with only the FC amount
-  // is still above 10%.
-  const fcOnlyRate = cullingRate(row.balance, row.pokok, null, row.transplant);
-  const stage = row.pokok !== null && fcOnlyRate > 0.1 ? 'auditor' : 'fc';
-
-  const [fcVal, setFcVal] = useState(row.pokok === null ? '' : String(row.pokok));
-  const [audVal, setAudVal] = useState(row.pokokAuditor === null ? '' : String(row.pokokAuditor));
-  const [fcLocked, setFcLocked] = useState(row.pokok !== null);
-  const [audLocked, setAudLocked] = useState(row.pokokAuditor !== null);
-  const [fcRevealed, setFcRevealed] = useState(false); // FC input shown inside the Auditor stage
-  const [pendingEdit, setPendingEdit] = useState(null); // 'fc' | 'auditor' | 'fc-reveal'
-  const [videoShown, setVideoShown] = useState(videoNeeded(row));
-  const [videoName, setVideoName] = useState(row.video);
-  const [videoUrl, setVideoUrl] = useState(null);
-
-  const fcVisible = stage === 'fc' || fcRevealed;
-  const audVisible = stage === 'auditor';
-
-  function confirmEdit() {
-    if (pendingEdit === 'fc-reveal') {
-      setFcRevealed(true);
-      setFcLocked(false);
-    } else if (pendingEdit === 'auditor') {
-      setAudLocked(false);
-    } else {
-      setFcLocked(false);
-    }
-    setPendingEdit(null);
-  }
-
-  function save() {
-    if (fcVisible) row.pokok = parseAmount(fcVal);
-    if (audVisible) row.pokokAuditor = parseAmount(audVal);
-    persistSessionData();
-
-    // After the Auditor submits: if still > 10%, keep the pop-up open and
-    // reveal the video-evidence box (first save only). The next Simpan closes.
-    if (videoNeeded(row) && !videoShown) {
-      setVideoShown(true);
-      if (audVisible) setAudLocked(true);
-      return;
-    }
-    onClose();
-  }
-
-  function videoChosen(e) {
-    const f = e.target.files && e.target.files[0];
-    if (!f) return;
-    row.video = f.name;
-    persistSessionData();
-    setVideoName(f.name);
-    setVideoUrl(URL.createObjectURL(f));
-  }
-
-  const lockedInputCls = 'bg-slate-100 text-slate-500 cursor-pointer';
-
+/* Which plot. Every plot at Pengambilan that this person may see, with the
+   rate it stands at, so the choice is made on the figures rather than by
+   remembering plot numbers. */
+function PlotPicker({ plots, current, t, onPick, onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-5 pb-7 shadow-2xl max-h-[92vh] overflow-y-auto">
+      <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-[#111821] border border-[#1f2a38] w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl p-5 pb-7 shadow-2xl max-h-[80vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-black text-slate-800 text-[15px] uppercase tracking-wide">
-            🌱 Plot {row.plot}
-            <span className="block text-[10px] text-slate-400 tracking-widest">
-              {cfg.label ? `${nurseryKey} · ${cfg.label}` : nurseryKey}
-            </span>
-          </h3>
-          <button onClick={onClose} className="w-9 h-9 rounded-full hover:bg-slate-100 text-slate-500 text-xl cursor-pointer">
-            ×
-          </button>
+          <h3 className="font-black text-slate-100 text-[14px] uppercase tracking-wide">{t('cull.pickPlot')}</h3>
+          <button onClick={onClose} aria-label={t('common.cancel')}
+            className="w-8 h-8 rounded-full hover:bg-[#1f2a38] text-slate-400 text-xl leading-none cursor-pointer">×</button>
         </div>
-
-        {/* FC amount shown as a tappable info line inside the Auditor stage */}
-        {audVisible && !fcRevealed && (
-          <button
-            onClick={() => setPendingEdit('fc-reveal')}
-            className="w-full flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 mb-3 text-left cursor-pointer"
-          >
-            <span className="text-[12px] font-bold text-slate-500">
-              Pokok Inang (Field Conductor) <em className="not-italic text-slate-400">· {t('cull.tapToEdit')}</em>
-            </span>
-            <b className="text-slate-800">{fmtNum(row.pokok)}</b>
-          </button>
-        )}
-
-        {fcVisible && (
-          <div className="mb-3">
-            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
-              {t('cull.fcAmount')}
-            </label>
-            <input
-              type="number"
-              inputMode="numeric"
-              min="0"
-              placeholder="0"
-              value={fcVal}
-              readOnly={fcLocked}
-              onClick={() => fcLocked && setPendingEdit('fc')}
-              onChange={(e) => setFcVal(e.target.value)}
-              className={`w-full border border-slate-300 rounded-xl px-3 py-3 text-sm font-bold outline-none focus:border-emerald-500 ${
-                fcLocked ? lockedInputCls : 'bg-white text-slate-800'
-              }`}
-            />
-            {fcLocked && (
+        <div className="space-y-1.5">
+          {plots.map((p) => {
+            const known = hasFigures(p);
+            const rate = known ? cullingRate(p.balance, 0, 0, p.transplant) : NaN;
+            return (
               <button
-                onClick={() => setPendingEdit('fc')}
-                className="mt-1.5 text-[11px] font-bold text-slate-500 hover:text-emerald-700 cursor-pointer"
+                key={p.plot}
+                onClick={() => onPick(p.plot)}
+                className={`w-full flex items-center justify-between gap-3 rounded-xl px-3.5 py-3 text-left cursor-pointer border transition-colors ${
+                  p.plot === current
+                    ? 'bg-emerald-600/15 border-emerald-600/50'
+                    : 'bg-[#0f1620] border-[#1f2a38] hover:border-slate-600'
+                }`}
               >
-                🔒 {t('cull.editAmount')}
+                <div className="min-w-0">
+                  <div className="font-black text-slate-100 text-[14px]">{p.plot}</div>
+                  <div className="text-[11px] font-semibold text-slate-500">
+                    {p.nursery} · {t('cull.balance')} {known ? fmtNum(p.balance) : '—'}
+                  </div>
+                </div>
+                <div className={`text-[13px] font-black tabular-nums shrink-0 ${
+                  !known ? 'text-slate-600' : rate > CULL_LIMIT ? 'text-rose-400' : 'text-emerald-400'
+                }`}>
+                  {known ? fmtPct(rate) : '—'}
+                </div>
               </button>
-            )}
-          </div>
-        )}
-
-        {audVisible && (
-          <div className="mb-3">
-            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
-              {t('cull.auditorAmount')}
-            </label>
-            <input
-              type="number"
-              inputMode="numeric"
-              min="0"
-              placeholder="0"
-              value={audVal}
-              readOnly={audLocked}
-              onClick={() => audLocked && setPendingEdit('auditor')}
-              onChange={(e) => setAudVal(e.target.value)}
-              className={`w-full border border-slate-300 rounded-xl px-3 py-3 text-sm font-bold outline-none focus:border-emerald-500 ${
-                audLocked ? lockedInputCls : 'bg-white text-slate-800'
-              }`}
-            />
-            {audLocked && (
-              <button
-                onClick={() => setPendingEdit('auditor')}
-                className="mt-1.5 text-[11px] font-bold text-slate-500 hover:text-emerald-700 cursor-pointer"
-              >
-                🔒 {t('cull.editAmount')}
-              </button>
-            )}
-          </div>
-        )}
-
-        {pendingEdit && (
-          <div className="bg-rose-50 border border-rose-200 rounded-xl p-3.5 mb-3">
-            <p className="text-[12px] font-bold text-rose-800 mb-2.5">{t('cull.editConfirm')}</p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setPendingEdit(null)}
-                className="flex-1 bg-white border border-slate-300 text-slate-600 font-black text-[11px] uppercase tracking-widest rounded-xl py-2.5 cursor-pointer"
-              >
-                {t('common.cancel')}
-              </button>
-              <button
-                onClick={confirmEdit}
-                className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-black text-[11px] uppercase tracking-widest rounded-xl py-2.5 cursor-pointer"
-              >
-                {t('cull.yesEdit')}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {videoShown && (
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3.5 mb-3">
-            <div className="text-[11px] font-black text-blue-800 uppercase tracking-wide mb-2">
-              {t('cull.videoLabel')}
-            </div>
-            <label className="block text-center bg-blue-600 hover:bg-blue-700 text-white font-black text-[12px] uppercase tracking-widest rounded-xl py-3 cursor-pointer">
-              🎥 {t('cull.videoBtn')}
-              <input type="file" accept="video/*" capture="environment" onChange={videoChosen} hidden />
-            </label>
-            {videoName && (
-              <div className="text-[11px] font-bold text-blue-700 mt-2">
-                ✓ {videoUrl ? t('cull.videoReady') : t('cull.videoDone')}: {videoName}
-              </div>
-            )}
-            {videoUrl && <video src={videoUrl} controls playsInline className="w-full rounded-lg mt-2" />}
-          </div>
-        )}
-
-        <div className="flex gap-2 mt-1">
-          <button
-            onClick={onClose}
-            className="flex-1 bg-white border border-slate-300 text-slate-600 font-black text-[12px] uppercase tracking-widest rounded-xl py-3.5 cursor-pointer"
-          >
-            {t('common.cancel')}
-          </button>
-          <button
-            onClick={save}
-            className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[12px] uppercase tracking-widest rounded-xl py-3.5 transition-colors cursor-pointer"
-          >
-            {t('cull.save')}
-          </button>
+            );
+          })}
         </div>
       </div>
     </div>

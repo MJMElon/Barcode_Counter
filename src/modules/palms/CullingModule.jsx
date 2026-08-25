@@ -16,7 +16,7 @@ import { NURSERIES } from './data.js';
 // The plot figures still come from the same PALMS stores, so which plots the
 // calculator lists is still decided by their stage in PALMS.
 export default function CullingModule() {
-  const { staffName, permissions } = useAuth();
+  const { staffName, permissions, session } = useAuth();
   // Same nursery scoping as every other nursery-aware screen, from
   // FC Scan Portal → User Access.
   // The calculator's own nursery list — set separately from PALMS.
@@ -31,18 +31,26 @@ export default function CullingModule() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 fade-enter">
+    <div className="min-h-screen bg-[#050a0e] fade-enter">
+      {/* Dark, because the screen is a calculator and the calculator is the
+          screen. The Scan module already runs dark for the same reason — a
+          tool you hold up in the sun rather than a page you read. */}
       <TopNav
         title={t('cull.title')}
         subtitle="FC Portal"
         user={staffName}
         back="/dashboard"
+        theme="dark"
       />
 
-      {/* A dense page of figures, so it gets the wider side margins and the
-          extra air between cards that the board and the study used to get. */}
-      <div className="max-w-[1000px] mx-auto px-3 sm:px-10 lg:px-14 py-4 sm:py-7 space-y-3 sm:space-y-5">
-        <CullingTab t={t} staffName={staffName} flash={flash} nurseryKeys={nurseryKeys} />
+      <div className="px-3 py-4 sm:py-7">
+        <CullingTab
+          t={t}
+          staffName={staffName}
+          userId={session?.user?.id || null}
+          flash={flash}
+          nurseryKeys={nurseryKeys}
+        />
       </div>
 
       {toast && (
