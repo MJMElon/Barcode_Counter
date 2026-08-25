@@ -12,6 +12,7 @@ import {
 } from './cullingData.js';
 import { cullingScopePlots, prettyD, todayStr } from './data.js';
 import { PURPOSE_CULLING, TO_AUDITOR, TO_HQ, addRequest, loadRequests, sentToday } from './requests.js';
+import { pushRequests, syncRequests } from './requestsSync.js';
 
 // Culling Calculator — lives inside PALMS as its third tab (it used to be a
 // standalone module). A plot is listed here once PALMS says it is at
@@ -36,6 +37,17 @@ export default function CullingTab({ t, staffName, flash, nurseryKeys }) {
   useEffect(() => {
     let live = true;
     refreshFigures().then((ok) => { if (live && ok) refresh(); });
+    return () => { live = false; };
+  }, []);
+
+  /* Requests raised on another phone, and whatever the office has since done
+     with the ones raised on this one. Without this the row still reads "sent"
+     from the local copy, which is true but is not the whole answer — an
+     auditor who has already been out is what the FC needs to see. Silent and
+     best effort: the tab is already usable from the device's own copy. */
+  useEffect(() => {
+    let live = true;
+    syncRequests().then((r) => { if (live && r) setReqs(r.list); });
     return () => { live = false; };
   }, []);
 
@@ -142,9 +154,19 @@ export default function CullingTab({ t, staffName, flash, nurseryKeys }) {
                         {act}
                         {sendTo &&
                           (sent ? (
-                            <div className="mt-1 text-[10px] font-black text-emerald-600 uppercase tracking-wide">
-                              ✓ {sendTo === TO_HQ ? t('cull.sentHQ') : t('cull.sent')}
-                            </div>
+                            /* Once the office has answered, the answer is what
+                               this cell is for. "Sent today" is only news until
+                               somebody has acted on it. */
+                            sent.status && sent.status !== 'open' ? (
+                              <div className="mt-1 text-[10px] font-black text-blue-600 uppercase tracking-wide">
+                                ✓ {sent.status === 'closed' ? t('cull.reqClosed') : t('cull.reqDone')}
+                                {sent.actionedBy ? ` · ${sent.actionedBy}` : ''}
+                              </div>
+                            ) : (
+                              <div className="mt-1 text-[10px] font-black text-emerald-600 uppercase tracking-wide">
+                                ✓ {sendTo === TO_HQ ? t('cull.sentHQ') : t('cull.sent')}
+                              </div>
+                            )
                           ) : (
                             <button
                               onClick={() => setAsking({ row, to: sendTo })}
@@ -252,6 +274,11 @@ export default function CullingTab({ t, staffName, flash, nurseryKeys }) {
             });
             setReqs(list);
             setAsking(null);
+            /* Straight up, rather than waiting for the next time PALMS is
+               opened — the whole point of the request is that somebody else
+               is waiting on it. If there is no signal it stays queued on the
+               device and the next sync sends it. */
+            if (added) pushRequests(list).catch(() => {});
             if (flash) flash(added ? t('cull.sentToast', { p: r.plot }) : t('cull.alreadySent', { p: r.plot }));
           }}
         />

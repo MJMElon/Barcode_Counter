@@ -1,9 +1,10 @@
 // Requests raised for the Site Auditor from the Culling Calculator.
 //
-// Stored on the device, like the rest of PALMS. That means the auditor sees
-// them when they open the portal on THIS device; delivering them to another
-// person's phone needs a shared backend (Supabase), which is the natural next
-// step once the flow is agreed.
+// The device's copy is still what the screens read and write — the Culling
+// Calculator is used standing in a plot, and a request must be raisable with
+// no signal. requestsSync.js is the layer either side of it: what is raised
+// here goes up on the next sync, and what the office has done with it comes
+// back down. See that file for why the phone never sends `status`.
 
 const KEY = 'palms_auditor_requests_v1';
 
@@ -13,6 +14,11 @@ export const PURPOSE_CULLING = 'Culling';
 // culling purpose either way; what differs is who has to act on it.
 export const TO_AUDITOR = 'auditor';
 export const TO_HQ = 'hq';
+
+// One per plot per destination per day, on the device and on the server
+// alike — fcportal_palms_requests carries the same rule as UNIQUE
+// (plot_name, send_to, at_date), so the two agree on what a duplicate is.
+export const keyOf = (r) => `${r.plot}|${r.to}|${r.at}`;
 
 export function loadRequests() {
   try {
@@ -32,6 +38,16 @@ function persist(list) {
   }
 }
 
+export function saveRequests(list) {
+  persist(list);
+  return list;
+}
+
+function uid() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+}
+
 // One request per plot per purpose per day — tapping twice by accident should
 // not queue the auditor up with duplicates.
 export function addRequest({ plot, nursery, purpose, to, by, at, details }) {
@@ -39,7 +55,20 @@ export function addRequest({ plot, nursery, purpose, to, by, at, details }) {
   const dup = list.find((r) => r.plot === plot && r.to === to && r.at === at);
   if (dup) return { list, added: false };
   const next = [
-    { id: `${plot}-${to}-${at}-${list.length}`, plot, nursery, purpose, to, by, at, details },
+    {
+      id: `${plot}-${to}-${at}-${list.length}`,
+      // The row's name on the server. Stamped here so a request raised with
+      // no signal keeps the same identity when it finally goes up.
+      uid: uid(),
+      plot,
+      nursery,
+      purpose,
+      to,
+      by,
+      at,
+      details,
+      status: 'open',
+    },
     ...list,
   ];
   persist(next);

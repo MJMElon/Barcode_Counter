@@ -1,6 +1,7 @@
 import { fetchAllRows, supabase } from '../../lib/supabase.js';
 import { newUid } from '../../lib/outbox.js';
 import { loadDB, nurseryOfPlot, saveDB } from './data.js';
+import { syncRequests } from './requestsSync.js';
 
 /**
  * PALMS, off the phone and onto the server.
@@ -185,14 +186,24 @@ export async function pull(db) {
  */
 export async function syncPalms(target) {
   const db = target || loadDB();
+
+  /* Requests ride along on the same round trip, but on their own footing:
+     they live in their own store, not in the DB, and a failure to send the
+     day's activity must not strand a request the Site Auditor is waiting on
+     (nor the other way about). syncRequests swallows its own failures, so
+     this cannot throw. */
+  const reqs = await syncRequests();
+
   try {
     if (ensureUids(db)) saveDB(db);
     const sent = await push(db);
     const got = await pull(db);
     saveDB(db);
-    return { ...sent, ...got };
+    return { ...sent, ...got, requests: reqs || undefined };
   } catch (e) {
     console.warn('[palms] sync skipped:', (e && e.message) || e);
-    return null;
+    // A request that moved is still worth redrawing for, even when the
+    // activity log could not be reached.
+    return reqs ? { logs: 0, history: 0, added: 0, updated: 0, requests: reqs } : null;
   }
 }
