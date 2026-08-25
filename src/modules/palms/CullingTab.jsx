@@ -121,11 +121,11 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
 
   return (
     <div className="max-w-[420px] mx-auto">
-      <div className="bg-black rounded-[2rem] overflow-hidden shadow-2xl border border-[#1f2a38]">
-        {/* The status line: which plot, and where its rate stands before any
-            of today's counting. Apple puts the clock here; the plot is what
-            this calculator is always about, so it takes that place. */}
-        <div className="flex items-center justify-between px-5 pt-4 pb-1">
+      <div className="bg-black rounded-[2rem] overflow-hidden shadow-2xl border border-[#1f2a38] p-3 space-y-2.5">
+        {/* Which plot, and where its rate stands before any of today's
+            counting. Apple puts the clock here; the plot is what this
+            calculator is always about, so it takes that place. */}
+        <div className="flex items-center justify-between px-2 pt-1">
           <button
             onClick={() => setPicking(true)}
             className="flex items-center gap-1.5 text-white font-black text-[15px] cursor-pointer"
@@ -133,59 +133,78 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
             {row ? row.plot : '—'}
             <span className="text-[10px] text-slate-500">▼</span>
           </button>
-          <div className={`text-[13px] font-black tabular-nums ${known && rateNow > CULL_LIMIT ? 'text-rose-400' : 'text-emerald-400'}`}>
-            {known ? fmtPct(rateNow) : '—'}
+          <div className="text-[13px] font-black tabular-nums">
+            <span className="text-slate-500 mr-1">{t('cull.cullShort')} :</span>
+            <span className={known && rateNow > CULL_LIMIT ? 'text-rose-400' : 'text-emerald-400'}>
+              {known ? fmtPct(rateNow) : '—'}
+            </span>
           </div>
         </div>
 
-        {/* The sum, read bottom-up like a calculator: what is standing, what
-            has been counted off it, what that leaves. */}
-        <div className="px-5 pt-6 pb-4 text-right">
-          <div className="text-[11px] font-bold uppercase tracking-widest text-slate-500">
+        {/* Two blocks, because there are two numbers and they are not the
+            same kind of thing: what the plot is holding, and what has been
+            counted off it. Told apart by a panel each rather than a rule
+            between them — a hard border here made the screen busier without
+            making it clearer. */}
+        <div className="bg-[#101013] rounded-2xl px-4 py-3 text-right">
+          <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">
             {t('cull.balance')}
           </div>
-          <div className="text-slate-400 text-[22px] font-light tabular-nums leading-tight">
-            {known ? fmtNum(row.balance) : '—'} <span className="text-slate-600">−</span>
+          <div className="text-slate-300 text-[28px] font-light tabular-nums leading-tight">
+            {known ? fmtNum(row.balance) : '—'}
+          </div>
+        </div>
+
+        <div className="bg-[#101013] rounded-2xl pt-3 pb-2">
+          <div className="px-4 text-right">
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+              {t('cull.selected')}
+            </div>
+            <div className="text-slate-500 text-[13px] font-mono min-h-[18px] truncate">
+              {[...terms, ...(typing === '' ? [] : [typing])].join(' + ') || ' '}
+            </div>
+            <div className="text-white text-[42px] font-light tabular-nums leading-none truncate">
+              {inang ? fmtNum(inang) : '0'}
+            </div>
           </div>
 
-          <div className="text-slate-500 text-[13px] font-mono min-h-[18px] truncate">
-            {[...terms, ...(typing === '' ? [] : [typing])].join(' + ') || ' '}
-          </div>
+          {/* The keypad belongs to the count, so it sits inside its panel
+              rather than floating under the whole card. */}
+          <Keypad onPress={press} />
+        </div>
 
-          <div className="text-white text-[46px] font-light tabular-nums leading-none mt-1 truncate">
-            {known ? fmtNum(left) : '—'}
-          </div>
-
-          <div className="mt-2 text-[12px] font-black tabular-nums">
-            <span className="text-slate-500 uppercase tracking-widest text-[10px] mr-2">
-              {t('cull.estRate')}
-            </span>
+        {/* What the count leaves, and what that means. A strip rather than a
+            third panel: it is the consequence of the two above, not a number
+            of its own. */}
+        <div className="flex items-center justify-between px-4 py-1 text-[12px] font-black tabular-nums">
+          <span>
+            <span className="text-slate-500 uppercase tracking-widest text-[10px] mr-1.5">{t('cull.left')}</span>
+            <span className="text-slate-300">{known ? fmtNum(left) : '—'}</span>
+          </span>
+          <span>
+            <span className="text-slate-500 uppercase tracking-widest text-[10px] mr-1.5">{t('cull.estRate')}</span>
             <span className={!known || !inang ? 'text-slate-600' : rateAfter > CULL_LIMIT ? 'text-rose-400' : 'text-emerald-400'}>
               {known && inang ? fmtPct(rateAfter) : '—'}
             </span>
-          </div>
+          </span>
         </div>
 
-        <Keypad onPress={press} />
-
-        {/* What the count means, and the one button that acts on it. The
-            wording comes from the rule that matched, so a new band added to
-            cullingActions.js appears here with nothing changed. */}
-        <div className="px-4 pb-5 pt-1">
-          <button
-            onClick={raise}
-            disabled={!action || busy}
-            className={`w-full rounded-2xl py-4 font-black text-[13px] uppercase tracking-widest transition-colors ${
-              !action
-                ? 'bg-[#1c1c1e] text-slate-600 cursor-default'
-                : action.tone === 'ok'
-                ? 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer'
-                : 'bg-amber-500 hover:bg-amber-400 text-black cursor-pointer'
-            }`}
-          >
-            {busy ? t('common.saving') : action ? t(action.titleKey) : t('cull.enterCount')}
-          </button>
-        </div>
+        {/* The one button that acts on it. The wording comes from the rule
+            that matched, so a new band added to cullingActions.js appears
+            here with nothing changed. */}
+        <button
+          onClick={raise}
+          disabled={!action || busy}
+          className={`w-full rounded-2xl py-4 font-black text-[13px] uppercase tracking-widest transition-colors ${
+            !action
+              ? 'bg-[#1c1c1e] text-slate-600 cursor-default'
+              : action.tone === 'ok'
+              ? 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer'
+              : 'bg-amber-500 hover:bg-amber-400 text-black cursor-pointer'
+          }`}
+        >
+          {busy ? t('common.saving') : action ? t(action.titleKey) : t('cull.enterCount')}
+        </button>
       </div>
 
       {picking && (
@@ -201,9 +220,12 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
   );
 }
 
-/* The keypad. Digits fill the left, the two things you can do to a running
-   count sit in the orange column on the right, the way a calculator puts its
-   operators. There is no ×, ÷ or −: you are only ever adding up counts. */
+/* The keypad.
+   Digits fill the left; the two things you can do to a running count sit in
+   the orange column, + above =. Both are two rows tall — + reaching from the
+   9 down to the 6 and = from the 3 down to the 00 — so the column is two
+   even halves rather than one small key and one long one. There is no ×, ÷
+   or −: you are only ever adding up counts. */
 function Keypad({ onPress }) {
   const grey = 'bg-[#333336] hover:bg-[#4a4a4d] text-white';
   const dark = 'bg-[#1c1c1e] hover:bg-[#2c2c2e] text-white';
@@ -212,23 +234,20 @@ function Keypad({ onPress }) {
     <button
       key={k}
       onClick={() => onPress(k)}
-      className={`${cls} ${span || ''} h-[58px] rounded-full text-[22px] font-medium tabular-nums transition-colors cursor-pointer active:scale-95`}
+      className={`${cls} ${span || ''} rounded-2xl text-[22px] font-medium tabular-nums transition-colors cursor-pointer active:scale-95`}
     >
       {label}
     </button>
   );
   return (
-    <div className="grid grid-cols-4 gap-2 px-4 pb-3">
-      {key('AC', 'AC', grey)}
-      {key('⌫', 'DEL', grey)}
-      {key('', 'noop', 'bg-transparent cursor-default pointer-events-none')}
-      {key('+', '+', amber)}
+    <div className="grid grid-cols-4 grid-rows-5 gap-2 px-3 pb-1 pt-2 auto-rows-[54px] [&>button]:h-[54px]">
+      {key('AC', 'AC', grey, 'col-span-2')}
+      {key('⌫', 'DEL', grey, 'col-span-2')}
       {['7', '8', '9'].map((d) => key(d, d, dark))}
-      {key('', 'noop2', 'bg-transparent cursor-default pointer-events-none')}
+      {key('+', '+', amber, 'row-span-2 !h-[116px]')}
       {['4', '5', '6'].map((d) => key(d, d, dark))}
-      {key('', 'noop3', 'bg-transparent cursor-default pointer-events-none')}
       {['1', '2', '3'].map((d) => key(d, d, dark))}
-      {key('=', '=', amber, 'row-span-2')}
+      {key('=', '=', amber, 'row-span-2 !h-[116px]')}
       {key('0', '0', dark, 'col-span-2')}
       {key('00', '00', dark)}
     </div>

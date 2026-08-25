@@ -47,6 +47,9 @@ const en = {
 
   // culling calculator (PALMS tab)
   'cull.title': 'Culling Calculator',
+  'cull.cullShort': 'Cull',
+  'cull.selected': 'Selected pokok inang',
+  'cull.left': 'Left',
   'cull.plot': 'Plot',
   'cull.pickPlot': 'Choose a plot',
   'cull.noPlots': 'No plot is at Pengambilan yet.',
@@ -456,6 +459,9 @@ const ms = {
 
   // culling calculator (PALMS tab)
   'cull.title': 'Kalkulator Culling',
+  'cull.cullShort': 'Cull',
+  'cull.selected': 'Pilihan pokok inang',
+  'cull.left': 'Baki tinggal',
   'cull.plot': 'Plot',
   'cull.pickPlot': 'Pilih plot',
   'cull.noPlots': 'Tiada plot pada peringkat Pengambilan.',
