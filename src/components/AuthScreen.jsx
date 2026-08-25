@@ -104,15 +104,13 @@ export default function AuthScreen() {
 
             {recovering ? (
               <>
-                <div className="bk-row">
-                  <span className="bk-tag">{t('auth.newPasswordTitle')}</span>
-                  <input
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    className="bk-write"
-                  />
-                </div>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder={t('auth.newPasswordTitle')}
+                  className="bk-field"
+                />
                 <button onClick={handleUpdatePassword} disabled={busy} className="bk-btn">
                   {busy ? t('auth.updating') : t('auth.savePassword')}
                 </button>
@@ -120,38 +118,34 @@ export default function AuthScreen() {
             ) : (
               <>
                 {mode === 'signup' && (
-                  <div className="bk-row">
-                    <span className="bk-tag">{t('auth.fullName')}</span>
-                    <input
-                      type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      className="bk-write"
-                    />
-                  </div>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder={t('auth.fullName')}
+                    className="bk-field"
+                  />
                 )}
 
-                <div className="bk-row">
-                  <span className="bk-tag">{t('auth.email')}</span>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    autoCapitalize="none"
-                    className="bk-write"
-                  />
-                </div>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoCapitalize="none"
+                  autoComplete="email"
+                  placeholder={t('auth.email')}
+                  className="bk-field"
+                />
 
-                <div className="bk-row">
-                  <span className="bk-tag">{t('auth.password')}</span>
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleMain()}
-                    className="bk-write"
-                  />
-                </div>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleMain()}
+                  autoComplete="current-password"
+                  placeholder={t('auth.password')}
+                  className="bk-field"
+                />
 
                 <button onClick={handleMain} disabled={busy} className="bk-btn">
                   {busy ? t('auth.processing') : mode === 'signup' ? t('auth.signup') : t('auth.login')}
@@ -177,7 +171,6 @@ export default function AuthScreen() {
             )}
           </div>
 
-          <div className="bk-imprint">Mega Jutamas Sdn Bhd · Miri, Sarawak</div>
         </div>
       </div>
 
@@ -190,7 +183,11 @@ export default function AuthScreen() {
            Auditor Portal has not been brought across yet. */
         .bk-page{
           --bk-cover:#a9c5de; --bk-cover-2:#93b3d1; --bk-cover-3:#84a4c3;  /* FC: blue */
-          --bk-ink:#23303f; --bk-print:#9c1c2c; --bk-red:#e23b4b; --bk-red-dark:#a5121f;
+          --bk-ink:#23303f;
+          /* the logotype and the button wear MJM's dark green, not the
+             printer's red the books themselves are stamped with */
+          --bk-green:#1f7a45; --bk-green-2:#155c33; --bk-green-3:#0f4a29; --bk-green-4:#0b3d21;
+          --bk-quiet:rgba(35,48,63,.62);   /* MJM Nursery and the portal line share it */
           --bk-hand:'Caveat','Bradley Hand','Segoe Script','Comic Sans MS',cursive;
 
           position:relative;min-height:100vh;
@@ -242,7 +239,7 @@ export default function AuthScreen() {
         .bk-brand{
           text-align:center;
           font-size:19px;font-weight:900;letter-spacing:.26em;text-transform:uppercase;
-          color:rgba(35,48,63,.62);
+          color:var(--bk-quiet);
           margin-bottom:2px;
         }
         .bk-logo-wrap{display:flex;justify-content:center;margin-bottom:4px}
@@ -251,58 +248,67 @@ export default function AuthScreen() {
              360px screen the cover is ~276px wide inside its padding, which
              27vw comfortably fits, and it stops growing on a tablet. */
           font-family:'Outfit',sans-serif;font-weight:900;font-style:italic;
+          /* main's responsive sizing, kept: the shadow offsets are fixed px,
+             so the centring correction below holds at every size. */
           font-size:clamp(88px,27vw,116px);line-height:.9;letter-spacing:-.02em;
-          color:var(--bk-red);
-          -webkit-text-stroke:1.5px #fff5f6;paint-order:stroke fill;
+          color:var(--bk-green);
+          -webkit-text-stroke:1.5px #f4fbf6;paint-order:stroke fill;
           text-shadow:
-            1px 1px 0 var(--bk-red-dark),2px 2px 0 var(--bk-red-dark),
-            3px 3px 0 var(--bk-red-dark),4px 4px 0 var(--bk-red-dark),
-            5px 5px 0 #8e0f1b,6px 6px 0 #8e0f1b,
-            7px 7px 0 #7a0c17,8px 8px 0 #7a0c17,
-            10px 12px 16px rgba(80,6,14,.4);
-          /* The glyphs are centred, but the shadow only falls down-RIGHT, so
-             the ink looks pushed left of centre. Nudge it back. */
-          transform:rotate(-1.2deg) translateX(4px);
+            1px 1px 0 var(--bk-green-2),2px 2px 0 var(--bk-green-2),
+            3px 3px 0 var(--bk-green-2),4px 4px 0 var(--bk-green-2),
+            5px 5px 0 var(--bk-green-3),6px 6px 0 var(--bk-green-3),
+            7px 7px 0 var(--bk-green-4),8px 8px 0 var(--bk-green-4),
+            10px 12px 16px rgba(6,42,22,.4);
+          /* The glyph box is centred, but the shadow only falls down-RIGHT and
+             shadows do not take up layout, so the INK ends up right of centre.
+             Measured off a render: at 0 the ink's centre of mass sits 8.4px
+             right of the cover's, and every 1px of translate moves it 1px.
+             -7px lands centre of mass and bounding box either side of zero
+             (+1.4 / -1.5), which is as centred as it gets. */
+          transform:translateX(-7px) rotate(-1.2deg);
         }
         .bk-portal{
           margin-top:14px;text-align:center;
           font-size:14px;font-weight:900;letter-spacing:.3em;text-transform:uppercase;
-          color:var(--bk-print);
+          color:var(--bk-quiet);
         }
 
-        /* the fill-in lines, the way the cover asks for your name */
+        /* The cover asks for your name on a ruled line; a phone in a
+           nursery asks for a box big enough to hit with a thumb. Boxes
+           win — drawn freehand, so they still belong on the cover. */
         .bk-lines{margin-top:34px}
-        .bk-row{
-          display:flex;align-items:flex-end;gap:7px;
-          border-bottom:2px dotted rgba(35,48,63,.4);
-          padding-bottom:2px;margin-bottom:17px;
-        }
-        .bk-row:focus-within{border-bottom-color:rgba(35,48,63,.8)}
-        .bk-tag{
-          flex:0 0 auto;
-          font-family:Georgia,'Times New Roman',serif;
-          font-size:15px;font-weight:700;color:var(--bk-print);
-          padding-bottom:5px;white-space:nowrap;text-transform:lowercase;
-        }
-        .bk-tag::first-letter{text-transform:uppercase}
-        .bk-write{
-          flex:1 1 auto;min-width:0;height:34px;
-          border:0;background:transparent;outline:none;
+        .bk-field{
+          display:block;width:100%;height:54px;
+          margin-bottom:13px;padding:0 15px;
+          background:rgba(255,255,255,.6);
+          border:1.5px solid rgba(35,48,63,.32);
+          border-radius:10px 7px 12px 6px / 7px 12px 6px 10px;
           font-family:var(--bk-hand);font-size:23px;color:var(--bk-ink);
-          padding:0 2px;border-radius:0;-webkit-appearance:none;
+          outline:none;-webkit-appearance:none;
+          transition:border-color .15s,box-shadow .15s,background .15s;
+        }
+        .bk-field::placeholder{
+          font-family:'Outfit',sans-serif;
+          font-size:13px;font-weight:700;letter-spacing:.02em;
+          color:rgba(35,48,63,.42);
+        }
+        .bk-field:focus{
+          background:rgba(255,255,255,.82);
+          border-color:var(--bk-green);
+          box-shadow:0 0 0 3px rgba(31,122,69,.16);
         }
 
         .bk-btn{
           width:100%;height:50px;margin-top:22px;
-          background:var(--bk-red-dark);color:#fff3f4;
-          border:2px solid rgba(90,6,14,.9);
+          background:var(--bk-green-2);color:#f2fbf5;
+          border:2px solid rgba(9,58,32,.9);
           border-radius:10px 7px 12px 6px / 7px 12px 6px 10px;
-          box-shadow:3px 3px 0 rgba(70,5,12,.35);
+          box-shadow:3px 3px 0 rgba(7,45,25,.35);
           transform:rotate(-.5deg);
           font-size:13px;font-weight:900;letter-spacing:.2em;text-transform:uppercase;
           cursor:pointer;transition:transform .12s,box-shadow .12s,background .15s;
         }
-        .bk-btn:hover{background:#bd1524}
+        .bk-btn:hover{background:var(--bk-green)}
         .bk-btn:active{transform:rotate(-.5deg) translate(3px,3px);box-shadow:0 0 0}
         .bk-btn:disabled{opacity:.65;cursor:default;transform:rotate(-.5deg)}
 
@@ -313,7 +319,7 @@ export default function AuthScreen() {
           border-bottom:1.5px dashed rgba(35,48,63,.4);
           padding:0 1px;cursor:pointer;
         }
-        .bk-link:hover{color:var(--bk-print);border-bottom-color:rgba(156,28,44,.6)}
+        .bk-link:hover{color:var(--bk-green);border-bottom-color:rgba(31,122,69,.6)}
         .bk-link-right{margin-left:auto}
 
         .bk-note{
@@ -324,11 +330,6 @@ export default function AuthScreen() {
         .bk-ok{color:#12603f;border-bottom-color:rgba(18,96,63,.45)}
         .bk-warn{color:#7a4a06;border-bottom-color:rgba(122,74,6,.45)}
 
-        .bk-imprint{
-          margin-top:20px;text-align:center;
-          font-size:8px;font-weight:700;letter-spacing:.28em;text-transform:uppercase;
-          color:rgba(35,48,63,.35);
-        }
 
         @media (max-width:360px){
           .bk-cover{padding:26px 20px 22px}
