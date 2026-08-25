@@ -68,18 +68,23 @@ export function ManuringIcon({ className = 'w-7 h-7' }) {
 }
 
 /* Weeding — RUMPUT under the knife that cuts it.
-   A real chopping knife rather than a wedge: straight spine, the tip low and
-   forward, the belly curving back to the heel, then a bolster and a handle.
-   The earlier wedge-and-three-bars read as a megaphone. */
+   A cleaver: a broad rectangular blade, a bolster, a handle. Two goes at a
+   tapered chef's knife both came out reading as a megaphone — the taper is
+   the first thing lost when the mark is shrunk to 17px, and without it a
+   pointed blade is just a wedge. A rectangle survives being made small, and
+   the hanging hole says which kind of knife it is. */
 export function WeedingIcon({ className = 'w-7 h-7' }) {
   return (
     <svg {...svg} className={className}>
-      {/* the blade — spine down to the tip, belly curving back to the heel */}
-      <path d="M14 4.2 2.4 7.1c3.4 2.4 7.5 3.1 11.6 2.5Z" />
-      {/* the bolster, where the blade meets the handle */}
-      <rect x="14" y="4.1" width="1.5" height="5.6" rx=".5" />
-      {/* the handle */}
-      <path d="M15.5 4.8h4.2a1.9 1.9 0 0 1 1.9 1.9v.3a1.9 1.9 0 0 1-1.9 1.9h-4.2Z" />
+      {/* the blade, with the hanging hole punched through it */}
+      <path
+        fillRule="evenodd"
+        d="M3.4 3h10.6v7.8H3.4a1.2 1.2 0 0 1-1.2-1.2V4.2A1.2 1.2 0 0 1 3.4 3Zm1.7 1.7a1 1 0 1 0 0 2 1 1 0 0 0 0-2Z"
+      />
+      {/* the handle, straight off the back of the blade. A separate bolster
+          between the two only added a step in the silhouette that read as a
+          gap — the handle looked like it was floating clear of the knife. */}
+      <rect x="13" y="5.5" width="8.8" height="2.8" rx="1.4" />
       <Word text="RUMPUT" y={16.8} size={7.6} w={21.5} />
     </svg>
   );
