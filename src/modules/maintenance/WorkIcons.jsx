@@ -68,21 +68,29 @@ export function ManuringIcon({ className = 'w-7 h-7' }) {
 }
 
 /* Weeding — RUMPUT under the sickle that cuts it.
-   A sabit, which is the tool actually used on grass here. Three goes at a
-   straight knife all failed: a chef's knife lost its taper at 17px and read
-   as a wedge, and a cleaver read as a flag or a luggage tag. A crescent has
-   no straight edge to be mistaken for, so it stays a blade at any size.
+   A sabit / 镰刀: a hooked blade, not a curved one. Three straight knives and
+   a shallow crescent all failed before this. A chef's knife loses its taper
+   at 17px and becomes a wedge; a cleaver reads as a flag; and a crescent
+   with only a gentle bow reads as a bent stick, because nothing about it
+   says the curve is the point.
 
-   The belly is what does the work — the first crescents were drawn thin and
-   came out as a bent stick. It runs from a point at the tip to a blunt heel
-   where the handle takes over. */
+   A hook does. The blade sweeps 210 degrees, so the shape closes back on
+   itself and cannot be read as anything but a hook, and the handle carries
+   on along the tangent at the heel rather than being dropped on top of the
+   blade — sitting it at the heel put it lying across the inside of the hook.
+
+   The outline is generated rather than drawn by hand: the arc is sampled at
+   26 steps with the width tapering from nothing at the tip to full at the
+   heel, which is a shape that can be reasoned about in numbers instead of
+   guessed at with bezier handles. 26 steps is indistinguishable from 44 at
+   the sizes this is read, and 40% less path. */
 export function WeedingIcon({ className = 'w-7 h-7' }) {
   return (
     <svg {...svg} className={className}>
       {/* the blade */}
-      <path d="M2.4 11.4C3.2 5.6 8.2 1.9 15.6 2.8l-.4 4.4c-4.8.6-9.2 2.2-12.8 4.2Z" />
-      {/* the handle, off the heel and following the line of the blade */}
-      <rect x="14.4" y="2.4" width="7.2" height="3.4" rx="1.7" transform="rotate(14 18 4.1)" />
+      <path d="M6.4 10.2 L6.8 10.9 L7.2 11.5 L7.7 12.0 L8.3 12.5 L9.0 12.8 L9.7 13.1 L10.4 13.2 L11.2 13.3 L11.9 13.3 L12.6 13.1 L13.3 12.8 L14.0 12.5 L14.6 12.1 L15.1 11.5 L15.6 11.0 L16.0 10.3 L16.2 9.6 L16.4 8.9 L16.5 8.1 L16.5 7.4 L16.3 6.7 L16.1 6.0 L15.8 5.3 L15.3 4.7 L14.8 4.1 L14.2 3.7 L12.2 6.6 L12.4 6.7 L12.7 6.8 L12.9 7.0 L13.1 7.2 L13.3 7.4 L13.5 7.7 L13.6 8.1 L13.7 8.4 L13.7 8.8 L13.7 9.2 L13.6 9.6 L13.4 10.0 L13.2 10.4 L12.9 10.7 L12.5 11.0 L12.1 11.3 L11.7 11.6 L11.2 11.7 L10.6 11.8 L10.1 11.8 L9.5 11.8 L8.9 11.6 L8.3 11.4 L7.7 11.1 L7.1 10.7 L6.4 10.2 Z" />
+      {/* the handle, continuing off the heel */}
+      <rect x="13.2" y="3.7" width="6.6" height="2.9" rx="1.45" transform="rotate(-145.0 13.2 5.1)" />
       <Word text="RUMPUT" y={16.8} size={7.6} w={21.5} />
     </svg>
   );
