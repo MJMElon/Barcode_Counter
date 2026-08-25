@@ -105,50 +105,116 @@ export default function TopNav({
     ? 'text-slate-400 hover:text-red-400 bg-[#111821] border-[#1f2a38]'
     : 'text-slate-500 hover:text-red-500 bg-slate-50 border-slate-200';
 
+  /* The 555 wordmark: the house name opens out around the book, so it reads
+     MJM 555 Nursery on one line with 555 the biggest thing in the bar. The
+     words come from `title` rather than being written in here, so the house
+     name stays one prop and the mark follows it. */
+  const [houseFirst, ...houseRest] = String(title).split(' ');
+  const wordCls = `font-black ${titleCls} text-[12px] sm:text-[16px] tracking-[0.1em] uppercase`;
+  const wordmark = (
+    <div className="min-w-0">
+      <div className="flex items-baseline justify-center gap-[3px] sm:gap-1.5">
+        <span className={wordCls}>{houseFirst}</span>
+        <span className="font-black italic text-[#065f46] text-[26px] sm:text-[34px] leading-none tracking-tight">
+          555
+        </span>
+        <span className={wordCls}>{houseRest.join(' ')}</span>
+      </div>
+      {/* nowrap: the wide tracking used to break "FC PORTAL" onto two lines
+          on a phone, which then collided with the staff name */}
+      <div className="font-black text-emerald-600 text-[10px] uppercase tracking-[0.18em] sm:tracking-[0.25em] leading-none mt-1 whitespace-nowrap text-center">
+        {subtitle}
+      </div>
+    </div>
+  );
+
+  const leftControls = (
+    <>
+      {portal && (
+        <a
+          href={MAIN_PORTAL_URL}
+          onClick={goToPortal}
+          title={t('common.moduleSelection')}
+          aria-label={t('common.moduleSelection')}
+          className={`${backCls} grid place-items-center rounded-full w-9 h-9 border ${dark ? 'border-[#1f2a38]' : 'border-slate-200'} transition-colors no-underline shrink-0 cursor-pointer`}
+        >
+          <BackArrow />
+        </a>
+      )}
+      {back && (
+        <Link
+          to={back}
+          title={t('common.back')}
+          aria-label={t('common.back')}
+          className={`grid place-items-center ${backCls} rounded-lg w-9 h-9 transition-colors no-underline shrink-0`}
+        >
+          <BackArrow />
+        </Link>
+      )}
+    </>
+  );
+
+  const rightControls = (
+    <>
+      {/* The staff name is dropped on phones. It was competing with the
+          title for a 360px bar and squeezing it out of view entirely. */}
+      {user && (
+        <span className={`hidden sm:inline text-[11px] font-bold ${userCls} truncate`}>
+          {t('dash.welcome', { name: user })}
+        </span>
+      )}
+      {onSettings && (
+        <button
+          onClick={onSettings}
+          title={t('set.title')}
+          aria-label={t('set.title')}
+          className={`grid place-items-center rounded-full w-9 h-9 border transition-colors cursor-pointer shrink-0 ${
+            settingsOn
+              ? 'bg-emerald-600 border-emerald-600 text-white'
+              : `${backCls} ${dark ? 'border-[#1f2a38]' : 'border-slate-200'}`
+          }`}
+        >
+          <CogIcon />
+        </button>
+      )}
+      <LangToggle dark={dark} />
+      {/* Icon only on phones — the words cost ~55px the title needs more. */}
+      <button
+        onClick={handleLogout}
+        title={t('common.signOut')}
+        aria-label={t('common.signOut')}
+        className={`text-[10px] font-bold ${signOutCls} uppercase tracking-wider sm:tracking-widest px-2.5 sm:px-3 py-2 rounded-full border cursor-pointer transition-colors shrink-0`}
+      >
+        <span className="hidden sm:inline">{t('common.signOut')}</span>
+        <span className="sm:hidden text-[13px] leading-none">⏻</span>
+      </button>
+    </>
+  );
+
+  /* Two layouts. `book` centres the wordmark in the bar with a three-column
+     grid — equal flexible columns either side, so the mark sits on the bar's
+     centre line rather than in whatever space the controls leave over. Every
+     other page keeps the plain row: the page name belongs beside the back
+     arrow you came in through, not floating in the middle. */
+  if (book) {
+    return (
+      <div
+        className={`${bar} border-b px-3 sm:px-6 py-2.5 grid grid-cols-[1fr_auto_1fr] items-center gap-2 sticky top-0 z-30 shadow-sm`}
+      >
+        <div className="flex items-center gap-2 sm:gap-3 justify-self-start">{leftControls}</div>
+        {wordmark}
+        <div className="flex items-center gap-2 sm:gap-3 justify-self-end">{rightControls}</div>
+      </div>
+    );
+  }
+
   return (
     <div className={`${bar} border-b px-3 sm:px-6 py-3 flex justify-between items-center gap-2 sticky top-0 z-30 shadow-sm`}>
       <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-        {portal && (
-          <a
-            href={MAIN_PORTAL_URL}
-            onClick={goToPortal}
-            title={t('common.moduleSelection')}
-            aria-label={t('common.moduleSelection')}
-            className={`${backCls} grid place-items-center rounded-full w-9 h-9 border ${dark ? 'border-[#1f2a38]' : 'border-slate-200'} transition-colors no-underline shrink-0 cursor-pointer`}
-          >
-            <BackArrow />
-          </a>
-        )}
-        {back && (
-          <Link
-            to={back}
-            title={t('common.back')}
-            aria-label={t('common.back')}
-            className={`grid place-items-center ${backCls} rounded-lg w-9 h-9 transition-colors no-underline shrink-0`}
-          >
-            <BackArrow />
-          </Link>
-        )}
+        {leftControls}
         {subtitle ? (
           <div className="leading-tight min-w-0">
-            {/* `book` stacks the bar the way the login cover reads: the house
-                name, the 555 book, then the portal it opens. Only the
-                dashboard asks for it — an inner page puts its own name on the
-                top line so a Field Conductor can see which screen they are
-                on, and a third row there would push the page title down on
-                every screen for branding they have already seen. */}
-            <div
-              className={`font-black ${titleCls} truncate ${
-                book ? 'text-[13px] sm:text-base tracking-[0.14em] uppercase' : 'text-sm sm:text-lg'
-              }`}
-            >
-              {title}
-            </div>
-            {book && (
-              <div className="font-black italic text-[#e23b4b] text-[15px] sm:text-[18px] leading-none tracking-tight my-0.5">
-                555
-              </div>
-            )}
+            <div className={`font-black ${titleCls} text-sm sm:text-lg truncate`}>{title}</div>
             {/* nowrap: the wide tracking used to break "FC PORTAL" onto two
                 lines on a phone, which then collided with the staff name */}
             <div className="font-black text-emerald-600 text-[10px] uppercase tracking-[0.18em] sm:tracking-[0.25em] leading-none mt-0.5 whitespace-nowrap truncate">
@@ -160,40 +226,7 @@ export default function TopNav({
         )}
       </div>
 
-      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-        {/* The staff name is dropped on phones. It was competing with the
-            title for a 360px bar and squeezing it out of view entirely. */}
-        {user && (
-          <span className={`hidden sm:inline text-[11px] font-bold ${userCls} truncate`}>
-            {t('dash.welcome', { name: user })}
-          </span>
-        )}
-        {onSettings && (
-          <button
-            onClick={onSettings}
-            title={t('set.title')}
-            aria-label={t('set.title')}
-            className={`grid place-items-center rounded-full w-9 h-9 border transition-colors cursor-pointer shrink-0 ${
-              settingsOn
-                ? 'bg-emerald-600 border-emerald-600 text-white'
-                : `${backCls} ${dark ? 'border-[#1f2a38]' : 'border-slate-200'}`
-            }`}
-          >
-            <CogIcon />
-          </button>
-        )}
-        <LangToggle dark={dark} />
-        {/* Icon only on phones — the words cost ~55px the title needs more. */}
-        <button
-          onClick={handleLogout}
-          title={t('common.signOut')}
-          aria-label={t('common.signOut')}
-          className={`text-[10px] font-bold ${signOutCls} uppercase tracking-wider sm:tracking-widest px-2.5 sm:px-3 py-2 rounded-full border cursor-pointer transition-colors shrink-0`}
-        >
-          <span className="hidden sm:inline">{t('common.signOut')}</span>
-          <span className="sm:hidden text-[13px] leading-none">⏻</span>
-        </button>
-      </div>
+      <div className="flex items-center gap-2 sm:gap-3 shrink-0">{rightControls}</div>
     </div>
   );
 }
