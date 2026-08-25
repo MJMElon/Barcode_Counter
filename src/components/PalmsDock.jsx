@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useLang } from '../context/LanguageContext.jsx';
 import { canPalms, visibleNurseries } from '../lib/access.js';
 import { NURSERIES, keysOfPlot, loadDB, plotsOf, tickedToday } from '../modules/palms/data.js';
 import { applyCachedOfficeConfig, refreshOfficeConfig } from '../modules/palms/officeConfig.js';
+import PalmsWindow from './PalmsWindow.jsx';
 
 /**
  * The PALMS train — a floating button, not a card in a list.
@@ -139,12 +140,12 @@ function Train({ steaming }) {
 export default function PalmsDock() {
   const { permissions } = useAuth();
   const { t } = useLang();
-  const navigate = useNavigate();
   const location = useLocation();
 
   const [pos, setPos] = useState(() => null);   // set on mount, once the window is measurable
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [dragging, setDragging] = useState(false);
+  const [open, setOpen] = useState(false);
   const drag = useRef(null);
 
   /* Keyed on the nurseries rather than on the permissions OBJECT. The auth
@@ -217,7 +218,9 @@ export default function PalmsDock() {
     drag.current = null;
     setDragging(false);
     if (!d) return;
-    if (d.moved < DRAG_SLOP) { navigate('/palms'); return; }
+    // A tap opens the window over whatever screen this is, rather than
+    // navigating away from it.
+    if (d.moved < DRAG_SLOP) { setOpen(true); return; }
     setPos((p) => {
       const next = clamp(p);
       try { localStorage.setItem(POS_KEY, JSON.stringify(next)); } catch (e) { /* private mode */ }
@@ -237,6 +240,7 @@ export default function PalmsDock() {
     : t('dock.left', { n: left, total: progress.total });
 
   return (
+    <>
     <button
       type="button"
       onPointerDown={onPointerDown}
@@ -274,5 +278,10 @@ export default function PalmsDock() {
         </span>
       )}
     </button>
+
+    {/* The engine has to react as the last plot is keyed in, not when the
+        window is shut — onDayChange fires on every save inside it. */}
+    {open && <PalmsWindow onClose={() => { setOpen(false); refresh(); }} onDayChange={refresh} />}
+    </>
   );
 }

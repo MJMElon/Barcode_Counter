@@ -217,8 +217,12 @@ export function nurseryOfPlot(p) {
 export function activityByN(n) {
   return ACTIVITIES.find((a) => a.n === n);
 }
+/* Every ideal-days read goes through here, so this is where a stage the
+   office has since removed or renumbered stops being a crash. An entry keeps
+   the ideal it was started with (log entries carry their own `ideal`); this
+   is only for starting a new one, and one day is a safe floor. */
 export function durFor(pid, act) {
-  return act.days;
+  return act && act.days != null ? act.days : 1;
 }
 
 function fmt(d) {
@@ -390,14 +394,24 @@ export function recordHistory(db, { key, actN, acts, by, at, demo }) {
 }
 
 /* ---------- sample data ----------
-   Built to be checked rather than to look plausible: every activity from 1 to
-   11 is represented, and the three statuses (on schedule, needs attention,
-   overdue) all appear, so the pipeline, the stat cards and the filters each
-   have something to show. Prior stages are back-filled with sensible dates and
-   written into the history, giving the date filter about a month to look
-   through. */
+   Built to be checked rather than to look plausible: every stage the office
+   has configured is represented, and the three statuses (on schedule, needs
+   attention, overdue) all appear, so the pipeline, the stat cards and the
+   filters each have something to show. Prior stages are back-filled with
+   sensible dates and written into the history, giving the date filter about a
+   month to look through. */
 function randInt(a, b) {
   return a + Math.floor(Math.random() * (b - a + 1));
+}
+
+/* The last two stage numbers — growing on, and collection. "Needs attention"
+   only means anything on those two: an earlier stage is measured in days and
+   is simply on schedule or late. Read rather than written as 10 and 11,
+   because how many stages there are is the office's to decide. */
+function lastTwo() {
+  const n = ACTIVITIES.length;
+  return [(ACTIVITIES[n - 2] || ACTIVITIES[n - 1] || { n: -1 }).n,
+          (ACTIVITIES[n - 1] || { n: -1 }).n];
 }
 
 // mood: 'ontrack' | 'overdue' | 'soon'
@@ -409,8 +423,8 @@ function seedUnit(db, key, actN, mood, by) {
   let curStart;
   if (mood === 'overdue') {
     curStart = addDays(today, -(idealC + randInt(1, 6)));
-  } else if (mood === 'soon' && (actN === 10 || actN === 11)) {
-    const window = actN === 11 ? 7 : 30;
+  } else if (mood === 'soon' && (actN === lastTwo()[0] || actN === lastTwo()[1])) {
+    const window = actN === lastTwo()[1] ? 7 : 30;
     curStart = addDays(today, -(idealC - randInt(1, window - 1)));
   } else {
     curStart = addDays(today, -randInt(0, Math.max(0, Math.min(20, idealC - 1))));
@@ -475,11 +489,20 @@ function seedUnit(db, key, actN, mood, by) {
 // Fixed stages for the multi-area plots so the weighted label has something
 // to show: B1 and U8 land on a Kosong/Pengambilan mix, B4 on Membesar with
 // Pengambilan.
-const MULTI_PLAN = {
-  B1: { A: 5, B: 11 },
-  B4: { A: 10, B: 11 },
-  U8: { A: 11, B: 11, C: 4 },
+/* Fixed stages for the multi-area demo plots, as positions in whatever list
+   the office has configured: `last` is collection, `mid` something growing,
+   `early` something at the start. Written as names rather than the numbers
+   5/10/11, which only meant anything while the list was fixed at eleven. */
+const demoN = (which) => {
+  const n = ACTIVITIES.length;
+  const pick = { last: n - 1, mid: Math.max(0, n - 2), early: Math.min(3, n - 1) }[which];
+  return (ACTIVITIES[pick] || ACTIVITIES[n - 1] || { n: 1 }).n;
 };
+const MULTI_PLAN = () => ({
+  B1: { A: demoN('early'), B: demoN('last') },
+  B4: { A: demoN('mid'),   B: demoN('last') },
+  U8: { A: demoN('last'),  B: demoN('last'), C: demoN('early') },
+});
 
 export function seedSample() {
   const db = freshDB();
@@ -495,8 +518,9 @@ export function seedSample() {
         const key = a ? aKey(pid, a) : pid;
         // Cycle the activities so all eleven are covered, and bias the
         // "needs attention" mood onto the two stages that can show it.
-        const planned = a && MULTI_PLAN[pid] ? MULTI_PLAN[pid][a] : null;
-        const actN = planned || (n % 11) + 1;
+        const plan = MULTI_PLAN();
+        const planned = a && plan[pid] ? plan[pid][a] : null;
+        const actN = planned || ACTIVITIES[n % ACTIVITIES.length].n;
         let mood = moods[n % 3];
         if (mood === 'soon' && actN < 10) mood = 'ontrack';
         if (actN >= 10 && n % 4 === 0) mood = 'soon';
