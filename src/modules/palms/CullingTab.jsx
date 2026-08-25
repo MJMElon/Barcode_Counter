@@ -9,6 +9,7 @@ import {
 } from './cullingData.js';
 import { CULL_LIMIT, actionFor, caseBody } from './cullingActions.js';
 import { cullingScopePlots, todayStr } from './data.js';
+import { syncPalms } from './sync.js';
 import { raiseCase } from '../../lib/nelos.js';
 
 /**
@@ -34,10 +35,16 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
   const [, setTick] = useState(0);
   const refresh = () => setTick((n) => n + 1);
 
-  // Every plot the FC may see that PALMS says is at Pengambilan. No nursery
-  // picker: which nurseries a person works is on their user access now, so
-  // asking them again on this screen was asking a question already answered.
-  const scope = useMemo(() => cullingScopePlots(), []);
+  /* Every plot the FC may see that PALMS says is at Pengambilan. No nursery
+     picker: which nurseries a person works is on their user access now, so
+     asking them again on this screen was asking a question already answered.
+
+     PALMS is pulled first. While the calculator was a tab inside PALMS it
+     inherited the module's sync — you could not reach the tab without PALMS
+     having already read the server. On its own page nothing did, so the plot
+     list was whatever happened to be on this phone: a stale copy from the
+     last visit, and never a status somebody else keyed in this morning. */
+  const [scope, setScope] = useState(() => cullingScopePlots());
   const plots = useMemo(() => {
     const out = [];
     nurseryKeys.forEach((nk) => (data[nk] || []).forEach((r) => {
@@ -52,9 +59,14 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
   const [typing, setTyping] = useState('');    // the one being keyed now
   const [busy, setBusy] = useState(false);
 
-  // Figures come off the Seedling Stock ledger. Best effort: with no signal
-  // the calculator still runs on whatever was cached last time.
-  useEffect(() => { refreshFigures().then((ok) => ok && refresh()); }, []);
+  // Both reads are best effort: with no signal the calculator still runs on
+  // whatever was cached last time rather than showing an empty screen.
+  useEffect(() => {
+    let live = true;
+    syncPalms().then(() => { if (live) setScope(cullingScopePlots()); });
+    refreshFigures().then((ok) => { if (live && ok) refresh(); });
+    return () => { live = false; };
+  }, []);
 
   const row = plots.find((p) => p.plot === plotId) || plots[0] || null;
   useEffect(() => { if (!plotId && row) setPlotId(row.plot); }, [row, plotId]);

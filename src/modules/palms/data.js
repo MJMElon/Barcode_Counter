@@ -561,7 +561,13 @@ function pengambilanN() {
 export function cullingScopePlots() {
   const db = loadDB();
   const target = pengambilanN();
-  const inScope = (key) => currentEntries(db, key).some((e) => e.actN === target);
+  /* !e.demo matters here. A fresh install seeds itself with generated
+     stages so there is something to look at, and one in eleven of them
+     lands on Pengambilan — which put invented plots in front of a Field
+     Conductor on a screen whose button raises a real case to an auditor.
+     Demo entries are already flagged for sync.js; the calculator has the
+     same reason to refuse them. */
+  const inScope = (key) => currentEntries(db, key).some((e) => e.actN === target && !e.demo);
   const set = new Set();
   Object.keys(NURSERIES).forEach((nk) =>
     plotsOf(nk).forEach((pid) => {
