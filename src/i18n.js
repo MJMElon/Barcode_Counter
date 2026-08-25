@@ -273,9 +273,12 @@ const en = {
 
   // maintenance board (dashboard summary)
   'mtb.title': 'Maintenance Status',
+  'mtb.schedule': 'Programme schedule',
+  'mtb.prevWeek': 'Previous week',
+  'mtb.nextWeek': 'Next week',
   'mtb.donePct': '{pct}% done',
   'mtb.none': 'Not due',
-  'mtb.footer': 'This month · weekly plan',
+  'mtb.footer': 'Open the weekly plan',
   'mtb.cached': 'Offline · cached',
   'mtb.unavailable': 'Schedule unavailable',
 
@@ -708,9 +711,12 @@ const ms = {
 
   // maintenance board (dashboard summary)
   'mtb.title': 'Status Penyelenggaraan',
+  'mtb.schedule': 'Jadual program',
+  'mtb.prevWeek': 'Minggu sebelum',
+  'mtb.nextWeek': 'Minggu seterusnya',
   'mtb.donePct': '{pct}% siap',
   'mtb.none': 'Tiada',
-  'mtb.footer': 'Bulan ini · jadual mingguan',
+  'mtb.footer': 'Buka jadual mingguan',
   'mtb.cached': 'Luar talian · cache',
   'mtb.unavailable': 'Jadual tiada',
 

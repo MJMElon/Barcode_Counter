@@ -19,11 +19,36 @@ import {
   isDone as isJobDone,
   mergeWeekTasks,
   monthLabelOf,
+  weekDates,
+  weekOfDate,
 } from '../modules/maintenance/schedule.js';
 import { tintOf } from '../modules/maintenance/tints.js';
 import WorkIcon from '../modules/maintenance/WorkIcons.jsx';
 
-const CACHE_KEY = 'maintenance_board_month';
+const CACHE_KEY = 'maintenance_board_month_v2';
+
+/** One week-stepper arrow. Greys out at the ends of the month instead of
+    disappearing, so the control does not change shape as you move. */
+function NavArrow({ dir, disabled, onClick, label }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={label}
+      aria-label={label}
+      className={`grid place-items-center w-7 h-7 rounded-full border shrink-0 transition-colors ${
+        disabled
+          ? 'border-teal-100 text-teal-200 cursor-default'
+          : 'border-teal-300 text-teal-700 hover:bg-teal-100 cursor-pointer'
+      }`}
+    >
+      <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="3"
+        strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        {dir === 'prev' ? <path d="m15 5-7 7 7 7" /> : <path d="m9 5 7 7-7 7" />}
+      </svg>
+    </button>
+  );
+}
 
 /**
  * A job's completion as the ring around its icon.
@@ -91,6 +116,9 @@ export default function MaintenanceBoard() {
   // A restricted user must be summed over their own nurseries only, exactly
   // as the module scopes them — otherwise the front page quotes a total for
   // plots they are not allowed to see.
+  // Opens on the week you are actually in; stepping is per-visit, not saved.
+  const [week, setWeek] = useState(() => weekOfDate(todayStr()) || 1);
+
   const allowed = allowedNurseries(permissions);
   const allowedSig = allowed === null ? '*' : [...allowed].sort().join('|');
 
@@ -120,23 +148,27 @@ export default function MaintenanceBoard() {
         const schedule = await loadSchedules(keys, month);
         const all = withQueued(records, queued);
 
-        const totals = {};
-        const done = {};
-        WORK_TYPES.forEach((wt) => { totals[wt.key] = 0; done[wt.key] = 0; });
+        // Kept week by week rather than summed. The board shows one week at
+        // a time and you step between them, so a month-wide total would have
+        // to be un-summed again to answer "what is due now".
+        const byWeek = {};
         WEEKS.forEach((w) => {
           const tasks = mergeWeekTasks(schedule, w);
+          const totals = {};
+          const done = {};
           WORK_TYPES.forEach((wt) => {
             const list = tasks[wt.key] || [];
-            totals[wt.key] += list.length;
-            done[wt.key] += list.filter((x) =>
+            totals[wt.key] = list.length;
+            done[wt.key] = list.filter((x) =>
               isJobDone(all, {
                 workTypeKey: wt.key, plot: x.plot, chemical: x.chemical, week: w, month,
               })
             ).length;
           });
+          byWeek[w] = { totals, done };
         });
 
-        const next = { totals, done, month, scheduled: schedule.length > 0 };
+        const next = { byWeek, month, scheduled: schedule.length > 0 };
         if (!live) return;
         setSum(next);
         setUpdatedAt(Date.now());
@@ -156,18 +188,64 @@ export default function MaintenanceBoard() {
   // nothing to report — and an empty widget is worse than no widget. Keep it
   // out of the way until there is a number to show.
   const anyWork = useMemo(
-    () => !!sum && WORK_TYPES.some((wt) => (sum.totals[wt.key] || 0) > 0),
+    () =>
+      !!sum &&
+      WEEKS.some((w) =>
+        WORK_TYPES.some((wt) => ((sum.byWeek?.[w]?.totals || {})[wt.key] || 0) > 0)
+      ),
     [sum]
   );
   if (sum && !anyWork) return null;
 
+  const thisWeek = weekOfDate(todayStr());
+  const wk = (sum && sum.byWeek && sum.byWeek[week]) || { totals: {}, done: {} };
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden mb-4 shadow-[0_4px_16px_rgba(0,0,0,.06)]">
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-200 bg-teal-50">
-        <span className="font-black uppercase tracking-widest text-[11px] sm:text-xs text-teal-800 truncate">
-          🛠️ {t('mtb.title')}
-        </span>
-        <span className="text-[10px] font-black text-teal-700 shrink-0">{month}</span>
+      <div className="px-4 py-2.5 border-b border-slate-200 bg-teal-50">
+        <div className="flex items-center justify-between gap-2">
+          <span className="font-black uppercase tracking-widest text-[11px] sm:text-xs text-teal-800 truncate">
+            🛠️ {t('mtb.title')}
+          </span>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-[10px] font-black text-teal-700">{month}</span>
+            {/* The programme schedule. Points at the Maintenance module, which
+                is where the month's plan actually lives today — repoint it at
+                a schedule view here once there is one. */}
+            <Link
+              to="/maintenance"
+              title={t('mtb.schedule')}
+              aria-label={t('mtb.schedule')}
+              className="grid place-items-center w-6 h-6 rounded-full border border-teal-300 text-teal-700 text-[11px] font-black italic no-underline hover:bg-teal-100 transition-colors"
+            >
+              i
+            </Link>
+          </div>
+        </div>
+
+        {/* Which week. The arrows stop at the ends rather than wrapping —
+            week 4 rolling round to week 1 reads as the month having changed. */}
+        <div className="flex items-center justify-between gap-2 mt-2">
+          <NavArrow
+            dir="prev"
+            disabled={week <= WEEKS[0]}
+            onClick={() => setWeek((w) => Math.max(WEEKS[0], w - 1))}
+            label={t('mtb.prevWeek')}
+          />
+          <div className="text-center leading-tight min-w-0">
+            <div className="text-[12px] font-black text-teal-800 uppercase tracking-wide">
+              {t('mt.weekN', { n: week })}
+              {week === thisWeek && <span className="text-teal-600"> · {t('mt.thisWeek')}</span>}
+            </div>
+            <div className="text-[10px] font-bold text-teal-600">{weekDates(week, month)}</div>
+          </div>
+          <NavArrow
+            dir="next"
+            disabled={week >= WEEKS[WEEKS.length - 1]}
+            onClick={() => setWeek((w) => Math.min(WEEKS[WEEKS.length - 1], w + 1))}
+            label={t('mtb.nextWeek')}
+          />
+        </div>
       </div>
 
       {!sum ? (
@@ -181,8 +259,8 @@ export default function MaintenanceBoard() {
               shorter than the stack of bars it replaced. */}
           <div className="grid grid-cols-4 gap-1.5 sm:gap-3 p-3">
             {WORK_TYPES.map((wt) => {
-              const total = (sum.totals[wt.key] || 0);
-              const doneN = (sum.done[wt.key] || 0);
+              const total = wk.totals[wt.key] || 0;
+              const doneN = wk.done[wt.key] || 0;
               const pct = total ? Math.round((doneN / total) * 100) : 0;
               const clear = total > 0 && doneN >= total;
               const tint = tintOf(wt.key);
