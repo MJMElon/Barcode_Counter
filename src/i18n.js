@@ -177,6 +177,8 @@ const en = {
   'set.addRule': 'Add activity',
   'set.removeRule': 'Remove',
   'set.attnNote': 'Now: {list}',
+  'set.officeOwned': 'Which plots exist, and which statuses you can choose, are set by the office — not on this phone. One list has to be true for everybody.',
+  'set.officeWhere': 'MJM AI System → Nursery Operation Management → Life of Plot → Status Stages (plots: Seedling Stock Management)',
   'set.resetAll': 'Reset settings to default',
   'set.reset': 'Settings reset to default',
 
@@ -610,6 +612,8 @@ const ms = {
   'set.addRule': 'Tambah aktiviti',
   'set.removeRule': 'Buang',
   'set.attnNote': 'Sekarang: {list}',
+  'set.officeOwned': 'Plot yang wujud, dan status yang boleh dipilih, ditetapkan oleh pejabat — bukan pada telefon ini. Satu senarai mesti sama untuk semua orang.',
+  'set.officeWhere': 'MJM AI System → Nursery Operation Management → Life of Plot → Status Stages (plot: Seedling Stock Management)',
   'set.resetAll': 'Set semula tetapan asal',
   'set.reset': 'Tetapan diset semula',
 

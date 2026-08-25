@@ -253,6 +253,17 @@ export default function SettingsTab({ db, t, flash, refresh }) {
             <span className="shrink-0 text-slate-300 text-xl font-black">›</span>
           </button>
         ))}
+        {/* Two things people look for in here are not here, and saying so is
+            cheaper than letting somebody hunt. Both are the office's: the same
+            list has to be true for every phone, which a per-device setting
+            can never be. */}
+        <div className="bg-sky-50 border border-sky-200 rounded-2xl px-4 py-3.5">
+          <p className="text-[12px] text-sky-900 leading-relaxed">
+            {t('set.officeOwned')}
+          </p>
+          <p className="text-[11px] font-bold text-sky-700 mt-1.5">{t('set.officeWhere')}</p>
+        </div>
+
         <div className="text-center pt-1">
           <button
             onClick={resetAll}

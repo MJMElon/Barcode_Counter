@@ -3,6 +3,7 @@ import EntryTab from './EntryTab.jsx';
 import SettingsTab from './SettingsTab.jsx';
 import { clearAll, seedDemo } from './demo.js';
 import { syncPalms } from './sync.js';
+import { applyCachedOfficeConfig, refreshOfficeConfig } from './officeConfig.js';
 import TopNav from '../../components/TopNav.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { canPalms, visibleNurseries } from '../../lib/access.js';
@@ -31,6 +32,13 @@ export default function PalmsModule() {
   // The DB is a plain mutable object persisted to localStorage; a tick
   // counter re-renders after each mutation (same pattern as the source app's
   // re-render calls).
+  /* Which plots exist and which statuses can be chosen are the office's, not
+     this app's. The cache is applied before the first render so the screen
+     never flashes the built-in list first; the server is asked straight
+     after, in the same effect as the sync. */
+  const cfgRef = useRef(false);
+  if (!cfgRef.current) { applyCachedOfficeConfig(); cfgRef.current = true; }
+
   const dbRef = useRef(null);
   if (!dbRef.current) dbRef.current = loadDB();
   const db = dbRef.current;
@@ -46,6 +54,7 @@ export default function PalmsModule() {
      Demo entries are flagged and never sent (see sync.js). */
   useEffect(() => {
     let live = true;
+    refreshOfficeConfig().then((changed) => { if (live && changed) refresh(); });
     syncPalms(db).then((r) => {
       if (!live) return;
       if (r) refresh();

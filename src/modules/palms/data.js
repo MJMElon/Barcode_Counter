@@ -10,10 +10,13 @@ import { loadSettings } from './settings.js';
 // sync.js is the layer either side of it: what is here goes up to
 // fcportal_palms_plot_logs, and what other people recorded comes back down.
 
+/* The nurseries and, once the office has been read, the exact plots in each.
+   `count` is only the fallback shape used before shared_plots has answered —
+   see applyOfficeConfig() and officeConfig.js. */
 export const NURSERIES = {
-  BNN: { label: 'BNN', prefix: 'B', count: 14 },
-  UNN1: { label: 'UNN1', prefix: 'U', count: 18 },
-  UNN2: { label: 'UNN2', prefix: 'N', count: 20 },
+  BNN: { label: 'BNN', prefix: 'B', count: 14, plots: null },
+  UNN1: { label: 'UNN1', prefix: 'U', count: 18, plots: null },
+  UNN2: { label: 'UNN2', prefix: 'N', count: 20, plots: null },
 };
 
 // Activity names are nursery domain vocabulary and stay as-is in both
@@ -166,7 +169,46 @@ export function saveDB(db) {
 /* ---------- helpers ---------- */
 export function plotsOf(nk) {
   const n = NURSERIES[nk];
+  if (!n) return [];
+  // The office's list once it has been read; the generated one until then, so
+  // a portal that cannot reach the server still has plots to show.
+  if (n.plots && n.plots.length) return n.plots;
   return Array.from({ length: n.count }, (_, i) => n.prefix + (i + 1));
+}
+
+/** The last stage of the cycle, whatever the office has called it. */
+export const lastAct = () => ACTIVITIES[ACTIVITIES.length - 1] || null;
+/** The first. Both are read rather than assumed, because the office decides
+    how many stages there are now. */
+export const firstAct = () => ACTIVITIES[0] || null;
+
+/**
+ * Take the plot list and the stage list from Nursery Operation Management.
+ *
+ * Which plots exist (shared_plots, kept in Seedling Stock Management) and
+ * which statuses can be chosen (nops_plot_status_stages, kept on Life of
+ * Plot) are the office's to decide — they were hardcoded here, so adding a
+ * plot or renaming a stage meant a code change and a deploy.
+ *
+ * Mutated in place, exactly as applySettings() does, so every screen already
+ * holding a reference to NURSERIES or ACTIVITIES picks the change up on its
+ * next render instead of needing to be re-imported.
+ *
+ * Anything the office has not filled in is left alone. An empty stage table
+ * must not empty the picker a Field Conductor is standing in a plot using.
+ */
+export function applyOfficeConfig(cfg) {
+  const c = cfg || {};
+  if (c.plots) {
+    Object.keys(NURSERIES).forEach((nk) => {
+      const list = c.plots[nk];
+      NURSERIES[nk].plots = list && list.length ? list : null;
+    });
+  }
+  if (c.activities && c.activities.length) {
+    ACTIVITIES.length = 0;
+    c.activities.forEach((a) => ACTIVITIES.push(a));
+  }
 }
 export function nurseryOfPlot(p) {
   for (const k in NURSERIES) if (p.startsWith(NURSERIES[k].prefix)) return k;
@@ -402,7 +444,7 @@ function seedUnit(db, key, actN, mood, by) {
     // gets a spare day so the fast cycles are not all identical, which still
     // leaves them inside 15.
     const bonusOn = randInt(1, 9);
-    for (let n = 11; n >= 1; n--) {
+    for (let n = (lastAct() || { n: 11 }).n; n >= 1; n--) {
       const ideal = durFor(key, activityByN(n));
       // Spread the durations either side of the ideal so shortest and longest
       // are actually different figures.
@@ -476,7 +518,7 @@ export function seedSample() {
 }
 
 /* ---------- link for the Culling Calculator ----------
-   A plot reaches the calculator when PALMS says it is at Pengambilan (11) —
+   A plot reaches the calculator when PALMS says it is at Pengambilan —
    collection — and not before. Counting pokok inang is a job done against
    what is being taken out of the plot, so the earlier culling-ish stages
    (Saringan Anak Bibit, Tunggu buat culling, Culling) used to widen this and
@@ -484,10 +526,18 @@ export function seedSample() {
 
    For a multi-area plot, ANY area at Pengambilan brings the plot in: the
    collection is happening on the plot even if only part of it is ready. */
-const PENGAMBILAN = 11;
+/* Matched by NAME, not by the number 11. The office can rename, reorder and
+   add stages now, so "the collection stage" has to be found rather than
+   assumed to be eleventh. Falls back to the last stage of the cycle, which is
+   what collection is. */
+function pengambilanN() {
+  const named = ACTIVITIES.find((a) => /pengambilan/i.test(a.name || ''));
+  return (named || lastAct() || { n: 11 }).n;
+}
 export function cullingScopePlots() {
   const db = loadDB();
-  const inScope = (key) => currentEntries(db, key).some((e) => e.actN === PENGAMBILAN);
+  const target = pengambilanN();
+  const inScope = (key) => currentEntries(db, key).some((e) => e.actN === target);
   const set = new Set();
   Object.keys(NURSERIES).forEach((nk) =>
     plotsOf(nk).forEach((pid) => {

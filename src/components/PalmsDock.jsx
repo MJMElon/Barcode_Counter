@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { useLang } from '../context/LanguageContext.jsx';
 import { canPalms, visibleNurseries } from '../lib/access.js';
 import { NURSERIES, keysOfPlot, loadDB, plotsOf, tickedToday } from '../modules/palms/data.js';
+import { applyCachedOfficeConfig, refreshOfficeConfig } from '../modules/palms/officeConfig.js';
 
 /**
  * The PALMS train — a floating button, not a card in a list.
@@ -156,6 +157,20 @@ export default function PalmsDock() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [scopeSig]
   );
+
+  /* The office's plot list. Without it the button counts the built-in 52 and
+     would say "5 left" on a nursery that has 40 plots.
+     The cache is what PALMS leaves behind, and is enough every time after the
+     first. On a device that has never opened PALMS there is no cache and this
+     button is the first thing seen, so it fetches once itself rather than
+     showing a count off the built-in list. */
+  useEffect(() => {
+    let live = true;
+    const cached = applyCachedOfficeConfig();
+    refresh();
+    if (!cached) refreshOfficeConfig().then((ok) => { if (live && ok) refresh(); });
+    return () => { live = false; };
+  }, [refresh]);
 
   // Position: placed once, then only ever moved by a drag or a resize.
   useEffect(() => {
