@@ -259,13 +259,17 @@ export default function AuthScreen() {
             5px 5px 0 var(--bk-green-3),6px 6px 0 var(--bk-green-3),
             7px 7px 0 var(--bk-green-4),8px 8px 0 var(--bk-green-4),
             10px 12px 16px rgba(6,42,22,.4);
-          /* The glyph box is centred, but the shadow only falls down-RIGHT and
-             shadows do not take up layout, so the INK ends up right of centre.
-             Measured off a render: at 0 the ink's centre of mass sits 8.4px
-             right of the cover's, and every 1px of translate moves it 1px.
-             -7px lands centre of mass and bounding box either side of zero
-             (+1.4 / -1.5), which is as centred as it gets. */
-          transform:translateX(-7px) rotate(-1.2deg);
+          /* What the eye centres on is the MIDDLE 5, not the ink of all three
+             plus their shadow — centring the whole block pushes the middle
+             glyph left, which is what -7px did. So this lines the face of
+             the middle 5 up with the centre of MJM NURSERY above it.
+
+             Measured on the built page by diffing renders (the cover is
+             textured, so "not the background" does not isolate ink): with no
+             translate the middle 5's face sits 3.2px right at a 90px logo and
+             4.5px right at 116px. Linear in font size, hence the calc — it
+             holds across the whole clamp() range, within 0.3px. */
+          transform:translateX(calc(1.3px - .05em)) rotate(-1.2deg);
         }
         .bk-portal{
           margin-top:14px;text-align:center;
