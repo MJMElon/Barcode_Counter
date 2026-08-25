@@ -132,13 +132,15 @@ export default function App() {
           </Protected>
         }
       />
-      {/* The Culling Calculator is its own page. It reads the PALMS stores,
-          so it is governed by the same permission. */}
+      {/* The Culling Calculator is its own page and now its own tick, because
+          counting pokok inang and keying the day's plot status are different
+          jobs done by different people. canScan fails open on a page nobody
+          has configured, so access saved before the split still works. */}
       <Route
         path="/culling"
         element={
           <Protected>
-            <PageGate page="palms">
+            <PageGate page="culling">
               <ErrorBoundary>
                 <Suspense fallback={<Loading />}>
                   <CullingModule />

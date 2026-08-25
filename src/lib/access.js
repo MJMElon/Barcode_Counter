@@ -12,24 +12,52 @@
  */
 
 /**
- * Which nurseries may this user see?
- *  - permissions.plot_status_nurseries absent/null → null, meaning ALL
- *  - array → exactly those (an empty array means none)
+ * Which nurseries may this user see, on this page?
+ *  - an array → exactly those (an empty array means none)
+ *  - null    → ALL
  *
- * One setting governs every nursery-aware screen — Maintenance and PALMS —
- * which is how the User Access screen presents it. The key still carries its
- * original plot_status_ name, from the retired Plot Status module, so that
- * access already saved for people keeps working; renaming it would silently
- * open the portal back up for everyone who had been narrowed down.
+ * Nursery access is set PER PAGE: somebody can do Maintenance in BNN and
+ * PALMS in UNN1, because in the field those are different jobs done by
+ * different people. It is written by 555 FC Portal → Setting as
+ * permissions.scan_nurseries.<page>.
+ *
+ * Two fallbacks, in order, and both matter:
+ *
+ *  1. plot_status_nurseries — the single list that governed every screen
+ *     before this was per page. Still honoured for anyone whose access has
+ *     not been re-saved since, or the change would silently reopen every
+ *     nursery for everyone who had been narrowed down. (It carries its
+ *     original name from the retired Plot Status module for exactly the same
+ *     reason.)
+ *  2. null — nothing set anywhere, so no restriction.
+ *
+ * `page` is optional. Called without one it answers for the whole portal:
+ * restricted only where every page agrees, which is what a screen that is not
+ * about one page — the floating train's count — should be measuring.
  */
-export function allowedNurseries(permissions) {
-  const v = permissions && permissions.plot_status_nurseries;
-  return Array.isArray(v) ? v : null;
+export function allowedNurseries(permissions, page) {
+  const p = permissions || {};
+  const per = p.scan_nurseries;
+
+  if (per && typeof per === 'object') {
+    if (page) {
+      if (Array.isArray(per[page])) return per[page];
+    } else {
+      /* No page named: the union of every page's list, because a person who
+         may see UNN1 on ANY page can see UNN1 in this portal. Narrowing to
+         the intersection here would hide nurseries they are entitled to. */
+      const lists = Object.keys(per).map((k) => per[k]).filter(Array.isArray);
+      if (lists.length) return [...new Set(lists.flat())];
+    }
+  }
+
+  const legacy = p.plot_status_nurseries;
+  return Array.isArray(legacy) ? legacy : null;
 }
 
 /** True when this user is restricted to a subset rather than everything. */
-export function isNurseryScoped(permissions) {
-  return allowedNurseries(permissions) !== null;
+export function isNurseryScoped(permissions, page) {
+  return allowedNurseries(permissions, page) !== null;
 }
 
 /**
@@ -42,8 +70,8 @@ export function nurseryKey(name) {
 }
 
 /** May this user see this nursery, however its name happens to be spelt? */
-export function nurseryAllowed(permissions, name) {
-  const allowed = allowedNurseries(permissions);
+export function nurseryAllowed(permissions, name, page) {
+  const allowed = allowedNurseries(permissions, page);
   if (allowed === null) return true;
   const want = nurseryKey(name);
   return allowed.some((n) => nurseryKey(n) === want);
@@ -54,10 +82,10 @@ export function nurseryAllowed(permissions, name) {
  * `labelOf` maps an entry to the name to match on, for lists of keys whose
  * label differs from the key. Returns a new array; the original is untouched.
  */
-export function visibleNurseries(permissions, list, labelOf) {
-  if (!isNurseryScoped(permissions)) return Array.isArray(list) ? [...list] : [];
+export function visibleNurseries(permissions, list, labelOf, page) {
+  if (!isNurseryScoped(permissions, page)) return Array.isArray(list) ? [...list] : [];
   const name = typeof labelOf === 'function' ? labelOf : (x) => x;
-  return (list || []).filter((item) => nurseryAllowed(permissions, name(item)));
+  return (list || []).filter((item) => nurseryAllowed(permissions, name(item), page));
 }
 
 /**
@@ -97,3 +125,8 @@ export const canBarcode    = (permissions, action) => canScan(permissions, 'barc
 export const canDo         = (permissions, action) => canScan(permissions, 'do', action);
 export const canMaintain   = (permissions, action) => canScan(permissions, 'maintenance', action);
 export const canPalms      = (permissions, action) => canScan(permissions, 'palms', action);
+/* The Culling Calculator was a tab inside PALMS and is now its own page, so it
+   is its own tick. Anyone whose access predates the split has no `culling`
+   entry, and canScan fails OPEN on a page nobody has configured — so they keep
+   the access they had rather than losing it on a deploy. */
+export const canCulling    = (permissions, action) => canScan(permissions, 'culling', action);

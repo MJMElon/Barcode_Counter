@@ -119,7 +119,7 @@ export default function MaintenanceBoard() {
   // Opens on the week you are actually in; stepping is per-visit, not saved.
   const [week, setWeek] = useState(() => weekOfDate(todayStr()) || 1);
 
-  const allowed = allowedNurseries(permissions);
+  const allowed = allowedNurseries(permissions, 'maintenance');
   const allowedSig = allowed === null ? '*' : [...allowed].sort().join('|');
 
   useEffect(() => {
