@@ -40,6 +40,29 @@ async function findOpenDuplicate({ source, category, plot }) {
 }
 
 /**
+ * Which plots already have an open case, so a screen can say so before
+ * somebody raises a second one. Same question findOpenDuplicate() asks,
+ * asked once for every plot rather than one at a time.
+ *
+ * Returns a Set of plot names — empty on any failure, because "we could
+ * not check" must read as "no badge", never as "already raised".
+ */
+export async function openCasePlots({ source = 'scan', category } = {}) {
+  try {
+    let q = supabase.from('nelos_cases')
+      .select('plot_name')
+      .in('status', PENDING)
+      .eq('source_module', source);
+    if (category) q = q.eq('category', category);
+    const { data, error } = await q.limit(500);
+    if (error || !Array.isArray(data)) return new Set();
+    return new Set(data.map((r) => r.plot_name).filter(Boolean));
+  } catch (e) {
+    return new Set();
+  }
+}
+
+/**
  * raiseCase({ title, description, category, priority, source, sourceRef,
  *             nursery, plot, batch, by, byId, dedupe })
  *
@@ -61,7 +84,19 @@ export async function raiseCase(opts) {
       category: opts.category || null,
       priority: PRIORITIES.includes(opts.priority) ? opts.priority : 'normal',
       status: 'open',
-      source_module: opts.source || 'fc_portal',
+      /* 'scan' is the FC Portal's key in nelos_modules, and every other
+         part of Nelos spells it that way — SOURCE_LABEL, the module
+         filter, and nelos_routes, whose source_module is a foreign key
+         to that table.
+
+         This used to default to 'fc_portal', which is not a module key
+         anywhere. No route row could exist for it (the foreign key
+         forbids one), so nelos_route_case() found no rule and fell
+         through to its last line — assigned_module := source_module —
+         and every case raised here was assigned straight back to the
+         people who raised it. That is the "PIC shows FC Portal" the
+         case list was reporting. */
+      source_module: opts.source || 'scan',
       source_ref: opts.sourceRef || null,
       nursery_name: opts.nursery || null,
       plot_name: opts.plot || null,

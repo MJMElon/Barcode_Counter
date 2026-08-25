@@ -10,7 +10,7 @@ import {
 import { CULL_LIMIT, actionFor, caseBody } from './cullingActions.js';
 import { cullingScopePlots, todayStr } from './data.js';
 import { syncPalms } from './sync.js';
-import { raiseCase } from '../../lib/nelos.js';
+import { openCasePlots, raiseCase } from '../../lib/nelos.js';
 
 /**
  * The Culling Calculator.
@@ -45,13 +45,27 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
      list was whatever happened to be on this phone: a stale copy from the
      last visit, and never a status somebody else keyed in this morning. */
   const [scope, setScope] = useState(() => cullingScopePlots());
+  /* Lowest culling rate first. The list arrived in nursery order, which is
+     an accident of how the plots are numbered and tells the person choosing
+     nothing; the rate is the only reason they are on this screen. A plot
+     with no figures yet has no rate to sort on, so it goes last rather than
+     counting as zero and leading the list. */
   const plots = useMemo(() => {
     const out = [];
     nurseryKeys.forEach((nk) => (data[nk] || []).forEach((r) => {
       if (scope.has(r.plot)) out.push({ ...r, nursery: nk });
     }));
-    return out;
+    const rateOf = (p) => (hasFigures(p) ? cullingRate(p.balance, 0, 0, p.transplant) : Infinity);
+    return out.sort((a, b) => rateOf(a) - rateOf(b));
   }, [data, nurseryKeys, scope]);
+
+  /* Plots that already have an open case. Read once and refreshed after a
+     case is raised, so the picker can say "this one has been sent" instead
+     of leaving somebody to find out by pressing the button and being told
+     it was a duplicate. */
+  const [raised, setRaised] = useState(() => new Set());
+  const reloadRaised = () =>
+    openCasePlots({ source: 'scan' }).then(setRaised, () => {});
 
   const [plotId, setPlotId] = useState(null);
   const [picking, setPicking] = useState(false);
@@ -65,6 +79,7 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
     let live = true;
     syncPalms().then(() => { if (live) setScope(cullingScopePlots()); });
     refreshFigures().then((ok) => { if (live && ok) refresh(); });
+    openCasePlots({ source: 'scan' }).then((s) => { if (live) setRaised(s); }, () => {});
     return () => { live = false; };
   }, []);
 
@@ -108,7 +123,7 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
       }),
       category: action.category,
       priority: action.priority,
-      source: 'fc_portal',
+      source: 'scan',            // the FC Portal's key in nelos_modules
       nursery: row.nursery,
       plot: row.plot,
       by: staffName,
@@ -119,6 +134,7 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
     });
     setBusy(false);
     if (error) { flash(t('cull.raiseFailed')); return; }
+    reloadRaised();
     flash(deduped ? t('cull.alreadyOpen', { n: c.case_no || '' }) : t('cull.raised', { n: c.case_no || '' }));
     setTerms([]); setTyping('');
   }
@@ -223,6 +239,7 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
         <PlotPicker
           plots={plots}
           current={plotId}
+          raised={raised}
           t={t}
           onPick={(p) => { setPlotId(p); setTerms([]); setTyping(''); setPicking(false); }}
           onClose={() => setPicking(false)}
@@ -269,7 +286,7 @@ function Keypad({ onPress }) {
 /* Which plot. Every plot at Pengambilan that this person may see, with the
    rate it stands at, so the choice is made on the figures rather than by
    remembering plot numbers. */
-function PlotPicker({ plots, current, t, onPick, onClose }) {
+function PlotPicker({ plots, current, raised, t, onPick, onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm" onClick={onClose} />
@@ -294,7 +311,17 @@ function PlotPicker({ plots, current, t, onPick, onClose }) {
                 }`}
               >
                 <div className="min-w-0">
-                  <div className="font-black text-slate-100 text-[14px]">{p.plot}</div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-black text-slate-100 text-[14px]">{p.plot}</span>
+                    {/* Already handed over. The rate alone cannot say this,
+                        and without it the only way to find out is to press
+                        the button and be told it was a duplicate. */}
+                    {raised && raised.has(p.plot) && (
+                      <span className="rounded-md bg-emerald-600 text-white px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider">
+                        ✓ Nelos
+                      </span>
+                    )}
+                  </div>
                   <div className="text-[11px] font-semibold text-slate-500">
                     {p.nursery} · {t('cull.balance')} {known ? fmtNum(p.balance) : '—'}
                   </div>
