@@ -67,24 +67,22 @@ export function ManuringIcon({ className = 'w-7 h-7' }) {
   );
 }
 
-/* Weeding — RUMPUT under the knife that cuts it.
-   A cleaver: a broad rectangular blade, a bolster, a handle. Two goes at a
-   tapered chef's knife both came out reading as a megaphone — the taper is
-   the first thing lost when the mark is shrunk to 17px, and without it a
-   pointed blade is just a wedge. A rectangle survives being made small, and
-   the hanging hole says which kind of knife it is. */
+/* Weeding — RUMPUT under the sickle that cuts it.
+   A sabit, which is the tool actually used on grass here. Three goes at a
+   straight knife all failed: a chef's knife lost its taper at 17px and read
+   as a wedge, and a cleaver read as a flag or a luggage tag. A crescent has
+   no straight edge to be mistaken for, so it stays a blade at any size.
+
+   The belly is what does the work — the first crescents were drawn thin and
+   came out as a bent stick. It runs from a point at the tip to a blunt heel
+   where the handle takes over. */
 export function WeedingIcon({ className = 'w-7 h-7' }) {
   return (
     <svg {...svg} className={className}>
-      {/* the blade, with the hanging hole punched through it */}
-      <path
-        fillRule="evenodd"
-        d="M3.4 3h10.6v7.8H3.4a1.2 1.2 0 0 1-1.2-1.2V4.2A1.2 1.2 0 0 1 3.4 3Zm1.7 1.7a1 1 0 1 0 0 2 1 1 0 0 0 0-2Z"
-      />
-      {/* the handle, straight off the back of the blade. A separate bolster
-          between the two only added a step in the silhouette that read as a
-          gap — the handle looked like it was floating clear of the knife. */}
-      <rect x="13" y="5.5" width="8.8" height="2.8" rx="1.4" />
+      {/* the blade */}
+      <path d="M2.4 11.4C3.2 5.6 8.2 1.9 15.6 2.8l-.4 4.4c-4.8.6-9.2 2.2-12.8 4.2Z" />
+      {/* the handle, off the heel and following the line of the blade */}
+      <rect x="14.4" y="2.4" width="7.2" height="3.4" rx="1.7" transform="rotate(14 18 4.1)" />
       <Word text="RUMPUT" y={16.8} size={7.6} w={21.5} />
     </svg>
   );
