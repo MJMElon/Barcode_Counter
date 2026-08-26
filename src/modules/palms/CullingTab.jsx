@@ -26,6 +26,20 @@ function prettyMonth(label) {
   return `${short(a)}–${one(b)}`;
 }
 
+/** A batch chip in the header strip. */
+function BatchChip({ on, label, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`shrink-0 rounded-lg px-2 py-1 text-[10px] font-black tabular-nums transition-colors cursor-pointer ${
+        on ? 'bg-emerald-600 text-white' : 'bg-[#1f2a38] text-slate-400 hover:text-slate-200'
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
 /**
  * The Culling Calculator.
  *
@@ -83,6 +97,11 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
     openCasePlots({ source: 'scan' }).then(setRaised, () => {});
 
   const [plotId, setPlotId] = useState(null);
+  /* Which batch of the intake is being counted, or '' for the whole intake.
+     A plot's batches are separate blocks of ground, transplanted and culled on
+     their own days, so one batch running at eleven percent inside an intake
+     averaging four is worth being able to see on its own. */
+  const [batchId, setBatchId] = useState('');
   const [picking, setPicking] = useState(false);
   const [terms, setTerms] = useState([]);      // the counts already entered
   const [typing, setTyping] = useState('');    // the one being keyed now
@@ -98,8 +117,24 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
     return () => { live = false; };
   }, []);
 
-  const row = plots.find((p) => p.plot === plotId) || plots[0] || null;
-  useEffect(() => { if (!plotId && row) setPlotId(row.plot); }, [row, plotId]);
+  const plotRow = plots.find((p) => p.plot === plotId) || plots[0] || null;
+  useEffect(() => { if (!plotId && plotRow) setPlotId(plotRow.plot); }, [plotRow, plotId]);
+  // Changing plot drops back to the whole intake: a batch number means
+  // nothing in the plot next door.
+  useEffect(() => { setBatchId(''); }, [plotId]);
+  // A count belongs to the block it was walked in, so switching blocks clears
+  // it rather than quietly re-attributing it.
+  useEffect(() => { setTerms([]); setTyping(''); }, [batchId]);
+
+  const lines = (plotRow && plotRow.lines) || [];
+  const line = batchId ? lines.find((l) => l.batch === batchId) : null;
+  /* The row the whole screen works from. Choosing a batch narrows the figures
+     to that block; choosing nothing leaves the intake whole. Everything
+     downstream — the rate, the action, the case — reads this one object, so
+     there is no second path where the batch could be forgotten. */
+  const row = line
+    ? { ...plotRow, transplant: line.transplant, balance: line.balance, batch: line.batch }
+    : plotRow;
 
   const known = hasFigures(row);
   const broken = figuresBroken(row); // more has left this plot than ever arrived
@@ -138,6 +173,9 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
       description: caseBody({
         t, plot: row.plot, nursery: row.nursery, balance: row.balance,
         inang, rate: rateAfter, terms, by: staffName, date: todayStr(),
+        // Which block of the plot was walked. Without it the auditor is sent
+        // to a plot and left to work out which part of it was counted.
+        batch: row.batch, intake: row.intake,
       }),
       category: action.category,
       priority: action.priority,
@@ -179,6 +217,22 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
             {row ? row.plot : '—'}
             <span className="text-[10px] text-slate-500">▼</span>
           </button>
+          {/* One batch, or the intake whole. Only offered when the intake has
+              more than one batch in it — otherwise the batch IS the intake
+              and a picker with one entry is a button that does nothing. */}
+          {lines.length > 1 && (
+            <div className="flex items-center gap-1 overflow-x-auto no-scrollbar max-w-[190px]">
+              <BatchChip on={!batchId} onClick={() => setBatchId('')} label={t('cull.allBatches')} />
+              {lines.map((l) => (
+                <BatchChip
+                  key={l.batch}
+                  on={batchId === l.batch}
+                  onClick={() => setBatchId(l.batch)}
+                  label={l.batch}
+                />
+              ))}
+            </div>
+          )}
           <div className="text-[13px] font-black tabular-nums">
             <span className="text-slate-500 mr-1">{t('cull.cullShort')} :</span>
             <span className={

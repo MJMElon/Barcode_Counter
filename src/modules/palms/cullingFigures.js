@@ -73,6 +73,9 @@ export async function loadCullingFigures() {
       intakes: cycles.filter((c) => c.transplant > 0).length,
       sellsFrom: cur.opens,
       selling: cur.selling,
+      // The intake batch by batch, so the calculator can be pointed at one
+      // block of ground rather than averaging the plot.
+      lines: cur.lines,
     });
   });
   return out;

@@ -71,9 +71,15 @@ export function actionFor(rate) {
  * see what was counted and what it left the rate at, without opening the
  * calculator or taking the Field Conductor's word for it.
  */
-export function caseBody({ t, plot, nursery, balance, inang, rate, terms, by, date }) {
+export function caseBody({ t, plot, nursery, balance, inang, rate, terms, by, date, batch, intake }) {
   const lines = [
     `${t('cull.plot')}: ${plot}${nursery ? ` (${nursery})` : ''}`,
+    /* Which block of the plot, and which intake. A plot holds several batches
+       and can hold two intakes at once, so "U4" on its own sends the auditor
+       to the right field and leaves them to guess the rest. Only written when
+       there is something to say. */
+    ...(batch ? [`${t('cull.batchField')}: ${batch}`] : []),
+    ...(intake ? [`${t('cull.intakeField')}: ${intake}`] : []),
     `${t('cull.balance')}: ${fmtNum(balance)}`,
     // The separate counts are kept, not just their total: "300 + 250 + 180"
     // is a walk round the plot in three goes, and a single 730 hides that.

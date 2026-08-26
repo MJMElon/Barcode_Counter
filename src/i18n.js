@@ -65,6 +65,9 @@ const en = {
   'cull.collected': 'Collected',
   'cull.checkStock': 'Check stock',
   'cull.intakeOf': '{m} intake — this plot holds {n}',
+  'cull.allBatches': 'All',
+  'cull.batchField': 'Batch',
+  'cull.intakeField': 'Intake',
   'cull.negativeNote': 'More has been culled and sold off this plot than was transplanted in. No rate until the stock ledger is corrected.',
   'cull.actDrone': 'Request drone flight',
 
@@ -534,6 +537,9 @@ const ms = {
   'cull.collected': 'Diambil',
   'cull.checkStock': 'Semak stok',
   'cull.intakeOf': 'Kemasukan {m} — plot ini ada {n}',
+  'cull.allBatches': 'Semua',
+  'cull.batchField': 'Batch',
+  'cull.intakeField': 'Kemasukan',
   'cull.negativeNote': 'Lebih banyak telah dibuang dan dijual dari plot ini daripada yang ditransplant masuk. Tiada kadar sehingga lejar stok dibetulkan.',
   'cull.actDrone': 'Mohon drone terbang',
 

@@ -116,6 +116,7 @@ export async function refreshFigures() {
         r.intakes = f.intakes;
         r.selling = f.selling;
         r.sellsFrom = f.sellsFrom;
+        r.lines = f.lines;
       }
     }
   }

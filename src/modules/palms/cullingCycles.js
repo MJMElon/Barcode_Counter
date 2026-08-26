@@ -127,10 +127,16 @@ export function cyclesForPlot(transplantLogs, balanceRows, nowMonth) {
   const indexOfMonth = new Map();
   clusters.forEach((c, i) => c.forEach((m) => indexOfMonth.set(m, i)));
 
-  const orphan = { months: [], batches: [], transplant: 0, balance: 0, opens: '', by: '' };
+  /* `lines` is the intake batch by batch. A plot's batches are separate
+     blocks of ground, transplanted on their own days and culled on their own
+     days, so one batch running at eleven percent inside an intake averaging
+     four is a thing to see rather than a thing to be hidden by the other
+     batches around it. */
+  const orphan = { months: [], batches: [], lines: [], transplant: 0, balance: 0, opens: '', by: '' };
   const cycles = clusters.map((months) => ({
     months,
     batches: [],
+    lines: [],
     transplant: 0,
     balance: 0,
     ...sellWindow(months),
@@ -147,18 +153,27 @@ export function cyclesForPlot(transplantLogs, balanceRows, nowMonth) {
         : orphan;
     c.batches.push(bk);
     c.transplant += e.qty;
+    c.lines.push({ batch: bk, transplant: e.qty, balance: 0, months: e.months });
   });
 
   for (const r of balanceRows || []) {
     const bk = r.batch_key || batchKey(r.batch_name);
     if (!bk) continue;
     const c = cycles.find((x) => x.batches.includes(bk)) || orphan;
-    if (c === orphan && !orphan.batches.includes(bk)) orphan.batches.push(bk);
-    c.balance += Number(r.qty || 0);
+    if (c === orphan && !orphan.batches.includes(bk)) {
+      orphan.batches.push(bk);
+      orphan.lines.push({ batch: bk, transplant: 0, balance: 0, months: [] });
+    }
+    const qty = Number(r.qty || 0);
+    c.balance += qty;
+    const line = c.lines.find((x) => x.batch === bk);
+    if (line) line.balance += qty;
   }
 
   const out = cycles.map((c) => ({
     ...c,
+    // Biggest block first: that is the one worth walking.
+    lines: [...c.lines].sort((a, b) => b.transplant - a.transplant || a.batch.localeCompare(b.batch)),
     key: c.months[0],
     label: c.months.length > 1 ? `${c.months[0]}…${c.months[c.months.length - 1]}` : c.months[0],
     selling: !!nowMonth && monthsApart(c.months[c.months.length - 1], nowMonth) >= SELL_OPENS,
