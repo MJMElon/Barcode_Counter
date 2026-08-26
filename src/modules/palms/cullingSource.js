@@ -16,12 +16,19 @@ import { nurseryOfPlot } from './data.js';
  *                 the sum of those collections is what has gone.
  *   transplanting The Batch Report's Transplanting tab, which records the
  *                 date, the plot, the batch and the quantity that went in.
+ *   3rd culling   Also the Batch Report. A 3rd culling against a block means
+ *                 that block is finished, and it leaves the screen.
  *
  * and the balance is the difference:
  *
  *     balance = transplanted in  −  collected
  *
  * which is what the ten percent line is drawn against.
+ *
+ * EVERY one of those reads is matched on the plot AND the batch together.
+ * Neither is enough on its own: one plot holds several batches, and one batch
+ * can be spread over several plots, so matching on either alone would pour
+ * one block's figures into another's.
  *
  * What was removed, in case any of it is worth having back (git has it all,
  * up to commit f79a4c5):
@@ -89,18 +96,28 @@ export async function loadPlots() {
     }
   }
 
-  /* What went in, against what has come out. Only the blocks being collected
-     from are looked up: the transplanting read covers every plot in the
-     nursery, and all but these are of no interest here. */
-  const planted = await loadTransplanting();
+  /* What went in, and what has finished. Both are matched on the same
+     plot-and-batch key the collections were gathered under, so a figure can
+     only ever meet the block it actually belongs to. */
+  const [planted, finished] = await Promise.all([loadTransplanting(), loadFinished()]);
   by.forEach((e) => {
     const t = planted.get(e.key);
     e.transplant = t ? t.qty : 0;
     e.transplantedOn = t ? t.last : '';
     e.balance = e.transplant - e.collected;
+    /* Months from transplanting to the last collection. Collection usually
+       opens seven to nine months after a block goes in, but not always — so
+       this is shown as context and never used to include or exclude a block.
+       A rule made out of a rough guide would quietly hide real work. */
+    e.monthsToCollect = monthsBetween(e.transplantedOn, e.lastDate);
   });
 
-  return [...by.values()].sort(
+  /* A 3rd culling against a block means the Field Conductor has already
+     judged what was left and culled it. The block is finished: offering it
+     again would invite a second count of stock that is no longer standing. */
+  return [...by.values()]
+    .filter((e) => !finished.has(e.key))
+    .sort(
     (a, b) =>
       a.plot.localeCompare(b.plot, undefined, { numeric: true }) ||
       a.batch.localeCompare(b.batch, undefined, { numeric: true })
@@ -133,6 +150,61 @@ export async function loadTransplanting() {
     return new Map();
   }
   return transplantedByBlock(res.data || []);
+}
+
+/* The end of a block's life on this screen. A 3rd culling is the last cull
+   there is, and once it is on the ledger the block has been judged and
+   cleared.
+
+   Cull3_Transfer counts as one: it is a 3rd culling whose seedlings were
+   moved rather than written off, and one log carries both sides — plot_name
+   is where they landed, and the remark names the plot they LEFT. It is the
+   plot they left that has been culled. */
+const FINISH_TYPES = ['3rd_Culling', 'Cull3_Transfer'];
+
+/** → Set of "PLOT#BATCH" that a 3rd culling has finished. */
+export async function loadFinished() {
+  const res = await fetchAllRows(() =>
+    supabase
+      .from('shared_inventory_logs')
+      .select('transaction_type, plot_name, batch_name, quantity_change, remark')
+      .in('transaction_type', FINISH_TYPES)
+      .order('id', { ascending: true })
+  );
+  if (res.error) {
+    console.warn('[culling] could not read the 3rd culling:', res.error.message);
+    return new Set();
+  }
+  return finishedBlocks(res.data || []);
+}
+
+/** The same, from rows already in hand. */
+export function finishedBlocks(rows) {
+  const out = new Set();
+  for (const l of rows || []) {
+    const qty = Math.abs(Number(l.quantity_change || 0));
+    const batch = batchKey(l.batch_name);
+    if (!qty || !batch) continue;
+    if (l.transaction_type === 'Cull3_Transfer') {
+      // The plot it LEFT, which only the remark names.
+      const from = String(l.remark || '').match(/From:\s*\[([^\]|]+)\|/);
+      const plot = from ? plotKey(from[1]) : '';
+      if (plot) out.add(`${plot}#${batch}`);
+      continue;
+    }
+    const plot = plotKey(l.plot_name);
+    if (plot) out.add(`${plot}#${batch}`);
+  }
+  return out;
+}
+
+/** Whole months between two dates, or null when either is missing. */
+export function monthsBetween(from, to) {
+  if (!from || !to) return null;
+  const [fy, fm] = from.split('-').map(Number);
+  const [ty, tm] = to.split('-').map(Number);
+  if (!fy || !ty) return null;
+  return (ty * 12 + tm) - (fy * 12 + fm);
 }
 
 /** The same, from rows already in hand — so the rule is testable without a
