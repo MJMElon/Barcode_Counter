@@ -387,9 +387,15 @@ function Keypad({ onPress }) {
   );
 }
 
-/* Which plot. Every plot at Pengambilan that this person may see, with the
-   rate it stands at, so the choice is made on the figures rather than by
-   remembering plot numbers. */
+/* Which plot. Every block a customer is COLLECTING from that this person may
+   see, with the rate it stands at, so the choice is made on the figures
+   rather than by remembering plot numbers.
+
+   Not "every plot at Pengambilan" — that is what this said, and it stopped
+   being true when cullingSource.js moved the list onto the delivery orders.
+   A plot is here because a D/O collects from it, whatever PALMS says its
+   stage is; the two disagreeing is a real mismatch to chase in the nursery,
+   not something this screen resolves. */
 function PlotPicker({ plots, current, raised, t, onPick, onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
