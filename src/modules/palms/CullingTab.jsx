@@ -1,15 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import {
-  cullingRate,
-  figuresBroken,
-  fmtNum,
-  fmtPct,
-  getSessionData,
-  hasFigures,
-  refreshFigures,
-} from './cullingData.js';
+import { fmtNum, fmtPct } from './cullingData.js';
 import { CULL_LIMIT, actionFor, caseBody } from './cullingActions.js';
-import { loadCachedScope, refreshDeliveryScope } from './cullingScope.js';
+// Every figure on this screen comes from here, and nothing is wired up yet.
+import { figuresFor, hasFigures, loadPlots, rateFor } from './cullingSource.js';
 import { todayStr } from './data.js';
 import { openCasePlots, raiseCase } from '../../lib/nelos.js';
 
@@ -59,51 +52,17 @@ function BatchChip({ on, label, onClick }) {
  * into this screen as well.
  */
 export default function CullingTab({ t, staffName, userId, flash, nurseryKeys }) {
-  const data = useMemo(() => getSessionData(), []);
   const [tick, setTick] = useState(0);
   const refresh = () => setTick((n) => n + 1);
 
-  /* Every plot the FC may see that a Delivery Order is collecting from. No
-     nursery picker: which nurseries a person works is on their user access
-     now, so asking them again on this screen was asking a question already
-     answered.
-
-     The office raising a D/O is what puts a plot here. It used to be PALMS
-     saying Pengambilan, which made the calculator wait on somebody keying a
-     status the delivery order had already stated as fact. Read from the
-     server on open and cached, so a nursery with no signal still gets the
-     list it had last time rather than an empty screen. */
-  const [scope, setScope] = useState(loadCachedScope);
-  /* Lowest culling rate first. The list arrived in nursery order, which is
-     an accident of how the plots are numbered and tells the person choosing
-     nothing; the rate is the only reason they are on this screen. A plot
-     with no figures yet has no rate to sort on, so it goes last rather than
-     counting as zero and leading the list. */
-  const plots = useMemo(() => {
-    const out = [];
-    nurseryKeys.forEach((nk) => (data[nk] || []).forEach((r) => {
-      /* A delivery order puts the plot here; a recorded cull takes it away
-         again. Collection empties the plot, the Field Conductor judges what is
-         left against the ten percent line, and the remainder is culled — so a
-         cull on the ledger means that has already happened and this intake is
-         finished. Leaving it listed invites a second count of stock that is no
-         longer standing.
-
-         `plotDelivered` is kept under its own name because the row's own
-         `delivered` is the INTAKE's, worked out per batch, while the scope's
-         spans every intake the plot has ever held. */
-      if (scope.plots.has(r.plot) && !r.done) {
-        out.push({ ...r, nursery: nk, plotDelivered: scope.delivered.get(r.plot) || 0 });
-      }
-    }));
-    const rateOf = (p) => (hasFigures(p) ? cullingRate(p.balance, 0, 0, p.transplant) : Infinity);
-    return out.sort((a, b) => rateOf(a) - rateOf(b));
-    /* `tick` is in the deps because `data` never changes identity: the server
-       figures are written INTO those row objects and a counter is bumped.
-       Without it this list was only rebuilt when the scope happened to arrive
-       second, so whether a finished plot disappeared came down to which of two
-       requests answered first. */
-  }, [data, nurseryKeys, scope, tick]);
+  /* The plots to list, and the figures behind each. Both come from
+     cullingSource.js, which is empty — so the list is empty and the screen
+     says so rather than showing invented numbers. */
+  const [rows, setRows] = useState([]);
+  const plots = useMemo(
+    () => rows.map((r) => ({ ...r, ...(figuresFor(r.plot) || { transplant: 0, balance: 0 }) })),
+    [rows, tick]
+  );
 
   /* Plots that already have an open case. Read once and refreshed after a
      case is raised, so the picker can say "this one has been sent" instead
@@ -124,12 +83,10 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
   const [typing, setTyping] = useState('');    // the one being keyed now
   const [busy, setBusy] = useState(false);
 
-  // Both reads are best effort: with no signal the calculator still runs on
-  // whatever was cached last time rather than showing an empty screen.
+  // Best effort: a read that fails leaves the screen empty rather than broken.
   useEffect(() => {
     let live = true;
-    refreshDeliveryScope().then(({ scope: s }) => { if (live) setScope(s); }, () => {});
-    refreshFigures().then((ok) => { if (live && ok) refresh(); });
+    loadPlots().then((p) => { if (live) { setRows(p || []); refresh(); } }, () => {});
     openCasePlots({ source: 'scan' }).then((s) => { if (live) setRaised(s); }, () => {});
     return () => { live = false; };
   }, []);
@@ -143,28 +100,22 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
   // it rather than quietly re-attributing it.
   useEffect(() => { setTerms([]); setTyping(''); }, [batchId]);
 
+  /* Batches were part of the intake model that came out with the rest of the
+     calculation. The strip stays in the markup below and simply has nothing to
+     show until something supplies them again. */
   const lines = (plotRow && plotRow.lines) || [];
   const line = batchId ? lines.find((l) => l.batch === batchId) : null;
-  /* The row the whole screen works from. Choosing a batch narrows the figures
-     to that block; choosing nothing leaves the intake whole. Everything
-     downstream — the rate, the action, the case — reads this one object, so
-     there is no second path where the batch could be forgotten. */
+  /* The row the whole screen works from — one object, so the rate, the action
+     and the case cannot read different figures. */
   const row = line
-    ? {
-        ...plotRow,
-        transplant: line.transplant,
-        balance: line.balance,
-        culled: line.culled,
-        delivered: line.delivered,
-        batch: line.batch,
-      }
+    ? { ...plotRow, transplant: line.transplant, balance: line.balance, batch: line.batch }
     : plotRow;
 
   const known = hasFigures(row);
-  const broken = figuresBroken(row); // more has left this plot than ever arrived
+  const broken = false; // was: a balance the ledger could not explain
   const inang = terms.reduce((a, b) => a + b, 0) + (typing === '' ? 0 : Number(typing));
-  const rateNow = known ? cullingRate(row.balance, 0, 0, row.transplant) : NaN;
-  const rateAfter = known ? cullingRate(row.balance, inang, 0, row.transplant) : NaN;
+  const rateNow = rateFor({ balance: row?.balance, transplant: row?.transplant, inang: 0 });
+  const rateAfter = rateFor({ balance: row?.balance, transplant: row?.transplant, inang });
   const left = known ? row.balance - inang : 0;
   const action = known && inang > 0 ? actionFor(rateAfter) : null;
 
@@ -434,8 +385,8 @@ function PlotPicker({ plots, current, raised, t, onPick, onClose }) {
         <div className="space-y-1.5">
           {plots.map((p) => {
             const known = hasFigures(p);
-            const broken = figuresBroken(p);
-            const rate = known ? cullingRate(p.balance, 0, 0, p.transplant) : NaN;
+            const broken = false; // was: a balance the ledger could not explain
+            const rate = rateFor({ balance: p.balance, transplant: p.transplant, inang: 0 });
             return (
               <button
                 key={p.plot}
