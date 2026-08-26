@@ -13,6 +13,14 @@ import { fmtNum, fmtPct } from './cullingData.js';
  * the specific ones go first. Each one carries everything the case needs, so
  * the screen never has to know what "drone flight" means.
  *
+ * category is the name this case is FILED under, and it is the string Nelos
+ * routes on — nelos_routes matches a case by the words in its category, not
+ * by an id. So it is not a label: renaming it here without renaming it in
+ * nelos_categories and nelos_routes leaves a rule for a name nothing raises,
+ * and every culling case falls back to the Field Conductors who raised it.
+ * shared/migration_nelos_culling_rename.sql in mjm-ai-system moves both, and
+ * carries the cases already filed under the old names across with them.
+ *
  * titleKey is the wording on the button, and changes with the language.
  * caseTitle is the wording the CASE carries, and does not: a case is read by
  * whoever picks it up, days later, in whatever language they use, so its
@@ -32,7 +40,7 @@ export const CULLING_ACTIONS = [
     when: (rate) => rate <= CULL_LIMIT,
     titleKey: 'cull.actDrone',
     caseTitle: (plot) => `Request drone flight for culling at plot "${plot}"`,
-    category: 'Culling — Drone Flight',
+    category: 'From Culling Calculator - Request Drone Flight',
     priority: 'normal',
     tone: 'ok',
   },
@@ -43,7 +51,7 @@ export const CULLING_ACTIONS = [
     when: (rate) => rate > CULL_LIMIT,
     titleKey: 'cull.actRecheck',
     caseTitle: (plot) => `Request auditor to plot "${plot}" for high culling rate audit`,
-    category: 'Culling — Final Check',
+    category: 'From Culling Calculator - Request Final Check For Pokok Inang',
     priority: 'high',
     tone: 'warn',
   },
