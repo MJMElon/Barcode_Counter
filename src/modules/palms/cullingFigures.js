@@ -74,7 +74,15 @@ export async function loadCullingFigures() {
 async function loadBalances() {
   const view = await fetchAllRows(() => supabase
     .from('shared_plot_batch_balance')
-    .select('plot_key, plot_name, batch_name, qty'));
+    // Ordered because the read is PAGED. .range() with no sort leaves the row
+    // order up to Postgres, so a plot's rows can repeat in one page and be
+    // skipped from the next — and since these figures are summed per plot,
+    // a duplicated or missing batch silently moves the balance. Above 1,000
+    // rows that is the difference between a plot's real balance and a made-up
+    // one. The maintenance module already orders the same read.
+    .select('plot_key, plot_name, batch_name, qty')
+    .order('plot_key', { ascending: true })
+    .order('batch_key', { ascending: true }));
   if (!view.error) return groupBalances(view.data || [], (r) => r.plot_key || plotKey(r.plot_name));
 
   console.warn('[culling] plot balance view unavailable, reading the ledger:', view.error.message);
