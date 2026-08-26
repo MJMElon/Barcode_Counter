@@ -29,7 +29,7 @@ const shortChemical = (c) => String(c || '').split(/\s*\+\s*/)[0].replace(/\s+[\
  */
 export default function WorkSheet({
   workType, week, weekDates, month, tasks, batchMap, isDone, isAdmin,
-  today, saving, onSave, onClose,
+  today, saving, onSave, onClose, allowPhotos = true,
 }) {
   const { t, lang } = useLang();
   const [plot, setPlot] = useState(null);      // the task being recorded
@@ -213,8 +213,14 @@ export default function WorkSheet({
             {/* Proof the work was done. Same numbered slots as the plot audit,
                 and every picture is shrunk before it leaves the phone. */}
             <div>
-              <span className={label}>{t('mt.photos', { n: MAX_PHOTOS })}</span>
-              <PhotoSlots value={photos} onChange={setPhotos} max={MAX_PHOTOS} />
+              {/* Only where they can actually be uploaded. A worker signed
+                  in with a PIN is `anon`, and the documents bucket takes
+                  uploads from `authenticated` only — a camera here would
+                  fail every time it was pressed. */}
+              {allowPhotos && <>
+                <span className={label}>{t('mt.photos', { n: MAX_PHOTOS })}</span>
+                <PhotoSlots value={photos} onChange={setPhotos} max={MAX_PHOTOS} />
+              </>}
             </div>
 
             <div>

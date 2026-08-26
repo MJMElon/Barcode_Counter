@@ -61,12 +61,52 @@ function relativeDay(iso, today, t) {
   return iso;
 }
 
-// Maintenance work recorded in the field by a Field Conductor: which job, on
-// which plot, on which day. Plots come from shared_plots (Seedling Stock
-// Management settings); which nurseries a user sees is set on the main
-// portal's User Access, the same setting Plot Status uses.
-export default function MaintenanceModule() {
-  const { staffName, permissions } = useAuth();
+/* Where the module gets its data and who it thinks is asking.
+ *
+ * The FC Portal's answer — a Supabase session, and data.js reading the tables
+ * directly — is the default, so the module behaves exactly as it always has
+ * when nobody passes anything.
+ *
+ * The Worker Portal passes its own: a worker signed in with a PIN is `anon`
+ * and cannot read those tables at all, so its data comes back through the
+ * worker_* database functions instead. Same board, same counting, same table
+ * written at the end of it — only the door differs. See
+ * worker/workerMaintSource.js.
+ */
+const FC_SOURCE = {
+  loadData:       loadMaintenanceData,
+  loadPlotBatches,
+  loadSchedules,
+  submitRecord,
+  deleteRecord,
+  flushQueue:     flushMaintenance,
+  pending:        pendingRecords,
+};
+
+// Maintenance work recorded in the field: which job, on which plot, on which
+// day. Plots come from shared_plots (Seedling Stock Management settings);
+// which nurseries a Field Conductor sees is set on the main portal's User
+// Access, and which a worker sees is their boundary in the Worker Portal's
+// Settings. Both arrive here as the same `allowed` list.
+export default function MaintenanceModule({
+  source = FC_SOURCE,
+  /* { name, permissions } — who is recording. Absent means the FC session. */
+  identity = null,
+  /* The bar across the top. The FC Portal's TopNav signs out of Supabase,
+     which is not what a worker's Sign Out has to do. */
+  nav = null,
+  /* A worker's boundary can name individual plots, which a nursery list
+     cannot express. Absent means every plot in the allowed nurseries. */
+  plotFilter = null,
+  /* The documents bucket takes uploads from `authenticated` only, so the
+     camera is offered to a Field Conductor and not to a worker. */
+  allowPhotos = true,
+  subtitle = 'FC Portal',
+  back = '/dashboard',
+}) {
+  const auth = useAuth();
+  const staffName   = identity ? identity.name        : auth.staffName;
+  const permissions = identity ? identity.permissions : auth.permissions;
   const { t, lang } = useLang();
 
   const [plots, setPlots] = useState([]);
@@ -105,7 +145,7 @@ export default function MaintenanceModule() {
 
   async function reload() {
     try {
-      const d = await loadMaintenanceData();
+      const d = await source.loadData();
       setPlots(d.plots);
       setRecords(d.records);
       setError(null);
@@ -120,7 +160,7 @@ export default function MaintenanceModule() {
     reload();
   }, []);
 
-  const refreshPending = () => pendingRecords().then(setPending).catch(() => setPending([]));
+  const refreshPending = () => source.pending().then(setPending).catch(() => setPending([]));
 
   /* Send anything waiting. useAutoSync already fires on mount, every minute
      while online, and the moment the connection comes back — which is exactly
@@ -129,9 +169,9 @@ export default function MaintenanceModule() {
     if (syncing) return;
     setSyncing(true);
     try {
-      const before = (await pendingRecords()).length;
+      const before = (await source.pending()).length;
       if (before) {
-        const r = await flushMaintenance();
+        const r = await source.flushQueue();
         if (r.sent) { flash(t('mt.synced', { n: r.sent })); reload(); }
         if (r.dropped) flash(t('mt.syncDropped', { n: r.dropped }));
       }
@@ -144,8 +184,10 @@ export default function MaintenanceModule() {
   useAutoSync(sync, 60000);
 
   const visiblePlots = useMemo(
-    () => plots.filter((p) => allowed === null || allowed.includes(p.nursery_name)),
-    [plots, allowed]
+    () => plots.filter((p) =>
+      (allowed === null || allowed.includes(p.nursery_name)) &&
+      (!plotFilter || plotFilter(p.plot_name))),
+    [plots, allowed, plotFilter]
   );
 
   const nurseryOptions = useMemo(
@@ -171,12 +213,13 @@ export default function MaintenanceModule() {
     return allRecords.filter(
       (r) =>
         (allowed === null || allowed.includes(r.nursery_name)) &&
+        (!plotFilter || plotFilter(r.plot_name)) &&
         (!nursery || r.nursery_name === nursery) &&
         (!q ||
           (r.plot_name || '').toLowerCase().includes(q) ||
           (r.remark || '').toLowerCase().includes(q))
     );
-  }, [allRecords, allowed, nursery, query]);
+  }, [allRecords, allowed, plotFilter, nursery, query]);
 
   const today = todayStr();
   const month = monthLabelOf(today);
@@ -200,7 +243,7 @@ export default function MaintenanceModule() {
     // The office files under BNN / UNN1; shared_plots says "UNN 1". Ask for
     // both spellings and keep whichever comes back.
     const keys = [...new Set(names.flatMap((n) => [n, nurseryKey(n)]))];
-    loadSchedules(keys, month)
+    source.loadSchedules(keys, month)
       .then((rows) => { if (live) setSchedule(rows); })
       .catch(() => { if (live) setSchedule([]); });
     return () => { live = false; };
@@ -213,7 +256,7 @@ export default function MaintenanceModule() {
   // twelve plots read the whole ledger twelve times for no new information.
   useEffect(() => {
     let live = true;
-    loadPlotBatches()
+    source.loadPlotBatches()
       .then((m) => { if (live) setBatchMap(m); })
       .catch(() => { if (live) setBatchMap(new Map()); });
     return () => { live = false; };
@@ -243,7 +286,7 @@ export default function MaintenanceModule() {
       || { plot_name: task.plot, nursery_name: task.nursery || nursery || null };
     setSaving(true);
     try {
-      const { queued } = await submitRecord({
+      const { queued } = await source.submitRecord({
         plot,
         workTypeKey: sheet.workType.key,
         // Today, always: the record says the job was done, and it is being
@@ -277,7 +320,7 @@ export default function MaintenanceModule() {
     const plot = visiblePlots.find((p) => p.plot_name === form.plotName);
     if (!plot) return;
     try {
-      const { queued } = await submitRecord({
+      const { queued } = await source.submitRecord({
         id: editing && editing.record ? editing.record.id : null,
         plot,
         workTypeKey: form.workTypeKey,
@@ -309,7 +352,7 @@ export default function MaintenanceModule() {
     if (!mayEdit) return flash(t('mt.noPermEdit'));
     if (!window.confirm(t('mt.confirmDelete'))) return;
     try {
-      await deleteRecord(rec.id);
+      await source.deleteRecord(rec.id);
       flash(t('mt.deletedToast'));
       reload();
     } catch (e) {
@@ -329,7 +372,7 @@ export default function MaintenanceModule() {
 
   return (
     <div className="min-h-screen bg-slate-100 fade-enter">
-      <TopNav title={t('mt.title')} subtitle="FC Portal" user={staffName} back="/dashboard" />
+      {nav || <TopNav title={t('mt.title')} subtitle={subtitle} user={staffName} back={back} />}
       <div className="max-w-[900px] mx-auto px-3 sm:px-6 py-4 space-y-3">
         {/* Filters + actions */}
         <div className="flex flex-wrap gap-2">
@@ -486,6 +529,7 @@ export default function MaintenanceModule() {
             today={today}
             saving={saving}
             isAdmin={isAdmin}
+            allowPhotos={allowPhotos}
             isDone={(task) => isJobDone(allRecords, {
               workTypeKey: sheet.workType.key, plot: task.plot,
               chemical: task.chemical, week: sheet.week, month })}
@@ -607,6 +651,7 @@ export default function MaintenanceModule() {
           batchMap={batchMap}
           onClose={() => setEditing(null)}
           onSave={handleSave}
+          allowPhotos={allowPhotos}
           t={t}
           lang={lang}
         />
@@ -622,7 +667,7 @@ export default function MaintenanceModule() {
 }
 
 // Bottom sheet to record a job, or correct one already recorded.
-function EntrySheet({ record, plots, batchMap, onClose, onSave, t, lang }) {
+function EntrySheet({ record, plots, batchMap, onClose, onSave, allowPhotos = true, t, lang }) {
   const [workTypeKey, setWorkTypeKey] = useState(record ? record.work_type : WORK_TYPES[0].key);
   const [plotName, setPlotName] = useState(record ? record.plot_name : '');
   const [date, setDate] = useState(record ? record.work_date : todayStr());
@@ -782,12 +827,14 @@ function EntrySheet({ record, plots, batchMap, onClose, onSave, t, lang }) {
           {qty ? qty.toLocaleString() : '—'}
         </div>
 
+        {allowPhotos && <>
         <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
           {t('mt.photos', { n: MAX_PHOTOS })}
         </label>
         <div className="mb-3">
           <PhotoSlots value={photos} onChange={setPhotos} max={MAX_PHOTOS} />
         </div>
+        </>}
 
         <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
           {t('mt.remark')}

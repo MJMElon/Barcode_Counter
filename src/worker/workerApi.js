@@ -102,6 +102,19 @@ export async function myRecords(token, limit = 60) {
   return unwrap(await supabase.rpc('worker_my_records', { p_token: token, p_limit: limit })) || [];
 }
 
+/* Every record inside the boundary, whoever recorded it — what the
+   Maintenance board counts. A plot somebody else sprayed this morning is
+   done, and a board that only knew this worker's own work would send two
+   workers to spray it twice. */
+export async function maintRecords(token, limit = 500) {
+  return unwrap(await supabase.rpc('worker_maint_records', { p_token: token, p_limit: limit })) || [];
+}
+
+/** The office's maintenance plan for the nurseries inside the boundary. */
+export async function schedules(token) {
+  return unwrap(await supabase.rpc('worker_schedules', { p_token: token })) || [];
+}
+
 export async function roster(token) {
   return unwrap(await supabase.rpc('worker_roster', { p_token: token })) || [];
 }
