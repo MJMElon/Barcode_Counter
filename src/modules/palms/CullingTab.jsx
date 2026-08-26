@@ -64,6 +64,7 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
   const [picking, setPicking] = useState(false);
   const [terms, setTerms] = useState([]);      // the counts already entered
   const [typing, setTyping] = useState('');    // the one being keyed now
+  const [showOrders, setShowOrders] = useState(false);
   const [busy, setBusy] = useState(false);
 
   // Best effort: a read that fails leaves the screen empty rather than broken.
@@ -108,7 +109,7 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
   useEffect(() => { if (!plotId && plotRow) setPlotId(plotRow.key); }, [plotRow, plotId]);
   /* A count belongs to the block it was walked in, so moving to another one
      clears it rather than quietly re-attributing it. */
-  useEffect(() => { setTerms([]); setTyping(''); }, [plotId]);
+  useEffect(() => { setTerms([]); setTyping(''); setShowOrders(false); }, [plotId]);
 
   /* The row the whole screen works from — one object, so the rate, the action
      and the case cannot read different figures. It is already one block: a
@@ -117,6 +118,7 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
 
   const known = hasFigures(row);
   const broken = figuresBroken(row);
+  const orders = row?.orders || [];
   const inang = terms.reduce((a, b) => a + b, 0) + (typing === '' ? 0 : Number(typing));
   const rateNow = rateFor({ balance: row?.balance, transplant: row?.transplant, inang: 0 });
   const rateAfter = rateFor({ balance: row?.balance, transplant: row?.transplant, inang });
@@ -249,10 +251,38 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
                 </span>
                 <span className="text-slate-400">{fmtNum(row.transplant)}</span>
               </div>
-              <div className="flex justify-between gap-3">
-                <span>{t('cull.collected')}</span>
+              {/* Collected is a SUM. A block emptied over four delivery
+                  orders shows one figure, and looking for an order carrying
+                  it finds nothing, because no single one does — so the number
+                  opens onto the orders it is made of. */}
+              <button
+                onClick={() => setShowOrders((v) => !v)}
+                className="w-full flex justify-between gap-3 cursor-pointer hover:text-slate-400"
+              >
+                <span>
+                  {t('cull.collected')}
+                  {orders.length > 1 && (
+                    <span className="text-slate-600 ml-1">
+                      ×{orders.length} {showOrders ? '▴' : '▾'}
+                    </span>
+                  )}
+                </span>
                 <span className="text-slate-400">{fmtNum(row.collected || 0)}</span>
-              </div>
+              </button>
+              {showOrders && (
+                <div className="pt-1 space-y-0.5 border-t border-[#1c1c1f] mt-1">
+                  {orders.map((o, i) => (
+                    <div key={`${o.do}-${o.on}-${i}`} className="flex justify-between gap-3">
+                      <span className="text-slate-600 truncate">
+                        {o.do || '—'}
+                        {o.on && <span className="ml-1.5">{prettyD(o.on)}</span>}
+                      </span>
+                      <span className="text-slate-500">{fmtNum(o.qty)}</span>
+                    </div>
+                  ))}
+                  {!orders.length && <div className="text-slate-600">—</div>}
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -104,10 +104,16 @@ export async function loadPlots() {
           collected: 0,
           firstDate: '',   // when collection opened on this block
           lastDate: '',    // and the most recent one
+          /* The orders the collected figure is made of. A block collected on
+             four delivery orders shows one number, and "which D/O is that?"
+             has no answer from the number alone — least of all when no single
+             order carries it, because it is their sum. */
+          orders: [],
         });
       }
       const e = by.get(key);
       e.collected += line.qty;
+      e.orders.push({ do: d.do_number || '', on: String(d.delivery_date || ''), qty: line.qty });
       /* Both ends of the collection. The FIRST is when pengambilan opened on
          this block, which is what says how far through it is; the last is
          only the most recent order. */
@@ -140,8 +146,12 @@ export async function loadPlots() {
      B11 — there is no transplanted-in figure to subtract from, so there is no
      balance and nothing here to judge. */
   const rows = [...by.values()].filter((e) => e.transplant > 0 && !finished.has(e.key));
-  // How long collection has been running on each.
-  rows.forEach((e) => { e.daysCollecting = daysSince(e.firstDate, today); });
+  rows.forEach((e) => {
+    // How long collection has been running on each.
+    e.daysCollecting = daysSince(e.firstDate, today);
+    // Its orders in the order they happened, which is how they are looked up.
+    e.orders.sort((a, b) => a.on.localeCompare(b.on) || String(a.do).localeCompare(String(b.do)));
+  });
   return byPlotThenBatch(rows);
 }
 
