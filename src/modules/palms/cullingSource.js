@@ -234,13 +234,22 @@ export async function loadFinished() {
   return finishedBlocks(res.data || []);
 }
 
-/** The same, from rows already in hand. */
+/**
+ * The same, from rows already in hand.
+ *
+ * What finishes a block is that a 3rd culling has been RECORDED against it,
+ * not how big the figure is. The Batch Report is careful about this: a Culled
+ * Qty left blank is never saved, precisely so a batch cannot look complete
+ * when nobody has judged it — which means a saved zero is somebody's answer,
+ * "nothing to cull here", and the block is as finished as one culled by the
+ * thousand. Reading only the non-zero rows left those blocks on the screen
+ * asking to be counted again.
+ */
 export function finishedBlocks(rows) {
   const out = new Set();
   for (const l of rows || []) {
-    const qty = Math.abs(Number(l.quantity_change || 0));
     const batch = batchKey(l.batch_name);
-    if (!qty || !batch) continue;
+    if (!batch) continue;
     if (l.transaction_type === 'Cull3_Transfer') {
       // The plot it LEFT, which only the remark names.
       const from = String(l.remark || '').match(/From:\s*\[([^\]|]+)\|/);
