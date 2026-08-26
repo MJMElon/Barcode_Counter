@@ -102,15 +102,21 @@ export function sellWindow(months) {
  * balance with nothing behind it must not move an intake's rate.
  */
 export function cyclesForPlot(transplantLogs, balanceRows, nowMonth, out2 = {}) {
-  /* What left the plot, per batch, so the intake's figures add up on screen:
+  /* What left the plot, per batch.
+     
+     `culled` is not just another term in a sum — it is the END of this
+     intake's life in the calculator. Collection runs until the plot is nearly
+     empty; the Field Conductor then comes here, and what is left is judged
+     against the ten percent line. Under it, the remainder is culled, less any
+     pokok inang screened out and kept. So a cull recorded against an intake
+     means that judgement has already been made and acted on: the intake is
+     finished, and it has no business being offered for counting again.
 
-       transplanted in  −  culled  −  collected  =  balance
-
-     Without these two the screen showed only the first, the third and the
-     last, and anyone subtracting them got the wrong answer — U4 read 4,374
-     in, 3,748 collected and 79 left, which looks like 547 gone missing. It
-     had not gone missing: it was culled. Showing two terms of a four-term sum
-     invites exactly that arithmetic. */
+     This is why a listed intake reconciles as
+     
+         transplanted in  −  collected  =  balance
+     
+     with nothing culled: once anything is culled, the intake leaves. */
   const culledBy = out2.culledBy || new Map();
   const deliveredBy = out2.deliveredBy || new Map();
   /* batch → { qty transplanted in, months it came in }
@@ -205,6 +211,8 @@ export function cyclesForPlot(transplantLogs, balanceRows, nowMonth, out2 = {}) 
     key: c.months[0],
     label: c.months.length > 1 ? `${c.months[0]}…${c.months[c.months.length - 1]}` : c.months[0],
     selling: !!nowMonth && monthsApart(c.months[c.months.length - 1], nowMonth) >= SELL_OPENS,
+    // The culling has been done. Judged, culled, finished.
+    done: total(c, 'culled') > 0,
   }));
   if (orphan.batches.length) {
     out.push({
@@ -214,6 +222,7 @@ export function cyclesForPlot(transplantLogs, balanceRows, nowMonth, out2 = {}) 
       key: 'unattributed',
       label: '',
       selling: false,
+      done: total(orphan, 'culled') > 0,
     });
   }
   return out;

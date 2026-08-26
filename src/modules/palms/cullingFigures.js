@@ -28,10 +28,16 @@ import { currentCycle, cyclesForPlot } from './cullingCycles.js';
    same plot. */
 const TRANSPLANT_TYPES = ['Transplanted', 'Transplanted_Premium', 'Transplanted_DoubleTone'];
 
-/* What takes seedlings OFF a plot other than a sale. Culling is the whole
-   point of this screen, and it is the term that made the figures look like
-   they did not add up: a plot showing 4,374 in, 3,748 collected and 79 left
-   reads as 547 unaccounted for until the culls are named. */
+/* Culling recorded against a PLOT. This is the end of the intake's life on
+   this screen, not a running total to display: collection empties the plot,
+   the Field Conductor judges what is left against the ten percent line, and
+   the remainder is culled. A cull on the ledger means that has happened.
+
+   All four types are read, though in practice only the later two reach a plot:
+   1st_Culling and Damaged_Seeds are recorded against the TRAY the seeds were
+   sown in, so they land under a tray key and never under U4 or B3. Reading
+   them costs nothing and means a plot-stage cull recorded under any of the
+   four still ends the intake. */
 const CULL_TYPES = ['Damaged_Seeds', '1st_Culling', '2nd_Culling', '3rd_Culling'];
 
 /** → Map(plotKey → { transplant, balance }). Plots with nothing standing in
@@ -104,10 +110,13 @@ export async function loadCullingFigures() {
       // The intake batch by batch, so the calculator can be pointed at one
       // block of ground rather than averaging the plot.
       lines: cur.lines,
-      // The two ways the intake emptied, so the figures on screen add up:
-      // transplanted in − culled − collected = balance.
-      culled: cur.culled,
       delivered: cur.delivered,
+      /* The culling has already been done on this intake, so it is finished:
+         the judgement against the ten percent line has been made and what was
+         left has been culled. The calculator drops it — offering it again
+         would invite a second cull of stock that is no longer there. */
+      culled: cur.culled,
+      done: cur.done,
     });
   });
   return out;

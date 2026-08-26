@@ -82,12 +82,17 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
   const plots = useMemo(() => {
     const out = [];
     nurseryKeys.forEach((nk) => (data[nk] || []).forEach((r) => {
-      /* `delivered` on the row is the INTAKE's, worked out per batch by
-         cullingFigures. The scope's figure is the whole plot across every
-         intake it has ever held, so it must not overwrite it — the breakdown
-         has to add up against this intake's balance, not the plot's history.
-         Kept alongside, under its own name. */
-      if (scope.plots.has(r.plot)) {
+      /* A delivery order puts the plot here; a recorded cull takes it away
+         again. Collection empties the plot, the Field Conductor judges what is
+         left against the ten percent line, and the remainder is culled — so a
+         cull on the ledger means that has already happened and this intake is
+         finished. Leaving it listed invites a second count of stock that is no
+         longer standing.
+
+         `plotDelivered` is kept under its own name because the row's own
+         `delivered` is the INTAKE's, worked out per batch, while the scope's
+         spans every intake the plot has ever held. */
+      if (scope.plots.has(r.plot) && !r.done) {
         out.push({ ...r, nursery: nk, plotDelivered: scope.delivered.get(r.plot) || 0 });
       }
     }));
@@ -291,28 +296,19 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
               {t('cull.intakeOf', { m: prettyMonth(row.intake), n: row.intakes })}
             </div>
           )}
-          {/* Where the rest of the intake went. The balance above is what is
-              left after both, and showing only one of them invited the
-              subtraction that does not work: 4,374 in and 3,748 collected
-              leaves 626, not 79, until the culls are named too. */}
-          {row && (row.delivered > 0 || row.culled > 0) && (
+          {/* Where the rest of the intake went. Nothing has been culled off a
+              plot still on this list — a cull is what takes it off — so the
+              balance is simply what the customers have not collected yet. */}
+          {row && row.delivered > 0 && (
             <div className="text-[10px] font-bold text-slate-500 tabular-nums leading-snug pt-1 space-y-0.5">
               <div className="flex justify-between gap-3">
                 <span>{t('cull.transplantedIn')}</span>
                 <span className="text-slate-400">{fmtNum(row.transplant)}</span>
               </div>
-              {row.culled > 0 && (
-                <div className="flex justify-between gap-3">
-                  <span>{t('cull.culledOff')}</span>
-                  <span className="text-slate-400">−{fmtNum(row.culled)}</span>
-                </div>
-              )}
-              {row.delivered > 0 && (
-                <div className="flex justify-between gap-3">
-                  <span>{t('cull.collected')}</span>
-                  <span className="text-slate-400">−{fmtNum(row.delivered)}</span>
-                </div>
-              )}
+              <div className="flex justify-between gap-3">
+                <span>{t('cull.collected')}</span>
+                <span className="text-slate-400">−{fmtNum(row.delivered)}</span>
+              </div>
             </div>
           )}
         </div>
