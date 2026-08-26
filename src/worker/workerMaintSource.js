@@ -143,12 +143,6 @@ export function makeWorkerMaintSource(token) {
       }
     },
 
-    /* No crew. A worker answers for their own morning, not for anyone
-       else's, and the panel would be a list of colleagues with their output
-       beside their names on a phone anybody in the plot can look over. The
-       module shows it only when a source offers one; this one does not. */
-    loadCrew: null,
-
     deleteRecord() {
       return Promise.reject(new Error('Only the office can remove a record.'));
     },

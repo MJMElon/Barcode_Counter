@@ -235,11 +235,11 @@ const en = {
   'mt.newTitle': 'Record Maintenance Work',
   'mt.editTitle': 'Edit Maintenance Record',
   'mt.pickPlot': '— Choose plot —',
-  'mt.crew': 'Who did the work',
-  'mt.crewRecorded': '{done} of {total} recorded',
-  'mt.crewNothing': 'Nothing recorded this month',
-  'mt.crewOther': 'not on your crew',
-  'mt.crewShowingAll': '✕ Show everyone',
+  'mt.verify': '+ Verify this work',
+  'mt.verifiedBy': 'Verified by {name}',
+  'mt.unverify': 'Tap to undo',
+  'mt.byNobody': 'no name recorded',
+  'mt.verifySetupNeeded': 'Run shared/add_maint_field_verify.sql first — the verify columns are missing.',
 
   // top nav / offline
 
@@ -710,11 +710,11 @@ const ms = {
   'mt.newTitle': 'Rekod Kerja Penyelenggaraan',
   'mt.editTitle': 'Ubah Rekod Penyelenggaraan',
   'mt.pickPlot': '— Pilih plot —',
-  'mt.crew': 'Siapa buat kerja',
-  'mt.crewRecorded': '{done} daripada {total} sudah rekod',
-  'mt.crewNothing': 'Tiada rekod bulan ini',
-  'mt.crewOther': 'bukan kru anda',
-  'mt.crewShowingAll': '✕ Tunjuk semua',
+  'mt.verify': '+ Sahkan kerja ini',
+  'mt.verifiedBy': 'Disahkan oleh {name}',
+  'mt.unverify': 'Ketik untuk batal',
+  'mt.byNobody': 'tiada nama direkod',
+  'mt.verifySetupNeeded': 'Jalankan shared/add_maint_field_verify.sql dahulu — lajur pengesahan tiada.',
 
   // top nav / offline
 

@@ -6,18 +6,19 @@ import { useLang } from '../../context/LanguageContext.jsx';
 import {
   BATCH_SETUP_NEEDED,
   SETUP_NEEDED,
+  VERIFY_SETUP_NEEDED,
   WORK_TYPES,
   allowedNurseries,
   canMaintain,
   deleteRecord,
   flushMaintenance,
   isModuleAdmin,
-  loadCrew,
   loadMaintenanceData,
   loadPlotBatches,
   loadSchedules,
   nurseryKey,
   pendingRecords,
+  setVerified,
   submitRecord,
   toCsv,
   todayStr,
@@ -27,7 +28,6 @@ import {
 } from './data.js';
 import PhotoSlots from './PhotoSlots.jsx';
 import ThisWeek from './ThisWeek.jsx';
-import Crew from './Crew.jsx';
 import Timeline from './Timeline.jsx';
 import WorkIcon from './WorkIcons.jsx';
 import WorkSheet from './WorkSheet.jsx';
@@ -77,11 +77,11 @@ function relativeDay(iso, today, t) {
  */
 const FC_SOURCE = {
   loadData:       loadMaintenanceData,
-  loadCrew,
   loadPlotBatches,
   loadSchedules,
   submitRecord,
   deleteRecord,
+  setVerified,
   flushQueue:     flushMaintenance,
   pending:        pendingRecords,
 };
@@ -125,7 +125,6 @@ export default function MaintenanceModule({
   const [batchMap, setBatchMap] = useState(new Map());
   const [sheet, setSheet] = useState(null);         // { week, workType }
   const [saving, setSaving] = useState(false);
-  const [crew, setCrew] = useState([]);         // the workers this conductor answers for
   const [whoPicked, setWhoPicked] = useState(null); // crew row the list is filtered to
   const [pending, setPending] = useState([]);   // records the queue is holding
   const [syncing, setSyncing] = useState(false);
@@ -141,6 +140,10 @@ export default function MaintenanceModule({
   const isAdmin   = isModuleAdmin(permissions, 'operation');
   const mayEdit   = isAdmin && canMaintain(permissions, 'edit');
   const mayExport = canMaintain(permissions, 'export');
+  /* Signing off a worker's morning. Set on the FC Scan Portal's User Access
+     under Schedule Maintenance Work; a worker's own portal never offers it,
+     because nobody verifies their own work. */
+  const mayVerify = !!source.setVerified && canMaintain(permissions, 'verify');
 
   const flash = (text) => {
     setToast(text);
@@ -236,18 +239,6 @@ export default function MaintenanceModule({
   const today = todayStr();
   const month = monthLabelOf(today);
 
-  /* What the crew panel counts: this month, this nursery, everybody. It is
-     deliberately NOT `visible` — that already has the crew pick applied, so
-     counting it would collapse every other row to zero the moment somebody
-     was tapped. */
-  const monthRecords = useMemo(
-    () => allRecords.filter(
-      (r) => (allowed === null || allowed.includes(r.nursery_name)) &&
-             (!nursery || r.nursery_name === nursery) &&
-             monthLabelOf(r.work_date) === month
-    ),
-    [allRecords, allowed, nursery, month]
-  );
   const currentWeek = weekOfDate(today);
 
   // Which nurseries the timeline covers: the one the filter names, or every
@@ -273,17 +264,6 @@ export default function MaintenanceModule({
       .catch(() => { if (live) setSchedule([]); });
     return () => { live = false; };
   }, [nurseriesSig, month]);
-
-  /* Who this conductor answers for. Only the FC portal asks — a worker has
-     no crew and its source says so by not offering loadCrew at all. */
-  useEffect(() => {
-    let live = true;
-    if (!source.loadCrew) { setCrew([]); return undefined; }
-    source.loadCrew()
-      .then((rows) => { if (live) setCrew(rows || []); })
-      .catch((e) => { console.warn('[maintenance] crew unavailable:', e); if (live) setCrew([]); });
-    return () => { live = false; };
-  }, [source]);
 
   // Once, when the module opens. Deliberately NOT re-read after a save:
   // recording that a plot was sprayed moves no seedlings, so the balances
@@ -393,6 +373,25 @@ export default function MaintenanceModule({
       reload();
     } catch (e) {
       flash(t('mt.saveErr', { msg: e.message || String(e) }));
+    }
+  }
+
+  async function handleVerify(rec) {
+    if (!mayVerify) return;
+    const on = !rec.verified_at;
+    /* Answer on screen before the round trip: a conductor works down a list
+       of a morning's records, and a tick that waits for the network turns
+       into two taps and a duplicate. Put back if the save fails. */
+    setRecords((rs) => rs.map((r) => (r.id === rec.id
+      ? { ...r, verified_by: on ? staffName : null, verified_at: on ? new Date().toISOString() : null }
+      : r)));
+    try {
+      await source.setVerified(rec.id, on ? staffName : null);
+    } catch (e) {
+      setRecords((rs) => rs.map((r) => (r.id === rec.id ? rec : r)));
+      flash(e && e.message === VERIFY_SETUP_NEEDED
+        ? t('mt.verifySetupNeeded')
+        : t('mt.saveErr', { msg: (e && e.message) || String(e) }));
     }
   }
 
@@ -574,20 +573,6 @@ export default function MaintenanceModule({
           />
         )}
 
-        {/* Who did the month's work. The Field Conductor's view of his crew;
-            a worker's own portal has no crew to show and its source does not
-            offer one. */}
-        {!!crew.length && (
-          <Crew
-            crew={crew}
-            records={monthRecords}
-            nursery={nursery}
-            picked={whoPicked}
-            onPick={setWhoPicked}
-            t={t}
-          />
-        )}
-
         <div className="flex items-center justify-between gap-2 pt-1">
           <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
             {t('mt.completed')}
@@ -626,15 +611,21 @@ export default function MaintenanceModule({
                       <div className="font-black text-slate-800 text-[14px] leading-tight">
                         {workTypeLabel(wt, lang) || r.jenis || '—'} · {r.plot_name}
                       </div>
-                      {/* One line for everything that is context rather than
-                          content: when, what was used, and who. */}
+                      {/* When and what was used. Who did it used to be the
+                          last item on this grey line; now that workers record
+                          their own mornings it is the thing a conductor is
+                          reading the list FOR, so it has a line of its own
+                          below. */}
                       <div className="text-[11.5px] font-bold text-slate-400 mt-0.5">
                         {[
                           relativeDay(r.work_date, today, t),
                           r.chemical || null,
                           r.qty != null ? Number(r.qty).toLocaleString() : null,
-                          r.reported_by || null,
                         ].filter(Boolean).join(' · ')}
+                      </div>
+
+                      <div className="text-[12.5px] font-black text-slate-600 mt-1">
+                        {r.reported_by || t('mt.byNobody')}
                       </div>
 
                       {r.batch_name && (
@@ -676,6 +667,36 @@ export default function MaintenanceModule({
                       </svg>
                     )}
                   </div>
+
+                  {/* Verified, or the button to verify it. Shown to everyone
+                      — a worker seeing "checked by Encik Ramli" against their
+                      own morning is the point of the signature — but only a
+                      conductor with the tick can press it. A queued record has
+                      not reached the database and cannot be signed for yet. */}
+                  {!r._pending && (r.verified_at || mayVerify) && (
+                    <div className="mt-2.5">
+                      {r.verified_at ? (
+                        <button
+                          onClick={() => handleVerify(r)}
+                          disabled={!mayVerify}
+                          className={`w-full flex items-center justify-center gap-1.5 rounded-xl py-2 border text-[11px] font-black uppercase tracking-widest
+                            bg-emerald-50 border-emerald-200 text-emerald-700
+                            ${mayVerify ? 'cursor-pointer hover:bg-emerald-100' : 'cursor-default'}`}
+                          title={mayVerify ? t('mt.unverify') : undefined}
+                        >
+                          <span aria-hidden="true">✓</span>
+                          {t('mt.verifiedBy', { name: r.verified_by || '—' })}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleVerify(r)}
+                          className="w-full rounded-xl py-2 border border-dashed border-slate-300 bg-white hover:bg-slate-50 hover:border-emerald-400 text-slate-500 hover:text-emerald-700 text-[11px] font-black uppercase tracking-widest cursor-pointer transition-colors"
+                        >
+                          {t('mt.verify')}
+                        </button>
+                      )}
+                    </div>
+                  )}
 
                   {mayEdit && !r._pending && (
                     <div className="flex gap-2 mt-2.5">

@@ -24,6 +24,9 @@ export { isModuleAdmin, nurseryKey } from '../../lib/access.js';
     SQL to run instead of showing a raw PostgREST error. */
 export const SETUP_NEEDED = 'SETUP_NEEDED';
 
+/** Raised when the verify columns have not been added yet. */
+export const VERIFY_SETUP_NEEDED = 'VERIFY_SETUP_NEEDED';
+
 /** Raised when the batch/week columns have not been added yet. */
 export const BATCH_SETUP_NEEDED = 'BATCH_SETUP_NEEDED';
 
@@ -329,34 +332,29 @@ async function loadPlotBatchesFromLedger() {
 }
 
 /**
- * The crew a Field Conductor answers for: the workers on the payroll whose
- * nursery is one of his.
+ * A Field Conductor's signature on a record.
  *
- * There is no supervisor column anywhere in this system, and inventing one
- * would be a second list to keep tidy — a new hire missed on it would simply
- * not appear under anybody. A Field Conductor already has a nursery list on
- * his User Access, and a worker's payroll row already names their nursery.
- * Those two together are the answer, and both are already maintained for
- * other reasons.
+ * Workers record their own morning, so a record is a claim until somebody who
+ * answers for the plot has looked at it. This is that: a name and a time, and
+ * nothing else changes — the work still counts for the week either way.
  *
- * NOTE the select list. `pin` is a column on this table and it is NEVER asked
- * for here: a PIN is a door number, the office hands them out, and no screen
- * outside the Payroll register has any business holding one. Do not add it.
+ * Passing null un-verifies, for the times it was pressed on the wrong row.
  *
- * A database without the payroll module returns nothing rather than raising —
- * the crew panel simply does not appear, and recording work carries on.
+ * Columns from shared/add_maint_field_verify.sql. A database without them
+ * says so plainly rather than failing with PostgREST's wording, because the
+ * fix is to run one file.
  */
-export async function loadCrew() {
-  const { data, error } = await supabase
-    .from('mjmnpayroll_workers')
-    .select('id, worker_no, full_name, nursery, section, role, active')
-    .eq('active', true)
-    .order('full_name');
+export async function setVerified(id, who) {
+  const { error } = await supabase
+    .from('nops_maint_field_records')
+    .update(who
+      ? { verified_by: who, verified_at: new Date().toISOString() }
+      : { verified_by: null, verified_at: null })
+    .eq('id', id);
   if (error) {
-    if (isMissingTable(error)) return [];
+    if (isMissingColumn(error)) throw new Error(VERIFY_SETUP_NEEDED);
     throw error;
   }
-  return data || [];
 }
 
 export async function deleteRecord(id) {
