@@ -11,9 +11,10 @@ import { nurseryOfPlot } from './data.js';
  *
  * Two reads, both against one block — a plot AND a batch:
  *
- *   pengambilan   Customer Order Monitoring. A Delivery Order collecting from
- *                 a plot is what says that plot is being collected from, and
- *                 the sum of those collections is what has gone.
+ *   pengambilan   The PLOT STATUS. A plot is on this screen when PALMS has it
+ *                 at Pengambilan — the Field Conductor moving it there is
+ *                 what puts it here. Delivery orders supply how much has been
+ *                 collected, but they do not decide the list.
  *   transplanting The Batch Report's Transplanting tab, which records the
  *                 date, the plot, the batch and the quantity that went in.
  *   3rd culling   Also the Batch Report. A block leaves this screen when its
@@ -45,12 +46,11 @@ import { nurseryOfPlot } from './data.js';
 /**
  * Which plots are in pengambilan, and which batch of each.
  *
- * A plot is in pengambilan when a customer is collecting off it, and the
- * Customer Order Monitoring page is where that is said: a Delivery Order names
- * the plot and the batch the seedlings came from. So a collection on a D/O is
- * what puts a plot on this screen, and nothing else does — a plot nobody is
- * collecting from never appears, and nor does a -R plot however much is
- * collected off it.
+ * A plot is here because PALMS has it at Pengambilan. Delivery orders say how
+ * much has gone; they do not decide whether the plot belongs. A plot moved
+ * this morning with nothing collected yet still appears, with a balance equal
+ * to what was transplanted in — which is exactly the plot somebody has been
+ * sent to count. A -R plot never appears however much is collected off it.
  *
  * One entry per plot AND batch, not per plot. A D/O collects from a named
  * batch, so a plot holding three of them is three separate blocks of ground
@@ -83,17 +83,102 @@ async function loadDeliveryOrders() {
   return res.data || [];
 }
 
+/**
+ * Which plots PALMS says are at Pengambilan, right now.
+ *
+ * THIS is what puts a plot on the Culling Calculator — the Field Conductor
+ * moving it to Pengambilan, and nothing else. Not a delivery order: a D/O is
+ * evidence that collection has started, but it is typed by hand on another
+ * screen by another person, and a plot can be named on one while the field
+ * still has it growing. When the D/O screen learns to move the status itself,
+ * this rule keeps working unchanged — the status is still the gate, something
+ * else is just setting it.
+ *
+ * Matched by NAME rather than by "the last stage in the list", because the
+ * list is the office's to extend: a nursery that adds a stage after
+ * Pengambilan (Up-keep, say) would otherwise silently move the gate onto it.
+ * Falls back to the last stage only when nothing is named Pengambilan at all.
+ *
+ * A split plot logs against "B2#A". The plot is what the delivery orders and
+ * the batch report name, so an area at Pengambilan puts its PLOT on the
+ * screen — the figures are per batch either way.
+ */
+export async function pengambilanPlots() {
+  const [logs, stages] = await Promise.all([
+    fetchAllRows(() =>
+      supabase
+        .from('fcportal_palms_plot_logs')
+        .select('plot_name, act_n, end_date')
+        .is('end_date', null)
+        .order('id', { ascending: true })
+    ),
+    supabase.from('nops_plot_status_stages').select('name, sort_order').order('sort_order'),
+  ]);
+  if (logs.error) {
+    console.warn('[culling] could not read the plot status:', logs.error.message);
+    return null;                 // null = could not tell, which is not "none"
+  }
+  if (stages.error || !(stages.data || []).length) {
+    console.warn('[culling] could not read the stage list:', stages.error && stages.error.message);
+    return null;
+  }
+  const list = stages.data;
+  const hit = list.find((x) => String(x.name).trim().toLowerCase() === 'pengambilan')
+           || list[list.length - 1];
+  const want = hit.sort_order;
+  const out = new Set();
+  (logs.data || []).forEach((r) => {
+    if (r.act_n !== want) return;
+    out.add(plotKey(String(r.plot_name || '').split('#')[0]));
+  });
+  return out;
+}
+
 export async function loadPlots() {
+  /* The gate first. A plot the field has not moved to Pengambilan is not on
+     this screen whatever the paperwork says, so there is no point reading the
+     rest for it. */
+  const atPengambilan = await pengambilanPlots();
+  if (!atPengambilan) return [];          // could not read the status — say nothing
+  if (!atPengambilan.size) return [];
+
   const dos = await loadDeliveryOrders();
   if (!dos) return [];
 
   const today = new Date().toISOString().slice(0, 10);
   const by = new Map();
+
+  /* Every batch that went INTO one of those plots is a block, whether or not
+     anything has been collected off it yet. A plot moved to Pengambilan this
+     morning has no delivery order against it and still has to be countable —
+     that is the whole point of moving it. Collections are added on top. */
+  const planted0 = await loadTransplanting();
+  planted0.forEach((t, key) => {
+    const plot = key.split('#')[0];
+    if (!atPengambilan.has(plot)) return;
+    if (isReplantPlot(plot)) return;
+    const batch = key.slice(plot.length + 1);
+    if (isOldBatch(batch)) return;
+    by.set(key, {
+      key,
+      plot,
+      batch,
+      nursery: nurseryOfPlot(plot) || '',
+      collected: 0,
+      firstDate: '',
+      lastDate: '',
+      orders: [],
+    });
+  });
+
   for (const d of dos) {
     if (isCancelled(d)) continue;
     for (const line of collectionLines(d)) {
       if (isReplantPlot(line.plot)) continue;
       if (isOldBatch(line.batch)) continue;
+      // The status is the gate, so a collection against a plot that is not at
+      // Pengambilan is not a reason to list it.
+      if (!atPengambilan.has(line.plot)) continue;
       const key = `${line.plot}#${line.batch}`;
       if (!by.has(key)) {
         by.set(key, {
@@ -128,7 +213,8 @@ export async function loadPlots() {
   /* What went in, and what has finished. Both are matched on the same
      plot-and-batch key the collections were gathered under, so a figure can
      only ever meet the block it actually belongs to. */
-  const [planted, finished] = await Promise.all([loadTransplanting(), loadFinished()]);
+  const planted = planted0;
+  const finished = await loadFinished();
   by.forEach((e) => {
     const t = planted.get(e.key);
     e.transplant = t ? t.qty : 0;
@@ -180,9 +266,34 @@ export async function diagnose(plot = '', batch = '') {
   const wantBatch = batchKey(batch);
   const dos = await loadDeliveryOrders();
   if (!dos) return [{ why: 'the delivery orders could not be read at all' }];
-  const [planted, finished] = await Promise.all([loadTransplanting(), loadFinished()]);
+  const [planted, finished, atPengambilan] = await Promise.all([
+    loadTransplanting(), loadFinished(), pengambilanPlots(),
+  ]);
 
   const out = [];
+
+  /* Blocks that ARE listed but have no delivery order at all — a plot moved
+     to Pengambilan with nothing collected off it yet. Walking the D/O lines
+     alone would never mention them, and "why is it on the screen" is as fair
+     a question as "why is it not". */
+  if (atPengambilan) {
+    planted.forEach((t, key) => {
+      const p = key.split('#')[0];
+      const b = key.slice(p.length + 1);
+      if (!atPengambilan.has(p)) return;
+      if (wantPlot && p !== wantPlot) return;
+      if (wantBatch && b !== wantBatch) return;
+      if (dos.some((d) => !isCancelled(d) &&
+          collectionLines(d).some((l) => l.plot === p && l.batch === b))) return;
+      out.push({
+        do: '', on: '', plot: p, batch: b, qty: 0, transplanted: t.qty,
+        why: finished.has(key)
+          ? 'the 3rd culling map qty is in — this block is done'
+          : 'LISTED (at Pengambilan, nothing collected yet)',
+      });
+    });
+  }
+
   for (const d of dos) {
     for (let i = 1; i <= 5; i++) {
       const rawPlot = d[`plot_${i}`];
@@ -205,7 +316,7 @@ export async function diagnose(plot = '', batch = '') {
         batch: rawBatch,
         qty: rawQty,
         transplanted: t ? t.qty : 0,
-        why: whyNot(d, p, b, q, planted, finished),
+        why: whyNot(d, p, b, q, planted, finished, atPengambilan),
       });
     }
   }
@@ -248,7 +359,13 @@ export async function plantedNear(plot = '', batch = '') {
 /* The gates, in the same order loadPlots applies them. Kept beside the
    diagnosis rather than inside it so the wording of each answer sits next to
    the rule it reports on. */
-function whyNot(d, p, b, q, planted, finished) {
+function whyNot(d, p, b, q, planted, finished, atPengambilan) {
+  /* The status gate is first here because it is first in loadPlots. Without
+     it this said LISTED for lines the list does not carry, which is the one
+     thing a diagnosis must never do. */
+  if (atPengambilan && !atPengambilan.has(p)) {
+    return `PALMS does not have ${p} at Pengambilan — the field moves it there, and that is what puts it on the screen`;
+  }
   if (isCancelled(d)) return 'the order is cancelled';
   if (!p) return 'no plot on this line';
   if (!b) return 'no batch on this line — the calculator cannot tell the plot’s batches apart without one';
