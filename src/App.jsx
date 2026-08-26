@@ -4,7 +4,7 @@ import { useAuth } from './context/AuthContext.jsx';
 import AuthScreen from './components/AuthScreen.jsx';
 import Dashboard from './components/Dashboard.jsx';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
-import PalmsDock from './components/PalmsDock.jsx';
+import FloatingDock from './components/FloatingDock.jsx';
 import { useLang } from './context/LanguageContext.jsx';
 import { canScan } from './lib/access.js';
 
@@ -181,7 +181,7 @@ export default function App() {
           the first job of the morning, and a control that only exists on the
           dashboard is one a Field Conductor can walk past all day. It hides
           itself inside PALMS and for anyone without the module. */}
-      <PalmsDock />
+      <FloatingDock />
     </>
   );
 }

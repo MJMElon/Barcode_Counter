@@ -8,7 +8,17 @@ import { applyCachedOfficeConfig, refreshOfficeConfig } from '../modules/palms/o
 import PalmsWindow from './PalmsWindow.jsx';
 
 /**
- * The PALMS train — a floating button, not a card in a list.
+ * The PALMS train — the artwork and the day's progress.
+ *
+ * This used to BE the floating button. It is now the PALMS half of one:
+ * FloatingDock owns the single button, the drag and where it sits, and
+ * borrows Train and todayProgress from here. Two floating buttons on one
+ * phone screen is one too many, and the second one always lands on the
+ * thing somebody needs to tap.
+ *
+ * The default export is kept and still works on its own — nothing else
+ * mounts it today, and deleting a working component to save a file is how
+ * you lose the only copy of the drag maths.
  *
  * Updating every plot's status is the first job of the morning, and a card
  * sitting fifth in a list on one screen is easy to walk past. This follows
@@ -59,7 +69,7 @@ function defaultPos() {
 /** How much of today's round is keyed in, across the nurseries this person
     may see. Areas count separately, because that is how the work is logged —
     a plot split in three is three things to key in, not one. */
-function todayProgress(permissions) {
+export function todayProgress(permissions) {
   const db = loadDB();
   const keys = visibleNurseries(permissions, Object.keys(NURSERIES), null, 'palms')
     .flatMap((nk) => plotsOf(nk))
@@ -68,7 +78,7 @@ function todayProgress(permissions) {
   return { done, total: keys.length };
 }
 
-function Train({ steaming }) {
+export function Train({ steaming }) {
   const body = steaming ? '#0f766e' : '#94a3b8';
   const trim = steaming ? '#5eead4' : '#cbd5e1';
   const wheel = steaming ? '#134e4a' : '#64748b';
