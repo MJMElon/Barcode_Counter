@@ -52,19 +52,16 @@ import { nurseryOfPlot } from './data.js';
  * collecting from never appears, and nor does a -R plot however much is
  * collected off it.
  *
- * Per batch, not per plot — but only where the batches are really separate
- * jobs. A D/O collects from a named batch, and a plot holding three of them
- * emptied a season apart is three blocks of ground on their own timetables,
- * which one row would average away. Batches emptied at the same time are the
- * opposite case: one visit, one count, one row. So a plot's batches are split
- * by WHEN their collection opened rather than by name, a month apart being
- * the line — see mergeNearBatches.
+ * One entry per plot AND batch, not per plot. A D/O collects from a named
+ * batch, so a plot holding three of them is three separate blocks of ground
+ * being emptied on their own timetables, and rolling them into one row would
+ * average away the only figures worth having. They are kept side by side
+ * instead — see byPlotThenBatch.
  *
- * @returns {Promise<Array<{ key, plot, batch, batches, nursery, collected,
- *   firstDate, lastDate, transplant, transplantedOn, balance, daysCollecting }>>}
+ * @returns {Promise<Array<{ key, plot, batch, nursery, collected, firstDate,
+ *   lastDate, transplant, transplantedOn, balance, daysCollecting }>>}
  *   `key` is what the screen selects on — a plot alone is not unique once its
- *   batches are separated. `batch` reads as "237 + 242" where several were
- *   fused, and `batches` lists them.
+ *   batches are separated.
  */
 /** Every delivery order, or null if they could not be read. Its own function
     so the diagnosis below reads exactly what the list reads. */
@@ -142,96 +139,10 @@ export async function loadPlots() {
      232 can be collected against on paper when no batch 232 ever went into
      B11 — there is no transplanted-in figure to subtract from, so there is no
      balance and nothing here to judge. */
-  const live = [...by.values()].filter((e) => e.transplant > 0 && !finished.has(e.key));
-
-  /* Batches of one plot being emptied at the same time are one job. Every
-     rule above has already been applied to each batch on its own, so a batch
-     that is finished or was never planted cannot pull a live one into a row
-     with it. */
-  const rows = mergeNearBatches(live);
+  const rows = [...by.values()].filter((e) => e.transplant > 0 && !finished.has(e.key));
+  // How long collection has been running on each.
   rows.forEach((e) => { e.daysCollecting = daysSince(e.firstDate, today); });
-  return rows.sort(byReadiness);
-}
-
-/**
- * How far apart two batches of one plot may start and still be one job.
- *
- * A month, because that is how long collecting a block takes: batches that
- * opened within a month of each other are being emptied together and are
- * walked together.
- */
-export const MERGE_DAYS = 31;
-
-/**
- * Batches of the SAME plot whose collections opened close together, fused
- * into one row.
- *
- * Plot A's first batch opening on 1 July and its second on 1 August is one
- * visit, not two: the Field Conductor walks the plot once and counts what is
- * standing in it. Splitting them would send him back to the same ground twice
- * in a month and make him judge each half against a rate the other half is
- * also part of.
- *
- * Two things this deliberately does NOT do. It never fuses across plots —
- * plot B opening on 15 July is its own ground and its own row, however close
- * its dates are to plot A's. And it never lets a group run away: a batch
- * joins only if it opened within a month of the EARLIEST in the group, so
- * July, August and September stay two rows rather than chaining into one
- * quarter-long block through a series of small steps.
- *
- * A batch with no collection date cannot be placed on the timeline, so it
- * stands on its own rather than being folded into whatever it sorts beside.
- */
-export function mergeNearBatches(blocks) {
-  const byPlot = new Map();
-  for (const b of blocks || []) {
-    if (!byPlot.has(b.plot)) byPlot.set(b.plot, []);
-    byPlot.get(b.plot).push(b);
-  }
-
-  const out = [];
-  byPlot.forEach((list) => {
-    const dated = list
-      .filter((b) => b.firstDate)
-      .sort((a, b) => a.firstDate.localeCompare(b.firstDate));
-    let group = [];
-    for (const b of dated) {
-      if (group.length && daysSince(group[0].firstDate, b.firstDate) > MERGE_DAYS) {
-        out.push(fuse(group));
-        group = [];
-      }
-      group.push(b);
-    }
-    if (group.length) out.push(fuse(group));
-    for (const b of list) if (!b.firstDate) out.push(b);
-  });
-  return out;
-}
-
-/** One row from several batches: the figures add up, the dates take the
-    widest span, and the batch reads as all of them. */
-function fuse(group) {
-  if (group.length === 1) return group[0];
-  const batches = group
-    .map((b) => b.batch)
-    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-  const widest = (pick, better) => group.reduce((m, b) => (better(pick(b), m) ? pick(b) : m), '');
-  const collected = group.reduce((n, b) => n + b.collected, 0);
-  const transplant = group.reduce((n, b) => n + b.transplant, 0);
-  return {
-    ...group[0],
-    // The key still names the ground, so a selection survives a refresh.
-    key: `${group[0].plot}#${batches.join('+')}`,
-    batch: batches.join(' + '),
-    batches,
-    collected,
-    transplant,
-    balance: transplant - collected,
-    // When collection opened on the FIRST of them — the job started then.
-    firstDate: widest((b) => b.firstDate, (v, m) => !!v && (!m || v < m)),
-    lastDate: widest((b) => b.lastDate, (v, m) => v > m),
-    transplantedOn: widest((b) => b.transplantedOn, (v, m) => v > m),
-  };
+  return byPlotThenBatch(rows);
 }
 
 /**
@@ -364,16 +275,46 @@ export function readiness(row) {
   return d >= COLLECTION_DAYS ? 0 : COLLECTION_DAYS - d;
 }
 
-/** The order the list is in. Exported so it can be driven on its own —
-    a comparator buried inside the read is a comparator nothing can check. */
-export function byReadiness(a, b) {
-  return (
-    readiness(a) - readiness(b) ||
-    // Among those already past the month, the longest-running first.
-    (b.daysCollecting || 0) - (a.daysCollecting || 0) ||
-    a.plot.localeCompare(b.plot, undefined, { numeric: true }) ||
-    a.batch.localeCompare(b.batch, undefined, { numeric: true })
-  );
+/**
+ * The order the list is in: plots by readiness, and a plot's batches together.
+ *
+ * Ranking every row on its own put a plot's second batch somewhere further
+ * down the list with other people's plots in between, so the same ground came
+ * up twice in one scroll with no way to see that it had. A plot is one place
+ * you walk, so its batches sit together.
+ *
+ * The plot takes its place from its READIEST batch. Ranking a plot by its
+ * least ready would bury ground that is nearly finished behind ground that
+ * has barely started, and it is the nearly-finished one the Field Conductor
+ * came here for.
+ *
+ * Inside a plot the batches read in number order, which is the order they are
+ * spoken of and written down.
+ *
+ * Exported so it can be driven on its own — a comparator buried inside the
+ * read is a comparator nothing can check.
+ */
+export function byPlotThenBatch(rows) {
+  const best = new Map();
+  for (const r of rows || []) {
+    const mine = { ready: readiness(r), days: r.daysCollecting || 0 };
+    const cur = best.get(r.plot);
+    if (!cur || mine.ready < cur.ready || (mine.ready === cur.ready && mine.days > cur.days)) {
+      best.set(r.plot, mine);
+    }
+  }
+  return [...(rows || [])].sort((a, b) => {
+    const ra = best.get(a.plot);
+    const rb = best.get(b.plot);
+    return (
+      ra.ready - rb.ready ||
+      // Among plots already past the month, the longest-running first.
+      rb.days - ra.days ||
+      a.plot.localeCompare(b.plot, undefined, { numeric: true }) ||
+      // Same plot: its batches, in number order.
+      a.batch.localeCompare(b.batch, undefined, { numeric: true })
+    );
+  });
 }
 
 /** Whole days from a date to another, or null when either is missing. */
