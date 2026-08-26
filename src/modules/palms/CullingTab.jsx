@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   cullingRate,
+  figuresBroken,
   fmtNum,
   fmtPct,
   getSessionData,
@@ -88,6 +89,7 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
   useEffect(() => { if (!plotId && row) setPlotId(row.plot); }, [row, plotId]);
 
   const known = hasFigures(row);
+  const broken = figuresBroken(row); // more has left this plot than ever arrived
   const inang = terms.reduce((a, b) => a + b, 0) + (typing === '' ? 0 : Number(typing));
   const rateNow = known ? cullingRate(row.balance, 0, 0, row.transplant) : NaN;
   const rateAfter = known ? cullingRate(row.balance, inang, 0, row.transplant) : NaN;
@@ -166,8 +168,11 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
           </button>
           <div className="text-[13px] font-black tabular-nums">
             <span className="text-slate-500 mr-1">{t('cull.cullShort')} :</span>
-            <span className={known && rateNow > CULL_LIMIT ? 'text-rose-400' : 'text-emerald-400'}>
-              {known ? fmtPct(rateNow) : '—'}
+            <span className={
+              broken ? 'text-amber-400'
+                : known && rateNow > CULL_LIMIT ? 'text-rose-400' : 'text-emerald-400'
+            }>
+              {known ? fmtPct(rateNow) : broken ? t('cull.checkStock') : '—'}
             </span>
           </div>
         </div>
@@ -181,9 +186,22 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
           <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">
             {t('cull.balance')}
           </div>
-          <div className="text-slate-300 text-[28px] font-light tabular-nums leading-tight">
-            {known ? fmtNum(row.balance) : '—'}
+          <div className={`text-[28px] font-light tabular-nums leading-tight ${
+            broken ? 'text-amber-400' : 'text-slate-300'
+          }`}>
+            {known || broken ? fmtNum(row.balance) : '—'}
           </div>
+          {/* Below zero means the stock ledger for this plot does not add up:
+              more has been culled and sold off it than was ever transplanted
+              in. It is a real figure and the office movement report shows it
+              too, so it is named rather than hidden — but no rate is offered
+              on top of it, because a rate worked out from it would be
+              negative, and a negative rate reads as a healthy plot. */}
+          {broken && (
+            <div className="text-[10px] font-bold text-amber-500/80 leading-snug pt-0.5">
+              {t('cull.negativeNote')}
+            </div>
+          )}
           {/* What the customer has already taken off this plot. The balance
               above is net of it — the ledger takes a delivery order off the
               plot the moment it is raised — so without this line the figure
@@ -311,6 +329,7 @@ function PlotPicker({ plots, current, raised, t, onPick, onClose }) {
         <div className="space-y-1.5">
           {plots.map((p) => {
             const known = hasFigures(p);
+            const broken = figuresBroken(p);
             const rate = known ? cullingRate(p.balance, 0, 0, p.transplant) : NaN;
             return (
               <button
@@ -335,14 +354,22 @@ function PlotPicker({ plots, current, raised, t, onPick, onClose }) {
                     )}
                   </div>
                   <div className="text-[11px] font-semibold text-slate-500">
-                    {p.nursery} · {t('cull.balance')} {known ? fmtNum(p.balance) : '—'}
+                    {p.nursery} · {t('cull.balance')} {known || broken ? fmtNum(p.balance) : '—'}
                   </div>
                 </div>
-                <div className={`text-[13px] font-black tabular-nums shrink-0 ${
-                  !known ? 'text-slate-600' : rate > CULL_LIMIT ? 'text-rose-400' : 'text-emerald-400'
-                }`}>
-                  {known ? fmtPct(rate) : '—'}
-                </div>
+                {/* A minus balance is not a good rate, so it does not get a
+                    green percentage. It gets named for what it is. */}
+                {broken ? (
+                  <div className="text-[9px] font-black uppercase tracking-wider text-amber-400 shrink-0 text-right leading-tight max-w-[86px]">
+                    {t('cull.checkStock')}
+                  </div>
+                ) : (
+                  <div className={`text-[13px] font-black tabular-nums shrink-0 ${
+                    !known ? 'text-slate-600' : rate > CULL_LIMIT ? 'text-rose-400' : 'text-emerald-400'
+                  }`}>
+                    {known ? fmtPct(rate) : '—'}
+                  </div>
+                )}
               </button>
             );
           })}

@@ -127,7 +127,24 @@ export function resetSessionData() {
 /** True once the plot has real figures behind it; false means "cannot say",
     which the screen shows as — rather than as 0.00%. */
 export function hasFigures(row) {
-  return !!row && row.transplant > 0;
+  return !!row && row.transplant > 0 && row.balance >= 0;
+}
+
+/**
+ * A plot whose ledger says more has left than ever arrived.
+ *
+ * The figure is real — the office movement report shows these too — but a
+ * culling rate worked out from it is not. It comes out NEGATIVE, and a
+ * negative rate is below the limit, so the screen painted it green and
+ * offered a drone flight: a plot whose stock ledger does not add up was
+ * reading as the healthiest one in the nursery.
+ *
+ * So it is called out instead of rated. Reporting a rate here would be a
+ * made-up number of exactly the kind these figures exist to remove, and
+ * hiding the plot would bury a figure somebody needs to go and look into.
+ */
+export function figuresBroken(row) {
+  return !!row && row.transplant > 0 && row.balance < 0;
 }
 
 // rate = (Baki − Pokok Inang FC − Pokok Inang Auditor) / Transplant

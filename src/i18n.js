@@ -63,6 +63,8 @@ const en = {
   'cull.raiseFailed': 'Could not raise the case — try again.',
   'cull.balance': 'Balance',
   'cull.collected': 'Collected',
+  'cull.checkStock': 'Check stock',
+  'cull.negativeNote': 'More has been culled and sold off this plot than was transplanted in. No rate until the stock ledger is corrected.',
   'cull.actDrone': 'Request drone flight',
 
   // PALMS
@@ -529,6 +531,8 @@ const ms = {
   'cull.raiseFailed': 'Kes tidak dapat dibuka — cuba lagi.',
   'cull.balance': 'Baki',
   'cull.collected': 'Diambil',
+  'cull.checkStock': 'Semak stok',
+  'cull.negativeNote': 'Lebih banyak telah dibuang dan dijual dari plot ini daripada yang ditransplant masuk. Tiada kadar sehingga lejar stok dibetulkan.',
   'cull.actDrone': 'Mohon drone terbang',
 
   // PALMS
