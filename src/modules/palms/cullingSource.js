@@ -60,7 +60,9 @@ import { nurseryOfPlot } from './data.js';
  *   `key` is what the screen selects on — a plot alone is not unique once its
  *   batches are separated.
  */
-export async function loadPlots() {
+/** Every delivery order, or null if they could not be read. Its own function
+    so the diagnosis below reads exactly what the list reads. */
+async function loadDeliveryOrders() {
   const res = await fetchAllRows(() =>
     supabase
       .from('shared_do_records')
@@ -73,12 +75,18 @@ export async function loadPlots() {
   );
   if (res.error) {
     console.warn('[culling] could not read the delivery orders:', res.error.message);
-    return [];
+    return null;
   }
+  return res.data || [];
+}
+
+export async function loadPlots() {
+  const dos = await loadDeliveryOrders();
+  if (!dos) return [];
 
   const today = new Date().toISOString().slice(0, 10);
   const by = new Map();
-  for (const d of res.data || []) {
+  for (const d of dos) {
     if (isCancelled(d)) continue;
     for (const line of collectionLines(d)) {
       if (isReplantPlot(line.plot)) continue;
@@ -133,6 +141,112 @@ export async function loadPlots() {
   return [...by.values()]
     .filter((e) => e.transplant > 0 && !finished.has(e.key))
     .sort(byReadiness);
+}
+
+/**
+ * Why a block is on this screen, or why it is not.
+ *
+ * A block that ought to be here and is not has been stopped by exactly one of
+ * the rules above, and from the screen there is no way to tell which — the
+ * list simply does not have it. This walks every collection line on every
+ * delivery order and says, per line, which rule it fell at, in the order the
+ * list applies them.
+ *
+ * Run it from the browser's console with the calculator open:
+ *
+ *     cullDebug('B4')            every line for a plot
+ *     cullDebug('U17', '237')    one block
+ *     cullDebug()                all of them
+ *
+ * @param   {string} plot   optional, to narrow it
+ * @param   {string} batch  optional, likewise
+ * @returns {Promise<Array<{ do, on, plot, batch, qty, transplanted, why }>>}
+ *   `why` is 'LISTED' or the rule that stopped it.
+ */
+export async function diagnose(plot = '', batch = '') {
+  const wantPlot = plotKey(plot);
+  const wantBatch = batchKey(batch);
+  const dos = await loadDeliveryOrders();
+  if (!dos) return [{ why: 'the delivery orders could not be read at all' }];
+  const [planted, finished] = await Promise.all([loadTransplanting(), loadFinished()]);
+
+  const out = [];
+  for (const d of dos) {
+    for (let i = 1; i <= 5; i++) {
+      const rawPlot = d[`plot_${i}`];
+      const rawBatch = d[`batch_${i}`];
+      const rawQty = d[`qty_${i}`];
+      // An untouched line slot is not a collection anybody expected to see.
+      if (!rawPlot && !rawBatch && !rawQty) continue;
+
+      const p = plotKey(rawPlot);
+      const b = batchKey(rawBatch);
+      const q = Math.abs(Number(rawQty || 0));
+      if (wantPlot && p !== wantPlot) continue;
+      if (wantBatch && b !== wantBatch) continue;
+
+      const t = planted.get(`${p}#${b}`);
+      out.push({
+        do: d.do_number,
+        on: d.delivery_date,
+        plot: rawPlot,
+        batch: rawBatch,
+        qty: rawQty,
+        transplanted: t ? t.qty : 0,
+        why: whyNot(d, p, b, q, planted, finished),
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * What the batch report actually holds near a block — every batch that went
+ * into this plot, and every plot this batch went into.
+ *
+ * The commonest answer diagnose() gives is that the batch report has no such
+ * batch in that plot, and the next question is always the same: then what IS
+ * in there? Two plot-and-batch keys that should have met and did not are
+ * usually a plot named one way on the delivery order and another in the batch
+ * report — B4 against B4-1 — and seeing both lists side by side is what makes
+ * that visible.
+ */
+export async function plantedNear(plot = '', batch = '') {
+  const wantPlot = plotKey(plot);
+  const wantBatch = batchKey(batch);
+  const planted = await loadTransplanting();
+  const out = [];
+  planted.forEach((v, key) => {
+    const [p, b] = key.split('#');
+    const samePlot = wantPlot && p === wantPlot;
+    const sameBatch = wantBatch && b === wantBatch;
+    if (!samePlot && !sameBatch) return;
+    out.push({
+      plot: p,
+      batch: b,
+      transplanted: v.qty,
+      on: v.last,
+      match: samePlot && sameBatch ? 'both' : samePlot ? 'this plot' : 'this batch',
+    });
+  });
+  return out.sort((a, b) => a.plot.localeCompare(b.plot, undefined, { numeric: true }) ||
+                            a.batch.localeCompare(b.batch, undefined, { numeric: true }));
+}
+
+/* The gates, in the same order loadPlots applies them. Kept beside the
+   diagnosis rather than inside it so the wording of each answer sits next to
+   the rule it reports on. */
+function whyNot(d, p, b, q, planted, finished) {
+  if (isCancelled(d)) return 'the order is cancelled';
+  if (!p) return 'no plot on this line';
+  if (!b) return 'no batch on this line — the calculator cannot tell the plot’s batches apart without one';
+  if (!q) return 'no quantity on this line';
+  if (isReplantPlot(p)) return 'a -R plot, which does not belong on this screen';
+  if (isOldBatch(b)) return `batch ${b} is before ${MIN_BATCH}`;
+  const key = `${p}#${b}`;
+  if (!planted.has(key)) return `the batch report has no batch ${b} transplanted into ${p}`;
+  if (finished.has(key)) return 'a 3rd culling amount is already recorded against it';
+  return 'LISTED';
 }
 
 /** Collection runs about a month, so a block a month into it is the one worth
@@ -237,19 +351,18 @@ export async function loadFinished() {
 /**
  * The same, from rows already in hand.
  *
- * What finishes a block is that a 3rd culling has been RECORDED against it,
- * not how big the figure is. The Batch Report is careful about this: a Culled
- * Qty left blank is never saved, precisely so a batch cannot look complete
- * when nobody has judged it — which means a saved zero is somebody's answer,
- * "nothing to cull here", and the block is as finished as one culled by the
- * thousand. Reading only the non-zero rows left those blocks on the screen
- * asking to be counted again.
+ * A CULLED AMOUNT is what finishes a block — the figure in the 3rd Culling
+ * Records report, not merely a row existing there. The report opens a row for
+ * every plot a batch was transplanted into, long before anybody has been out
+ * to judge them, so treating the row itself as the end would take a block off
+ * this screen while the Field Conductor still had it to walk.
  */
 export function finishedBlocks(rows) {
   const out = new Set();
   for (const l of rows || []) {
+    const qty = Math.abs(Number(l.quantity_change || 0));
     const batch = batchKey(l.batch_name);
-    if (!batch) continue;
+    if (!qty || !batch) continue;
     if (l.transaction_type === 'Cull3_Transfer') {
       // The plot it LEFT, which only the remark names.
       const from = String(l.remark || '').match(/From:\s*\[([^\]|]+)\|/);

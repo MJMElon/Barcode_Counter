@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { fmtNum, fmtPct } from './cullingData.js';
 import { CULL_LIMIT, actionFor, caseBody } from './cullingActions.js';
 // Every figure on this screen comes from here.
-import { figuresBroken, figuresFor, hasFigures, loadPlots, rateFor } from './cullingSource.js';
+import {
+  diagnose, figuresBroken, figuresFor, hasFigures, loadPlots, plantedNear, rateFor,
+} from './cullingSource.js';
 import { prettyD, todayStr } from './data.js';
 import { openCasePlots, raiseCase } from '../../lib/nelos.js';
 
@@ -69,6 +71,21 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
     let live = true;
     loadPlots().then((p) => { if (live) { setRows(p || []); refresh(); } }, () => {});
     openCasePlots({ source: 'scan' }).then((s) => { if (live) setRaised(s); }, () => {});
+    /* A plot that ought to be on this list and is not has been stopped by one
+       of the rules behind it, and the screen cannot say which — it simply
+       does not have the row. So the answer is put within reach: with the
+       calculator open, cullDebug('B4') or cullDebug('U17', '237') in the
+       browser console prints every collection line and the rule it fell at. */
+    window.cullDebug = async (plot, batch) => {
+      const lines = await diagnose(plot, batch);
+      console.log('%cdelivery order lines', 'font-weight:bold');
+      console.table(lines);
+      if (plot) {
+        console.log('%cwhat the batch report holds', 'font-weight:bold');
+        console.table(await plantedNear(plot, batch));
+      }
+      return lines;
+    };
     return () => { live = false; };
   }, []);
 
