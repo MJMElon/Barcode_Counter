@@ -60,7 +60,7 @@ function BatchChip({ on, label, onClick }) {
  */
 export default function CullingTab({ t, staffName, userId, flash, nurseryKeys }) {
   const data = useMemo(() => getSessionData(), []);
-  const [, setTick] = useState(0);
+  const [tick, setTick] = useState(0);
   const refresh = () => setTick((n) => n + 1);
 
   /* Every plot the FC may see that a Delivery Order is collecting from. No
@@ -98,7 +98,12 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
     }));
     const rateOf = (p) => (hasFigures(p) ? cullingRate(p.balance, 0, 0, p.transplant) : Infinity);
     return out.sort((a, b) => rateOf(a) - rateOf(b));
-  }, [data, nurseryKeys, scope]);
+    /* `tick` is in the deps because `data` never changes identity: the server
+       figures are written INTO those row objects and a counter is bumped.
+       Without it this list was only rebuilt when the scope happened to arrive
+       second, so whether a finished plot disappeared came down to which of two
+       requests answered first. */
+  }, [data, nurseryKeys, scope, tick]);
 
   /* Plots that already have an open case. Read once and refreshed after a
      case is raised, so the picker can say "this one has been sent" instead

@@ -40,6 +40,14 @@ const TRANSPLANT_TYPES = ['Transplanted', 'Transplanted_Premium', 'Transplanted_
    four still ends the intake. */
 const CULL_TYPES = ['Damaged_Seeds', '1st_Culling', '2nd_Culling', '3rd_Culling'];
 
+/* A 3rd culling that MOVES the culled seedlings rather than writing them off.
+   One log with two sides: plot_name is where they landed, and the remark names
+   where they left. The plot they left has been culled just as surely as if the
+   seedlings had been destroyed — the balance view already deducts it — so
+   missing it left a finished intake sitting on the list with a balance that no
+   longer had a cull to explain it. */
+const CULL_TRANSFER = 'Cull3_Transfer';
+
 /** → Map(plotKey → { transplant, balance }). Plots with nothing standing in
     them are absent rather than zeroed: no batches is "cannot say", not 0%. */
 export async function loadCullingFigures() {
@@ -54,8 +62,8 @@ export async function loadCullingFigures() {
       .order('id', { ascending: true })),
     fetchAllRows(() => supabase
       .from('shared_inventory_logs')
-      .select('transaction_type, plot_name, batch_name, quantity_change')
-      .in('transaction_type', CULL_TYPES)
+      .select('transaction_type, plot_name, batch_name, quantity_change, remark')
+      .in('transaction_type', [...CULL_TYPES, CULL_TRANSFER])
       .order('id', { ascending: true })),
     // Best effort: without the delivery orders the breakdown is short a term,
     // which is worth less than the whole screen failing to load.
@@ -68,10 +76,10 @@ export async function loadCullingFigures() {
   ]);
   if (logs.error) throw logs.error;
 
-  // plotKey → batchKey → quantity, for each way seedlings leave a plot.
-  const culledBy = perPlotBatch(culls.error ? [] : culls.data || [],
-    (l) => plotKey(l.plot_name), (l) => batchKey(l.batch_name),
-    (l) => Math.abs(Number(l.quantity_change || 0)));
+  // plotKey → batchKey → quantity culled off that plot.
+  const culledBy = perPlotBatch(cullRows(culls.error ? [] : culls.data || []),
+    (r) => r.plot, (r) => batchKey(r.batch),
+    (r) => Math.abs(Number(r.qty || 0)));
   const deliveredBy = deliveredPerPlotBatch((dos && dos.data) || []);
 
   // plotKey → its transplanting rows, kept whole so their dates survive.
@@ -119,6 +127,26 @@ export async function loadCullingFigures() {
       done: cur.done,
     });
   });
+  return out;
+}
+
+/** Culling as it applies to a PLOT.
+
+    A straight cull is charged to the plot named on the row. A Cull3_Transfer
+    is charged to the plot the seedlings LEFT, which the remark names — the
+    plot they arrived in has gained stock, not culled any. */
+function cullRows(logs) {
+  const out = [];
+  for (const l of logs) {
+    const qty = Math.abs(Number(l.quantity_change || 0));
+    if (!qty) continue;
+    if (l.transaction_type === 'Cull3_Transfer') {
+      const from = String(l.remark || '').match(/From:\s*\[([^\]|]+)\|/);
+      if (from) out.push({ plot: plotKey(from[1]), batch: l.batch_name, qty });
+      continue;
+    }
+    out.push({ plot: plotKey(l.plot_name), batch: l.batch_name, qty });
+  }
   return out;
 }
 
