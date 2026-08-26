@@ -117,6 +117,8 @@ export async function refreshFigures() {
         r.selling = f.selling;
         r.sellsFrom = f.sellsFrom;
         r.lines = f.lines;
+        r.culled = f.culled;
+        r.delivered = f.delivered;
       }
     }
   }

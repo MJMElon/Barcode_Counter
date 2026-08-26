@@ -82,7 +82,14 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
   const plots = useMemo(() => {
     const out = [];
     nurseryKeys.forEach((nk) => (data[nk] || []).forEach((r) => {
-      if (scope.plots.has(r.plot)) out.push({ ...r, nursery: nk, delivered: scope.delivered.get(r.plot) || 0 });
+      /* `delivered` on the row is the INTAKE's, worked out per batch by
+         cullingFigures. The scope's figure is the whole plot across every
+         intake it has ever held, so it must not overwrite it — the breakdown
+         has to add up against this intake's balance, not the plot's history.
+         Kept alongside, under its own name. */
+      if (scope.plots.has(r.plot)) {
+        out.push({ ...r, nursery: nk, plotDelivered: scope.delivered.get(r.plot) || 0 });
+      }
     }));
     const rateOf = (p) => (hasFigures(p) ? cullingRate(p.balance, 0, 0, p.transplant) : Infinity);
     return out.sort((a, b) => rateOf(a) - rateOf(b));
@@ -133,7 +140,14 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
      downstream — the rate, the action, the case — reads this one object, so
      there is no second path where the batch could be forgotten. */
   const row = line
-    ? { ...plotRow, transplant: line.transplant, balance: line.balance, batch: line.batch }
+    ? {
+        ...plotRow,
+        transplant: line.transplant,
+        balance: line.balance,
+        culled: line.culled,
+        delivered: line.delivered,
+        batch: line.batch,
+      }
     : plotRow;
 
   const known = hasFigures(row);
@@ -277,13 +291,28 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
               {t('cull.intakeOf', { m: prettyMonth(row.intake), n: row.intakes })}
             </div>
           )}
-          {/* What the customer has already taken off this plot. The balance
-              above is net of it — the ledger takes a delivery order off the
-              plot the moment it is raised — so without this line the figure
-              drops between visits with nothing on screen to say why. */}
-          {row && row.delivered > 0 && (
-            <div className="text-[10px] font-bold text-slate-500 tabular-nums">
-              {t('cull.collected')} {fmtNum(row.delivered)}
+          {/* Where the rest of the intake went. The balance above is what is
+              left after both, and showing only one of them invited the
+              subtraction that does not work: 4,374 in and 3,748 collected
+              leaves 626, not 79, until the culls are named too. */}
+          {row && (row.delivered > 0 || row.culled > 0) && (
+            <div className="text-[10px] font-bold text-slate-500 tabular-nums leading-snug pt-1 space-y-0.5">
+              <div className="flex justify-between gap-3">
+                <span>{t('cull.transplantedIn')}</span>
+                <span className="text-slate-400">{fmtNum(row.transplant)}</span>
+              </div>
+              {row.culled > 0 && (
+                <div className="flex justify-between gap-3">
+                  <span>{t('cull.culledOff')}</span>
+                  <span className="text-slate-400">−{fmtNum(row.culled)}</span>
+                </div>
+              )}
+              {row.delivered > 0 && (
+                <div className="flex justify-between gap-3">
+                  <span>{t('cull.collected')}</span>
+                  <span className="text-slate-400">−{fmtNum(row.delivered)}</span>
+                </div>
+              )}
             </div>
           )}
         </div>

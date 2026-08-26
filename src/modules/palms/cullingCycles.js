@@ -101,7 +101,18 @@ export function sellWindow(months) {
  * figure rather than being shared out among the real intakes, because a
  * balance with nothing behind it must not move an intake's rate.
  */
-export function cyclesForPlot(transplantLogs, balanceRows, nowMonth) {
+export function cyclesForPlot(transplantLogs, balanceRows, nowMonth, out2 = {}) {
+  /* What left the plot, per batch, so the intake's figures add up on screen:
+
+       transplanted in  −  culled  −  collected  =  balance
+
+     Without these two the screen showed only the first, the third and the
+     last, and anyone subtracting them got the wrong answer — U4 read 4,374
+     in, 3,748 collected and 79 left, which looks like 547 gone missing. It
+     had not gone missing: it was culled. Showing two terms of a four-term sum
+     invites exactly that arithmetic. */
+  const culledBy = out2.culledBy || new Map();
+  const deliveredBy = out2.deliveredBy || new Map();
   /* batch → { qty transplanted in, months it came in }
      The quantity is counted whether or not the row carries a readable date.
      Dates decide which intake a batch belongs to; they must not decide
@@ -153,7 +164,14 @@ export function cyclesForPlot(transplantLogs, balanceRows, nowMonth) {
         : orphan;
     c.batches.push(bk);
     c.transplant += e.qty;
-    c.lines.push({ batch: bk, transplant: e.qty, balance: 0, months: e.months });
+    c.lines.push({
+      batch: bk,
+      transplant: e.qty,
+      balance: 0,
+      culled: Number(culledBy.get(bk) || 0),
+      delivered: Number(deliveredBy.get(bk) || 0),
+      months: e.months,
+    });
   });
 
   for (const r of balanceRows || []) {
@@ -162,7 +180,14 @@ export function cyclesForPlot(transplantLogs, balanceRows, nowMonth) {
     const c = cycles.find((x) => x.batches.includes(bk)) || orphan;
     if (c === orphan && !orphan.batches.includes(bk)) {
       orphan.batches.push(bk);
-      orphan.lines.push({ batch: bk, transplant: 0, balance: 0, months: [] });
+      orphan.lines.push({
+        batch: bk,
+        transplant: 0,
+        balance: 0,
+        culled: Number(culledBy.get(bk) || 0),
+        delivered: Number(deliveredBy.get(bk) || 0),
+        months: [],
+      });
     }
     const qty = Number(r.qty || 0);
     c.balance += qty;
@@ -170,8 +195,11 @@ export function cyclesForPlot(transplantLogs, balanceRows, nowMonth) {
     if (line) line.balance += qty;
   }
 
+  const total = (c, field) => c.lines.reduce((s2, l) => s2 + (l[field] || 0), 0);
   const out = cycles.map((c) => ({
     ...c,
+    culled: total(c, 'culled'),
+    delivered: total(c, 'delivered'),
     // Biggest block first: that is the one worth walking.
     lines: [...c.lines].sort((a, b) => b.transplant - a.transplant || a.batch.localeCompare(b.batch)),
     key: c.months[0],
@@ -179,7 +207,14 @@ export function cyclesForPlot(transplantLogs, balanceRows, nowMonth) {
     selling: !!nowMonth && monthsApart(c.months[c.months.length - 1], nowMonth) >= SELL_OPENS,
   }));
   if (orphan.batches.length) {
-    out.push({ ...orphan, key: 'unattributed', label: '', selling: false });
+    out.push({
+      ...orphan,
+      culled: total(orphan, 'culled'),
+      delivered: total(orphan, 'delivered'),
+      key: 'unattributed',
+      label: '',
+      selling: false,
+    });
   }
   return out;
 }

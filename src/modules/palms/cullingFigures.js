@@ -28,10 +28,16 @@ import { currentCycle, cyclesForPlot } from './cullingCycles.js';
    same plot. */
 const TRANSPLANT_TYPES = ['Transplanted', 'Transplanted_Premium', 'Transplanted_DoubleTone'];
 
+/* What takes seedlings OFF a plot other than a sale. Culling is the whole
+   point of this screen, and it is the term that made the figures look like
+   they did not add up: a plot showing 4,374 in, 3,748 collected and 79 left
+   reads as 547 unaccounted for until the culls are named. */
+const CULL_TYPES = ['Damaged_Seeds', '1st_Culling', '2nd_Culling', '3rd_Culling'];
+
 /** → Map(plotKey → { transplant, balance }). Plots with nothing standing in
     them are absent rather than zeroed: no batches is "cannot say", not 0%. */
 export async function loadCullingFigures() {
-  const [balances, logs] = await Promise.all([
+  const [balances, logs, culls, dos] = await Promise.all([
     loadBalances(),
     fetchAllRows(() => supabase
       .from('shared_inventory_logs')
@@ -40,8 +46,27 @@ export async function loadCullingFigures() {
       .select('transaction_type, plot_name, batch_name, quantity_change, transaction_date, created_at')
       .in('transaction_type', TRANSPLANT_TYPES)
       .order('id', { ascending: true })),
+    fetchAllRows(() => supabase
+      .from('shared_inventory_logs')
+      .select('transaction_type, plot_name, batch_name, quantity_change')
+      .in('transaction_type', CULL_TYPES)
+      .order('id', { ascending: true })),
+    // Best effort: without the delivery orders the breakdown is short a term,
+    // which is worth less than the whole screen failing to load.
+    fetchAllRows(() => supabase
+      .from('shared_do_records')
+      .select('status, remark, plot_1, qty_1, batch_1, plot_2, qty_2, batch_2, ' +
+        'plot_3, qty_3, batch_3, plot_4, qty_4, batch_4, plot_5, qty_5, batch_5')
+      .order('id', { ascending: true }))
+      .then((r) => r, () => ({ data: [] })),
   ]);
   if (logs.error) throw logs.error;
+
+  // plotKey → batchKey → quantity, for each way seedlings leave a plot.
+  const culledBy = perPlotBatch(culls.error ? [] : culls.data || [],
+    (l) => plotKey(l.plot_name), (l) => batchKey(l.batch_name),
+    (l) => Math.abs(Number(l.quantity_change || 0)));
+  const deliveredBy = deliveredPerPlotBatch((dos && dos.data) || []);
 
   // plotKey → its transplanting rows, kept whole so their dates survive.
   const inBy = new Map();
@@ -59,7 +84,10 @@ export async function loadCullingFigures() {
        January and again in June holds two, and summing them netted January's
        leftovers off against June's stock — which is how a plot came to report
        a balance below zero while one of its intakes was perfectly healthy. */
-    const cycles = cyclesForPlot(inBy.get(pk) || [], batches.map(toRow), now);
+    const cycles = cyclesForPlot(inBy.get(pk) || [], batches.map(toRow), now, {
+      culledBy: culledBy.get(pk) || new Map(),
+      deliveredBy: deliveredBy.get(pk) || new Map(),
+    });
     const cur = currentCycle(cycles);
     // A plot whose batches were never transplanted in — hand-corrected stock,
     // a batch keyed differently in the two tables — has a balance but no
@@ -76,9 +104,43 @@ export async function loadCullingFigures() {
       // The intake batch by batch, so the calculator can be pointed at one
       // block of ground rather than averaging the plot.
       lines: cur.lines,
+      // The two ways the intake emptied, so the figures on screen add up:
+      // transplanted in − culled − collected = balance.
+      culled: cur.culled,
+      delivered: cur.delivered,
     });
   });
   return out;
+}
+
+/** → Map(plotKey → Map(batchKey → qty)). */
+function perPlotBatch(rows, plotOf, batchOf, qtyOf) {
+  const out = new Map();
+  for (const r of rows) {
+    const pk = plotOf(r);
+    const bk = batchOf(r);
+    if (!pk || !bk) continue;
+    if (!out.has(pk)) out.set(pk, new Map());
+    const m = out.get(pk);
+    m.set(bk, (m.get(bk) || 0) + qtyOf(r));
+  }
+  return out;
+}
+
+/** The same shape, from the five collection lines a delivery order carries.
+    A cancelled order collected nothing — recorded both ways the office has
+    used it, a status and a marker in the remark. */
+function deliveredPerPlotBatch(dos) {
+  const rows = [];
+  for (const d of dos) {
+    if (d.status === 'Cancelled' || String(d.remark || '').includes('[CANCELLED]')) continue;
+    for (let i = 1; i <= 5; i++) {
+      const qty = Math.abs(Number(d[`qty_${i}`] || 0));
+      if (!qty) continue;
+      rows.push({ plot: d[`plot_${i}`], batch: d[`batch_${i}`], qty });
+    }
+  }
+  return perPlotBatch(rows, (r) => plotKey(r.plot), (r) => batchKey(r.batch), (r) => r.qty);
 }
 
 /** The balance map holds { batch, qty }; the cycle model reads batch_name. */
