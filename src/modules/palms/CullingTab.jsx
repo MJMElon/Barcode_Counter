@@ -105,16 +105,66 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
     return () => { live = false; };
   }, []);
 
-  const plotRow = plots.find((p) => p.key === plotId) || plots[0] || null;
+  /* One row per PLOT, with its batches underneath.
+     
+     The list was one row per plot AND batch, which is right for the figures —
+     a batch is the block of ground actually being emptied — but wrong for
+     choosing: a Field Conductor is sent to a PLOT, and being asked which of
+     B4's three batches he means before he has stood in it is the wrong
+     question in the wrong order. So the plot is the choice, and the batch is
+     a second, optional one made beside it.
+
+     ALL sums the batches. That is the honest whole-plot figure: transplanted
+     in is what went in across all of them, collected is what has come off,
+     and the balance is the difference — the same arithmetic one batch gets,
+     over more ground. */
+  const plotList = useMemo(() => {
+    const by = new Map();
+    plots.forEach((b) => {
+      if (!by.has(b.plot)) {
+        by.set(b.plot, {
+          key: b.plot, plot: b.plot, batch: '', nursery: b.nursery,
+          transplant: 0, collected: 0, balance: 0,
+          firstDate: '', lastDate: '', orders: [], blocks: [],
+        });
+      }
+      const e = by.get(b.plot);
+      e.blocks.push(b);
+      e.transplant += b.transplant || 0;
+      e.collected += b.collected || 0;
+      e.balance += b.balance || 0;
+      e.orders = e.orders.concat(b.orders || []);
+      if (b.firstDate && (!e.firstDate || b.firstDate < e.firstDate)) e.firstDate = b.firstDate;
+      if (b.lastDate && b.lastDate > e.lastDate) e.lastDate = b.lastDate;
+      // Collection on the plot opened when its FIRST batch opened.
+      e.daysCollecting = Math.max(e.daysCollecting || 0, b.daysCollecting || 0);
+    });
+    by.forEach((e) => {
+      e.orders.sort((a, b2) => String(a.on).localeCompare(String(b2.on))
+        || String(a.do).localeCompare(String(b2.do)));
+      e.blocks.sort((a, b2) => String(a.batch).localeCompare(String(b2.batch)));
+    });
+    return [...by.values()];
+  }, [plots]);
+
+  const plotRow = plotList.find((p) => p.key === plotId) || plotList[0] || null;
   useEffect(() => { if (!plotId && plotRow) setPlotId(plotRow.key); }, [plotRow, plotId]);
+
+  /* Which batch of it, or ALL. Reset whenever the plot changes: a batch
+     number means nothing on a different plot. */
+  const [batchId, setBatchId] = useState('ALL');
+  useEffect(() => { setBatchId('ALL'); }, [plotId]);
+  const batches = plotRow ? plotRow.blocks : [];
+  const picked = batchId === 'ALL' ? null : batches.find((b) => b.batch === batchId) || null;
   /* A count belongs to the block it was walked in, so moving to another one
      clears it rather than quietly re-attributing it. */
-  useEffect(() => { setTerms([]); setTyping(''); setShowOrders(false); }, [plotId]);
+  useEffect(() => { setTerms([]); setTyping(''); setShowOrders(false); }, [plotId, batchId]);
 
   /* The row the whole screen works from — one object, so the rate, the action
-     and the case cannot read different figures. It is already one block: a
-     plot and a batch, chosen as a pair. */
-  const row = plotRow;
+     and the case cannot read different figures. Either the plot as a whole or
+     the one batch chosen beside its name; nothing downstream needs to know
+     which, because both carry the same fields. */
+  const row = picked || plotRow;
 
   const known = hasFigures(row);
   const broken = figuresBroken(row);
@@ -154,9 +204,16 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
       description: caseBody({
         t, plot: row.plot, nursery: row.nursery, balance: row.balance,
         inang, rate: rateAfter, terms, by: staffName, date: todayStr(),
-        // Which block of the plot was walked. Without it the auditor is sent
-        // to a plot and left to work out which part of it was counted.
-        batch: row.batch,
+        /* Which block of the plot was walked. Without it the auditor is sent
+           to a plot and left to work out which part of it was counted — and
+           an ALL count has to SAY it covered the whole plot, naming the
+           batches, or a blank line reads as "we forgot to write it down". */
+        batch: picked
+          ? picked.batch
+          : (batches.length > 1
+              ? t('cull.allBatchesOf', { n: batches.length }) + ' — ' +
+                batches.map((b) => b.batch).join(', ')
+              : (batches[0] && batches[0].batch) || ''),
       }),
       category: action.category,
       priority: action.priority,
@@ -191,16 +248,36 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
             counting. Apple puts the clock here; the plot is what this
             calculator is always about, so it takes that place. */}
         <div className="flex items-center justify-between px-2 pt-1">
-          <button
-            onClick={() => setPicking(true)}
-            className="flex items-center gap-1.5 text-white font-black text-[15px] cursor-pointer"
-          >
-            {row ? row.plot : '—'}
-            {row && row.batch && (
-              <span className="font-bold text-slate-400 text-[11px] tabular-nums">{row.batch}</span>
+          <div className="flex items-center gap-2 min-w-0">
+            <button
+              onClick={() => setPicking(true)}
+              className="flex items-center gap-1.5 text-white font-black text-[15px] cursor-pointer"
+            >
+              {plotRow ? plotRow.plot : '—'}
+              <span className="text-[10px] text-slate-500">▼</span>
+            </button>
+            {/* Which batch, beside the plot rather than folded into choosing
+                it. Only when there is more than one: with a single batch ALL
+                and that batch are the same figures, and a dropdown offering
+                one real answer is furniture. */}
+            {batches.length > 1 && (
+              <select
+                value={batchId}
+                onChange={(e) => setBatchId(e.target.value)}
+                className="bg-[#1a1a1f] border border-[#2a2a33] text-slate-200 font-bold text-[11px]
+                           rounded-lg px-2 py-1 tabular-nums cursor-pointer outline-none max-w-[130px]"
+                aria-label={t('cull.batch')}
+              >
+                <option value="ALL">{t('cull.allBatches')}</option>
+                {batches.map((b) => (
+                  <option key={b.batch} value={b.batch}>{b.batch}</option>
+                ))}
+              </select>
             )}
-            <span className="text-[10px] text-slate-500">▼</span>
-          </button>
+            {batches.length === 1 && batches[0].batch && (
+              <span className="font-bold text-slate-400 text-[11px] tabular-nums">{batches[0].batch}</span>
+            )}
+          </div>
           <div className="text-[13px] font-black tabular-nums">
             <span className="text-slate-500 mr-1">{t('cull.cullShort')} :</span>
             <span className={
@@ -341,7 +418,7 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
 
       {picking && (
         <PlotPicker
-          plots={plots}
+          plots={plotList}
           current={plotId}
           raised={raised}
           t={t}
@@ -423,9 +500,17 @@ function PlotPicker({ plots, current, raised, t, onPick, onClose }) {
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
                     <span className="font-black text-slate-100 text-[14px]">{p.plot}</span>
-                    {/* The batch, because the plot alone no longer says which
-                        block this row is. */}
-                    <span className="font-bold text-slate-400 text-[11px] tabular-nums">{p.batch}</span>
+                    {/* How many batches are standing in it, since the row is
+                        the whole plot now and its figures are their sum. The
+                        batch itself is chosen after, beside the plot name. */}
+                    {p.blocks && p.blocks.length > 1 && (
+                      <span className="font-bold text-slate-400 text-[11px] tabular-nums">
+                        {p.blocks.length} {t('cull.batches')}
+                      </span>
+                    )}
+                    {p.blocks && p.blocks.length === 1 && p.blocks[0].batch && (
+                      <span className="font-bold text-slate-400 text-[11px] tabular-nums">{p.blocks[0].batch}</span>
+                    )}
                     {/* Already handed over. The rate alone cannot say this,
                         and without it the only way to find out is to press
                         the button and be told it was a duplicate. */}
