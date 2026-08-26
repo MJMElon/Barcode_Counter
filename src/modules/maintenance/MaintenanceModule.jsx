@@ -202,11 +202,25 @@ export default function MaintenanceModule({
   );
 
   /* This nursery's workers. A conductor covering two nurseries should not be
-     offered the other one's crew on a plot they never set foot in. */
-  const nurseryWorkers = useMemo(
-    () => workers.filter((w) => !nursery || String(w.nursery || '').trim() === nursery),
-    [workers, nursery]
-  );
+     offered the other one's crew on a plot they never set foot in.
+
+     Matched through nurseryKey, not by string equality. The nursery on screen
+     comes from shared_plots and reads "UNN 2"; the Payroll register is filled
+     in by hand and may say "UNN2". Comparing them as they are spelt found the
+     crew for BNN — which has no space in it — and nobody at all for UNN 1 or
+     UNN 2, so the tick list simply did not appear there.
+
+     `section` is read when `nursery` is blank, the same fallback the office's
+     own worker link uses: the register copies one into the other, but a row
+     added since carries only whichever the person keying it used. */
+  const nurseryWorkers = useMemo(() => {
+    if (!nursery) return workers;
+    const want = nurseryKey(nursery);
+    return workers.filter((w) => {
+      const mine = nurseryKey(w.nursery) || nurseryKey(w.section);
+      return mine === want;
+    });
+  }, [workers, nursery]);
 
   const nurseryOptions = useMemo(
     () => [...new Set(visiblePlots.map((p) => p.nursery_name).filter(Boolean))].sort(),
