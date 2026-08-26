@@ -328,6 +328,37 @@ async function loadPlotBatchesFromLedger() {
   return batchesByPlot(logsRes.data || [], (dosRes && dosRes.data) || []);
 }
 
+/**
+ * The crew a Field Conductor answers for: the workers on the payroll whose
+ * nursery is one of his.
+ *
+ * There is no supervisor column anywhere in this system, and inventing one
+ * would be a second list to keep tidy — a new hire missed on it would simply
+ * not appear under anybody. A Field Conductor already has a nursery list on
+ * his User Access, and a worker's payroll row already names their nursery.
+ * Those two together are the answer, and both are already maintained for
+ * other reasons.
+ *
+ * NOTE the select list. `pin` is a column on this table and it is NEVER asked
+ * for here: a PIN is a door number, the office hands them out, and no screen
+ * outside the Payroll register has any business holding one. Do not add it.
+ *
+ * A database without the payroll module returns nothing rather than raising —
+ * the crew panel simply does not appear, and recording work carries on.
+ */
+export async function loadCrew() {
+  const { data, error } = await supabase
+    .from('mjmnpayroll_workers')
+    .select('id, worker_no, full_name, nursery, section, role, active')
+    .eq('active', true)
+    .order('full_name');
+  if (error) {
+    if (isMissingTable(error)) return [];
+    throw error;
+  }
+  return data || [];
+}
+
 export async function deleteRecord(id) {
   const { error } = await supabase.from('nops_maint_field_records').delete().eq('id', id);
   if (error) throw error;

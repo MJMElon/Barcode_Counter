@@ -12,6 +12,7 @@ import {
   deleteRecord,
   flushMaintenance,
   isModuleAdmin,
+  loadCrew,
   loadMaintenanceData,
   loadPlotBatches,
   loadSchedules,
@@ -26,6 +27,7 @@ import {
 } from './data.js';
 import PhotoSlots from './PhotoSlots.jsx';
 import ThisWeek from './ThisWeek.jsx';
+import Crew from './Crew.jsx';
 import Timeline from './Timeline.jsx';
 import WorkIcon from './WorkIcons.jsx';
 import WorkSheet from './WorkSheet.jsx';
@@ -75,6 +77,7 @@ function relativeDay(iso, today, t) {
  */
 const FC_SOURCE = {
   loadData:       loadMaintenanceData,
+  loadCrew,
   loadPlotBatches,
   loadSchedules,
   submitRecord,
@@ -122,6 +125,8 @@ export default function MaintenanceModule({
   const [batchMap, setBatchMap] = useState(new Map());
   const [sheet, setSheet] = useState(null);         // { week, workType }
   const [saving, setSaving] = useState(false);
+  const [crew, setCrew] = useState([]);         // the workers this conductor answers for
+  const [whoPicked, setWhoPicked] = useState(null); // crew row the list is filtered to
   const [pending, setPending] = useState([]);   // records the queue is holding
   const [syncing, setSyncing] = useState(false);
   const online = useOnline();
@@ -201,6 +206,12 @@ export default function MaintenanceModule({
     if (!nursery && nurseryOptions.length) setNursery(nurseryOptions[0]);
   }, [nurseryOptions, nursery]);
 
+  /* Whoever was picked worked in the nursery that was showing. Switching
+     nursery would otherwise leave the list filtered to a name with nothing
+     in it, reading as "this person did nothing" when they simply work
+     somewhere else. */
+  useEffect(() => { setWhoPicked(null); }, [nursery]);
+
   /* A queued record has not reached the database, but the work HAS been done
      — so it counts for the week's ticks and shows in the list. Without this a
      Field Conductor offline would see the plot still outstanding and do it
@@ -215,14 +226,28 @@ export default function MaintenanceModule({
         (allowed === null || allowed.includes(r.nursery_name)) &&
         (!plotFilter || plotFilter(r.plot_name)) &&
         (!nursery || r.nursery_name === nursery) &&
+        (!whoPicked || String(r.reported_by || '').trim().toLowerCase() === whoPicked) &&
         (!q ||
           (r.plot_name || '').toLowerCase().includes(q) ||
           (r.remark || '').toLowerCase().includes(q))
     );
-  }, [allRecords, allowed, plotFilter, nursery, query]);
+  }, [allRecords, allowed, plotFilter, nursery, whoPicked, query]);
 
   const today = todayStr();
   const month = monthLabelOf(today);
+
+  /* What the crew panel counts: this month, this nursery, everybody. It is
+     deliberately NOT `visible` — that already has the crew pick applied, so
+     counting it would collapse every other row to zero the moment somebody
+     was tapped. */
+  const monthRecords = useMemo(
+    () => allRecords.filter(
+      (r) => (allowed === null || allowed.includes(r.nursery_name)) &&
+             (!nursery || r.nursery_name === nursery) &&
+             monthLabelOf(r.work_date) === month
+    ),
+    [allRecords, allowed, nursery, month]
+  );
   const currentWeek = weekOfDate(today);
 
   // Which nurseries the timeline covers: the one the filter names, or every
@@ -248,6 +273,17 @@ export default function MaintenanceModule({
       .catch(() => { if (live) setSchedule([]); });
     return () => { live = false; };
   }, [nurseriesSig, month]);
+
+  /* Who this conductor answers for. Only the FC portal asks — a worker has
+     no crew and its source says so by not offering loadCrew at all. */
+  useEffect(() => {
+    let live = true;
+    if (!source.loadCrew) { setCrew([]); return undefined; }
+    source.loadCrew()
+      .then((rows) => { if (live) setCrew(rows || []); })
+      .catch((e) => { console.warn('[maintenance] crew unavailable:', e); if (live) setCrew([]); });
+    return () => { live = false; };
+  }, [source]);
 
   // Once, when the module opens. Deliberately NOT re-read after a save:
   // recording that a plot was sprayed moves no seedlings, so the balances
@@ -538,8 +574,32 @@ export default function MaintenanceModule({
           />
         )}
 
-        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest pt-1">
-          {t('mt.completed')}
+        {/* Who did the month's work. The Field Conductor's view of his crew;
+            a worker's own portal has no crew to show and its source does not
+            offer one. */}
+        {!!crew.length && (
+          <Crew
+            crew={crew}
+            records={monthRecords}
+            nursery={nursery}
+            picked={whoPicked}
+            onPick={setWhoPicked}
+            t={t}
+          />
+        )}
+
+        <div className="flex items-center justify-between gap-2 pt-1">
+          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+            {t('mt.completed')}
+          </div>
+          {whoPicked && (
+            <button
+              onClick={() => setWhoPicked(null)}
+              className="text-[10px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-1 cursor-pointer"
+            >
+              {t('mt.crewShowingAll')}
+            </button>
+          )}
         </div>
 
         {loading ? (
