@@ -241,6 +241,11 @@ const en = {
   'mt.unverify': 'Tap to undo',
   'mt.byNobody': 'no name recorded',
   'mt.verifySetupNeeded': 'Run shared/add_maint_field_verify.sql first — the verify columns are missing.',
+  'mt.whoDidIt': 'Who did this work',
+  'mt.whoDidItHint': 'Leave blank if you did it yourself. Tick a worker if you are keying it for them — a broken phone, a PIN that will not take.',
+  'mt.whoDidItPicked': '{n} ticked',
+  'mt.whoDidItShared': 'The job will be recorded as shared between them.',
+  'mt.keyedBy': 'keyed by {name}',
 
   // top nav / offline
 
@@ -717,6 +722,11 @@ const ms = {
   'mt.unverify': 'Ketik untuk batal',
   'mt.byNobody': 'tiada nama direkod',
   'mt.verifySetupNeeded': 'Jalankan shared/add_maint_field_verify.sql dahulu — lajur pengesahan tiada.',
+  'mt.whoDidIt': 'Siapa buat kerja ini',
+  'mt.whoDidItHint': 'Biar kosong jika anda sendiri yang buat. Tanda pekerja jika anda merekod bagi pihak mereka — telefon rosak, PIN tidak boleh masuk.',
+  'mt.whoDidItPicked': '{n} ditanda',
+  'mt.whoDidItShared': 'Kerja ini akan direkod sebagai dikongsi antara mereka.',
+  'mt.keyedBy': 'direkod oleh {name}',
 
   // top nav / offline
 

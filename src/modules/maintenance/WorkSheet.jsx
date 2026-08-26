@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLang } from '../../context/LanguageContext.jsx';
 import { workTypeLabel } from './helpers.js';
 import PhotoSlots from './PhotoSlots.jsx';
+import WhoDidIt from './WhoDidIt.jsx';
 import { batchesIn } from './plotBatches.js';
 import WorkIcon from './WorkIcons.jsx';
 
@@ -29,7 +30,7 @@ const shortChemical = (c) => String(c || '').split(/\s*\+\s*/)[0].replace(/\s+[\
  */
 export default function WorkSheet({
   workType, week, weekDates, month, tasks, batchMap, isDone, isAdmin,
-  today, saving, onSave, onClose, allowPhotos = true,
+  today, saving, onSave, onClose, allowPhotos = true, workers = null,
 }) {
   const { t, lang } = useLang();
   const [plot, setPlot] = useState(null);      // the task being recorded
@@ -39,6 +40,8 @@ export default function WorkSheet({
   // the numbered place it was taken in rather than shuffling up when an
   // earlier one is cleared.
   const [photos, setPhotos] = useState(() => Array(MAX_PHOTOS).fill(null));
+  // Whose work this was, when the conductor is keying it for somebody else.
+  const [workedBy, setWorkedBy] = useState([]);
 
 
   /* Work already recorded is not re-recordable: a second save would be a
@@ -54,6 +57,7 @@ export default function WorkSheet({
     setBatches([]);
     setRemark('');
     setPhotos(Array(MAX_PHOTOS).fill(null));
+    setWorkedBy([]);
   }, [workType.key, week]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // Plots the schedule asks for twice this week — the pest spray and the
@@ -76,6 +80,7 @@ export default function WorkSheet({
     setBatches([]);
     setRemark('');
     setPhotos(Array(MAX_PHOTOS).fill(null));
+    setWorkedBy([]);
   }
 
   // The seedlings worked on ARE the batches ticked, so the quantity is their
@@ -217,6 +222,12 @@ export default function WorkSheet({
                   in with a PIN is `anon`, and the documents bucket takes
                   uploads from `authenticated` only — a camera here would
                   fail every time it was pressed. */}
+              {/* Only a Field Conductor is handed a roster: a worker
+                  recording their own morning is the answer already. */}
+              {workers && (
+                <WhoDidIt workers={workers} value={workedBy} onChange={setWorkedBy} t={t} />
+              )}
+
               {allowPhotos && <>
                 <span className={label}>{t('mt.photos', { n: MAX_PHOTOS })}</span>
                 <PhotoSlots value={photos} onChange={setPhotos} max={MAX_PHOTOS} />
@@ -232,7 +243,7 @@ export default function WorkSheet({
 
             <button
               disabled={saving}
-              onClick={() => onSave({ task: plot, batches, remark, photos: taken, qty })}
+              onClick={() => onSave({ task: plot, batches, remark, photos: taken, qty, workedBy })}
               className="w-full rounded-2xl bg-emerald-600 disabled:bg-slate-300 text-white font-black uppercase tracking-widest text-[13px] py-3.5">
               {saving ? t('common.saving') : isDone(plot) ? t('mt.saveCorrection') : t('mt.save')}
             </button>

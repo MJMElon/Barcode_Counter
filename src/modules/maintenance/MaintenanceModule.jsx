@@ -15,6 +15,7 @@ import {
   isModuleAdmin,
   loadMaintenanceData,
   loadPlotBatches,
+  loadWorkers,
   loadSchedules,
   nurseryKey,
   pendingRecords,
@@ -30,6 +31,7 @@ import PhotoSlots from './PhotoSlots.jsx';
 import ThisWeek from './ThisWeek.jsx';
 import Timeline from './Timeline.jsx';
 import WorkIcon from './WorkIcons.jsx';
+import WhoDidIt from './WhoDidIt.jsx';
 import WorkSheet from './WorkSheet.jsx';
 import { batchesIn } from './plotBatches.js';
 import { tintOf } from './tints.js';
@@ -78,6 +80,7 @@ function relativeDay(iso, today, t) {
 const FC_SOURCE = {
   loadData:       loadMaintenanceData,
   loadPlotBatches,
+  loadWorkers,
   loadSchedules,
   submitRecord,
   deleteRecord,
@@ -125,7 +128,7 @@ export default function MaintenanceModule({
   const [batchMap, setBatchMap] = useState(new Map());
   const [sheet, setSheet] = useState(null);         // { week, workType }
   const [saving, setSaving] = useState(false);
-  const [whoPicked, setWhoPicked] = useState(null); // crew row the list is filtered to
+  const [workers, setWorkers] = useState([]);   // the roster a conductor may credit work to
   const [pending, setPending] = useState([]);   // records the queue is holding
   const [syncing, setSyncing] = useState(false);
   const online = useOnline();
@@ -198,6 +201,13 @@ export default function MaintenanceModule({
     [plots, allowed, plotFilter]
   );
 
+  /* This nursery's workers. A conductor covering two nurseries should not be
+     offered the other one's crew on a plot they never set foot in. */
+  const nurseryWorkers = useMemo(
+    () => workers.filter((w) => !nursery || String(w.nursery || '').trim() === nursery),
+    [workers, nursery]
+  );
+
   const nurseryOptions = useMemo(
     () => [...new Set(visiblePlots.map((p) => p.nursery_name).filter(Boolean))].sort(),
     [visiblePlots]
@@ -209,11 +219,6 @@ export default function MaintenanceModule({
     if (!nursery && nurseryOptions.length) setNursery(nurseryOptions[0]);
   }, [nurseryOptions, nursery]);
 
-  /* Whoever was picked worked in the nursery that was showing. Switching
-     nursery would otherwise leave the list filtered to a name with nothing
-     in it, reading as "this person did nothing" when they simply work
-     somewhere else. */
-  useEffect(() => { setWhoPicked(null); }, [nursery]);
 
   /* A queued record has not reached the database, but the work HAS been done
      — so it counts for the week's ticks and shows in the list. Without this a
@@ -229,12 +234,11 @@ export default function MaintenanceModule({
         (allowed === null || allowed.includes(r.nursery_name)) &&
         (!plotFilter || plotFilter(r.plot_name)) &&
         (!nursery || r.nursery_name === nursery) &&
-        (!whoPicked || String(r.reported_by || '').trim().toLowerCase() === whoPicked) &&
         (!q ||
           (r.plot_name || '').toLowerCase().includes(q) ||
           (r.remark || '').toLowerCase().includes(q))
     );
-  }, [allRecords, allowed, plotFilter, nursery, whoPicked, query]);
+  }, [allRecords, allowed, plotFilter, nursery, query]);
 
   const today = todayStr();
   const month = monthLabelOf(today);
@@ -264,6 +268,18 @@ export default function MaintenanceModule({
       .catch(() => { if (live) setSchedule([]); });
     return () => { live = false; };
   }, [nurseriesSig, month]);
+
+  /* The roster a conductor may credit a job to. Only the FC portal asks —
+     a worker recording their own morning is already the answer, and its
+     source offers no loadWorkers at all. */
+  useEffect(() => {
+    let live = true;
+    if (!source.loadWorkers) { setWorkers([]); return undefined; }
+    source.loadWorkers()
+      .then((rows) => { if (live) setWorkers(rows || []); })
+      .catch((e) => { console.warn('[maintenance] worker list unavailable:', e); if (live) setWorkers([]); });
+    return () => { live = false; };
+  }, [source]);
 
   // Once, when the module opens. Deliberately NOT re-read after a save:
   // recording that a plot was sprayed moves no seedlings, so the balances
@@ -297,7 +313,7 @@ export default function MaintenanceModule({
     return acc;
   }, {}), [tasksByWeek, allRecords, month]);
 
-  async function handleSheetSave({ task, batches, remark, photos, qty }) {
+  async function handleSheetSave({ task, batches, remark, photos, qty, workedBy }) {
     const plot = visiblePlots.find((p) => p.plot_name === task.plot)
       || { plot_name: task.plot, nursery_name: task.nursery || nursery || null };
     setSaving(true);
@@ -315,6 +331,7 @@ export default function MaintenanceModule({
         weekNo: sheet.week,
         scheduleMonth: month,
         reportedBy: staffName,
+        workedBy,
         photos,
       });
       if (queued) {
@@ -345,6 +362,7 @@ export default function MaintenanceModule({
         chemical: form.chemical,
         remark: form.remark,
         reportedBy: staffName,
+        workedBy: form.workedBy,
         batches: form.batches,
         photos: form.photos,
       });
@@ -565,6 +583,7 @@ export default function MaintenanceModule({
             saving={saving}
             isAdmin={isAdmin}
             allowPhotos={allowPhotos}
+            workers={nurseryWorkers.length ? nurseryWorkers : null}
             isDone={(task) => isJobDone(allRecords, {
               workTypeKey: sheet.workType.key, plot: task.plot,
               chemical: task.chemical, week: sheet.week, month })}
@@ -573,18 +592,8 @@ export default function MaintenanceModule({
           />
         )}
 
-        <div className="flex items-center justify-between gap-2 pt-1">
-          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-            {t('mt.completed')}
-          </div>
-          {whoPicked && (
-            <button
-              onClick={() => setWhoPicked(null)}
-              className="text-[10px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-1 cursor-pointer"
-            >
-              {t('mt.crewShowingAll')}
-            </button>
-          )}
+        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest pt-1">
+          {t('mt.completed')}
         </div>
 
         {loading ? (
@@ -624,9 +633,18 @@ export default function MaintenanceModule({
                         ].filter(Boolean).join(' · ')}
                       </div>
 
+                      {/* Who did the work. worked_by is set only when the
+                          conductor keyed it for somebody else, so when it is
+                          there it is the answer and reported_by is merely who
+                          held the phone — said quietly underneath. */}
                       <div className="text-[12.5px] font-black text-slate-600 mt-1">
-                        {r.reported_by || t('mt.byNobody')}
+                        {r.worked_by || r.reported_by || t('mt.byNobody')}
                       </div>
+                      {r.worked_by && r.reported_by && r.worked_by !== r.reported_by && (
+                        <div className="text-[11px] font-semibold text-slate-400">
+                          {t('mt.keyedBy', { name: r.reported_by })}
+                        </div>
+                      )}
 
                       {r.batch_name && (
                         <div className="mt-2 flex flex-wrap gap-1.5">
@@ -733,6 +751,7 @@ export default function MaintenanceModule({
           onClose={() => setEditing(null)}
           onSave={handleSave}
           allowPhotos={allowPhotos}
+          workers={nurseryWorkers.length ? nurseryWorkers : null}
           t={t}
           lang={lang}
         />
@@ -748,13 +767,18 @@ export default function MaintenanceModule({
 }
 
 // Bottom sheet to record a job, or correct one already recorded.
-function EntrySheet({ record, plots, batchMap, onClose, onSave, allowPhotos = true, t, lang }) {
+function EntrySheet({ record, plots, batchMap, onClose, onSave, allowPhotos = true, workers = null, t, lang }) {
   const [workTypeKey, setWorkTypeKey] = useState(record ? record.work_type : WORK_TYPES[0].key);
   const [plotName, setPlotName] = useState(record ? record.plot_name : '');
   const [date, setDate] = useState(record ? record.work_date : todayStr());
   const [chemical, setChemical] = useState((record && record.chemical) || '');
   const [remark, setRemark] = useState((record && record.remark) || '');
   const [saving, setSaving] = useState(false);
+  const [workedBy, setWorkedBy] = useState(
+    record && record.worked_by
+      ? String(record.worked_by).split(',').map((n) => n.trim()).filter(Boolean)
+      : []
+  );
   const [batches, setBatches] = useState(
     record && record.batch_name
       ? String(record.batch_name).split(',').map((b) => b.trim()).filter(Boolean)
@@ -908,6 +932,10 @@ function EntrySheet({ record, plots, batchMap, onClose, onSave, allowPhotos = tr
           {qty ? qty.toLocaleString() : '—'}
         </div>
 
+        {workers && (
+          <WhoDidIt workers={workers} value={workedBy} onChange={setWorkedBy} t={t} />
+        )}
+
         {allowPhotos && <>
         <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
           {t('mt.photos', { n: MAX_PHOTOS })}
@@ -931,7 +959,8 @@ function EntrySheet({ record, plots, batchMap, onClose, onSave, allowPhotos = tr
           onClick={async () => {
             setSaving(true);
             await onSave({ workTypeKey, plotName, date, qty, chemical: chemical.trim(),
-                           remark: remark.trim(), batches, photos: photos.filter(Boolean) });
+                           remark: remark.trim(), batches, workedBy,
+                           photos: photos.filter(Boolean) });
             setSaving(false);
           }}
           disabled={saving || !plotName || !date || !workTypeKey}

@@ -143,6 +143,13 @@ export function makeWorkerMaintSource(token) {
       }
     },
 
+    /* No roster. The tick list exists so a conductor can key a job for
+       somebody whose phone is broken; a worker signing in with their own PIN
+       has already answered the question, and handing them a list of
+       colleagues to credit work to would be handing them a way to credit it
+       to the wrong person. The module offers it only when a source has one. */
+    loadWorkers: null,
+
     deleteRecord() {
       return Promise.reject(new Error('Only the office can remove a record.'));
     },
