@@ -25,6 +25,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { isOverdue, pendingCases } from '../lib/nelos.js';
+import NelosNewCase from './NelosNewCase.jsx';
 
 const MODULE = 'scan';                 // this portal's key in nelos_modules
 
@@ -301,6 +302,10 @@ export default function NelosWindow({ onClose, onCount }) {
   const { session } = useAuth();
   const [state, setState] = useState({ status: 'loading', rows: [], uid: null });
   const [openId, setOpenId] = useState(null);
+  const [adding, setAdding] = useState(false);
+  /* What was just raised, said once on the list the person lands back on.
+     A form that closes with no word is a form you press twice. */
+  const [raised, setRaised] = useState(null);
 
   const me = {
     id: session?.user?.id || null,
@@ -338,14 +343,41 @@ export default function NelosWindow({ onClose, onCount }) {
           {state.status === 'ready' && !!rows.length && (
             <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">{rows.length}</span>
           )}
+          {/* The other half of a case log: noticing one. The Field
+              Conductor is the person standing in the plot. */}
+          {!openId && !adding && (
+            <button onClick={() => { setRaised(null); setAdding(true); }}
+              className="ml-auto px-2.5 py-1.5 rounded-full bg-violet-600 hover:bg-violet-700 text-white text-[10px] font-black uppercase tracking-wider cursor-pointer shrink-0">
+              + New Case
+            </button>
+          )}
           <button onClick={onClose} title="Close" aria-label="Close"
-            className="ml-auto grid place-items-center w-9 h-9 rounded-full bg-slate-100 hover:bg-rose-100 text-slate-500 hover:text-rose-600 text-xl leading-none cursor-pointer shrink-0">
+            className={`grid place-items-center w-9 h-9 rounded-full bg-slate-100 hover:bg-rose-100 text-slate-500 hover:text-rose-600 text-xl leading-none cursor-pointer shrink-0${
+              openId || adding ? ' ml-auto' : ' ml-1'}`}>
             ×
           </button>
         </div>
 
         <div className="overflow-y-auto">
-          {openId ? (
+          {/* A case raised for another system does not land in this
+              portal's queue, so the list can stay exactly as it was. Say
+              so, or the Field Conductor raises it again. */}
+          {!adding && !openId && raised && (
+            <div className="mx-4 mt-3 px-3 py-2 rounded-lg text-[11.5px] font-black bg-emerald-100 text-emerald-800">
+              Case raised · {raised}
+            </div>
+          )}
+          {adding ? (
+            <NelosNewCase
+              source={MODULE}
+              me={me}
+              onBack={() => setAdding(false)}
+              onDone={(c) => {
+                setAdding(false);
+                setRaised(c?.case_no || 'the case');
+                reload();
+              }} />
+          ) : openId ? (
             <CaseView caseId={openId} me={me}
               onBack={() => { setOpenId(null); reload(); }}
               onChanged={reload} />
