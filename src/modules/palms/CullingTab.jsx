@@ -80,6 +80,21 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
       const lines = await diagnose(plot, batch);
       console.log('%cdelivery order lines', 'font-weight:bold');
       console.table(lines);
+      /* Which orders make up the figure on screen. "N15 batch 244 collected
+         186 — from which D/O?" is asked of a number, and the answer is the
+         orders that were counted into it, named and totalled, so the screen
+         and the paperwork can be squared without adding a column up by
+         hand. */
+      const counted = lines.filter((l) => l.why === 'LISTED');
+      if (counted.length) {
+        const total = counted.reduce((n, l) => n + Math.abs(Number(l.qty || 0)), 0);
+        console.log(
+          `%ccollected ${total.toLocaleString()} on ${counted.length} order` +
+            `${counted.length === 1 ? '' : 's'}: ` +
+            counted.map((l) => `${l.do || '(no number)'} ${l.qty}`).join(', '),
+          'font-weight:bold'
+        );
+      }
       if (plot) {
         console.log('%cwhat the batch report holds', 'font-weight:bold');
         console.table(await plantedNear(plot, batch));
