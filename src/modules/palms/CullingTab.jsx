@@ -8,8 +8,8 @@ import {
   refreshFigures,
 } from './cullingData.js';
 import { CULL_LIMIT, actionFor, caseBody } from './cullingActions.js';
-import { cullingScopePlots, todayStr } from './data.js';
-import { syncPalms } from './sync.js';
+import { loadCachedScope, refreshDeliveryScope } from './cullingScope.js';
+import { todayStr } from './data.js';
 import { openCasePlots, raiseCase } from '../../lib/nelos.js';
 
 /**
@@ -35,16 +35,17 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
   const [, setTick] = useState(0);
   const refresh = () => setTick((n) => n + 1);
 
-  /* Every plot the FC may see that PALMS says is at Pengambilan. No nursery
-     picker: which nurseries a person works is on their user access now, so
-     asking them again on this screen was asking a question already answered.
+  /* Every plot the FC may see that a Delivery Order is collecting from. No
+     nursery picker: which nurseries a person works is on their user access
+     now, so asking them again on this screen was asking a question already
+     answered.
 
-     PALMS is pulled first. While the calculator was a tab inside PALMS it
-     inherited the module's sync — you could not reach the tab without PALMS
-     having already read the server. On its own page nothing did, so the plot
-     list was whatever happened to be on this phone: a stale copy from the
-     last visit, and never a status somebody else keyed in this morning. */
-  const [scope, setScope] = useState(() => cullingScopePlots());
+     The office raising a D/O is what puts a plot here. It used to be PALMS
+     saying Pengambilan, which made the calculator wait on somebody keying a
+     status the delivery order had already stated as fact. Read from the
+     server on open and cached, so a nursery with no signal still gets the
+     list it had last time rather than an empty screen. */
+  const [scope, setScope] = useState(loadCachedScope);
   /* Lowest culling rate first. The list arrived in nursery order, which is
      an accident of how the plots are numbered and tells the person choosing
      nothing; the rate is the only reason they are on this screen. A plot
@@ -53,7 +54,7 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
   const plots = useMemo(() => {
     const out = [];
     nurseryKeys.forEach((nk) => (data[nk] || []).forEach((r) => {
-      if (scope.has(r.plot)) out.push({ ...r, nursery: nk });
+      if (scope.plots.has(r.plot)) out.push({ ...r, nursery: nk, delivered: scope.delivered.get(r.plot) || 0 });
     }));
     const rateOf = (p) => (hasFigures(p) ? cullingRate(p.balance, 0, 0, p.transplant) : Infinity);
     return out.sort((a, b) => rateOf(a) - rateOf(b));
@@ -77,7 +78,7 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
   // whatever was cached last time rather than showing an empty screen.
   useEffect(() => {
     let live = true;
-    syncPalms().then(() => { if (live) setScope(cullingScopePlots()); });
+    refreshDeliveryScope().then(({ scope: s }) => { if (live) setScope(s); }, () => {});
     refreshFigures().then((ok) => { if (live && ok) refresh(); });
     openCasePlots({ source: 'scan' }).then((s) => { if (live) setRaised(s); }, () => {});
     return () => { live = false; };
@@ -183,6 +184,15 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
           <div className="text-slate-300 text-[28px] font-light tabular-nums leading-tight">
             {known ? fmtNum(row.balance) : '—'}
           </div>
+          {/* What the customer has already taken off this plot. The balance
+              above is net of it — the ledger takes a delivery order off the
+              plot the moment it is raised — so without this line the figure
+              drops between visits with nothing on screen to say why. */}
+          {row && row.delivered > 0 && (
+            <div className="text-[10px] font-bold text-slate-500 tabular-nums">
+              {t('cull.collected')} {fmtNum(row.delivered)}
+            </div>
+          )}
         </div>
 
         <div className="bg-[#101013] rounded-2xl pt-3 pb-2">

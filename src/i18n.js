@@ -62,6 +62,7 @@ const en = {
   'cull.alreadyOpen': 'Case {n} is already open for this plot',
   'cull.raiseFailed': 'Could not raise the case — try again.',
   'cull.balance': 'Balance',
+  'cull.collected': 'Collected',
   'cull.actDrone': 'Request drone flight',
 
   // PALMS
@@ -474,6 +475,7 @@ const ms = {
   'cull.alreadyOpen': 'Kes {n} sudah dibuka untuk plot ini',
   'cull.raiseFailed': 'Kes tidak dapat dibuka — cuba lagi.',
   'cull.balance': 'Baki',
+  'cull.collected': 'Diambil',
   'cull.actDrone': 'Mohon drone terbang',
 
   // PALMS
