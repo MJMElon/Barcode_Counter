@@ -3,7 +3,7 @@ import { fmtNum, fmtPct } from './cullingData.js';
 import { CULL_LIMIT, actionFor, caseBody } from './cullingActions.js';
 // Every figure on this screen comes from here.
 import { figuresBroken, figuresFor, hasFigures, loadPlots, rateFor } from './cullingSource.js';
-import { todayStr } from './data.js';
+import { prettyD, todayStr } from './data.js';
 import { openCasePlots, raiseCase } from '../../lib/nelos.js';
 
 /**
@@ -193,18 +193,23 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
               {t('cull.negativeNote')}
             </div>
           )}
-          {/* Where the rest of the intake went. Nothing has been culled off a
-              plot still on this list — a cull is what takes it off — so the
-              balance is simply what the customers have not collected yet. */}
-          {row && row.delivered > 0 && (
+          {/* The balance in full, so nobody has to work out where the rest
+              went: what the Batch Report says went in, less what the delivery
+              orders have taken out. */}
+          {row && row.transplant > 0 && (
             <div className="text-[10px] font-bold text-slate-500 tabular-nums leading-snug pt-1 space-y-0.5">
               <div className="flex justify-between gap-3">
-                <span>{t('cull.transplantedIn')}</span>
+                <span>
+                  {t('cull.transplantedIn')}
+                  {row.transplantedOn && (
+                    <span className="text-slate-600 ml-1">{prettyD(row.transplantedOn)}</span>
+                  )}
+                </span>
                 <span className="text-slate-400">{fmtNum(row.transplant)}</span>
               </div>
               <div className="flex justify-between gap-3">
                 <span>{t('cull.collected')}</span>
-                <span className="text-slate-400">−{fmtNum(row.delivered)}</span>
+                <span className="text-slate-400">−{fmtNum(row.collected || 0)}</span>
               </div>
             </div>
           )}

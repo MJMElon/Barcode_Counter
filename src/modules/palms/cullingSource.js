@@ -9,14 +9,19 @@ import { nurseryOfPlot } from './data.js';
  * it goes back in. The screen reads only from here, so wiring the calculator
  * up means filling in these functions and touching nothing else.
  *
- * Wired so far:
- *   loadPlots    — the plots in pengambilan, from the Customer Order
- *                  Monitoring delivery orders, split by batch
+ * Two reads, both against one block — a plot AND a batch:
  *
- * Still empty, and honest about it — a plot shows a dash rather than a zero:
- *   figuresFor   — Transplant and Baki behind one block
- *   hasFigures   — whether those figures can carry a rate at all
- *   rateFor      — the rate itself
+ *   pengambilan   Customer Order Monitoring. A Delivery Order collecting from
+ *                 a plot is what says that plot is being collected from, and
+ *                 the sum of those collections is what has gone.
+ *   transplanting The Batch Report's Transplanting tab, which records the
+ *                 date, the plot, the batch and the quantity that went in.
+ *
+ * and the balance is the difference:
+ *
+ *     balance = transplanted in  −  collected
+ *
+ * which is what the ten percent line is drawn against.
  *
  * What was removed, in case any of it is worth having back (git has it all,
  * up to commit f79a4c5):
@@ -84,11 +89,75 @@ export async function loadPlots() {
     }
   }
 
+  /* What went in, against what has come out. Only the blocks being collected
+     from are looked up: the transplanting read covers every plot in the
+     nursery, and all but these are of no interest here. */
+  const planted = await loadTransplanting();
+  by.forEach((e) => {
+    const t = planted.get(e.key);
+    e.transplant = t ? t.qty : 0;
+    e.transplantedOn = t ? t.last : '';
+    e.balance = e.transplant - e.collected;
+  });
+
   return [...by.values()].sort(
     (a, b) =>
       a.plot.localeCompare(b.plot, undefined, { numeric: true }) ||
       a.batch.localeCompare(b.batch, undefined, { numeric: true })
   );
+}
+
+/* Transplanting puts seedlings INTO a plot. Three types, because the Batch
+   Report offers three destinations; only the first reaches a numbered plot,
+   but reading all three costs nothing and matches the office movement report
+   rather than being a second opinion on it. */
+const TRANSPLANT_TYPES = ['Transplanted', 'Transplanted_Premium', 'Transplanted_DoubleTone'];
+
+/**
+ * What the Batch Report says was transplanted in, per plot and batch.
+ *
+ * @returns {Promise<Map<string, { qty: number, first: string, last: string }>>}
+ *   keyed the same way as the delivery orders, "PLOT#BATCH", so the two sides
+ *   of the balance meet on the same key however loosely either was typed.
+ */
+export async function loadTransplanting() {
+  const res = await fetchAllRows(() =>
+    supabase
+      .from('shared_inventory_logs')
+      .select('plot_name, batch_name, quantity_change, transaction_date, created_at')
+      .in('transaction_type', TRANSPLANT_TYPES)
+      .order('id', { ascending: true })
+  );
+  if (res.error) {
+    console.warn('[culling] could not read the transplanting:', res.error.message);
+    return new Map();
+  }
+  return transplantedByBlock(res.data || []);
+}
+
+/** The same, from rows already in hand — so the rule is testable without a
+    database behind it. */
+export function transplantedByBlock(rows) {
+  const out = new Map();
+  for (const l of rows || []) {
+    const plot = plotKey(l.plot_name);
+    const batch = batchKey(l.batch_name);
+    const qty = Math.abs(Number(l.quantity_change || 0));
+    if (!plot || !batch || !qty) continue;
+    const key = `${plot}#${batch}`;
+    if (!out.has(key)) out.set(key, { qty: 0, first: '', last: '' });
+    const e = out.get(key);
+    e.qty += qty;
+    /* The date the office recorded the transplanting on, falling back to when
+       the row was written. A batch can go in over several days, so both ends
+       are kept rather than one being made to stand for the whole. */
+    const on = String(l.transaction_date || l.created_at || '').slice(0, 10);
+    if (on) {
+      if (!e.first || on < e.first) e.first = on;
+      if (on > e.last) e.last = on;
+    }
+  }
+  return out;
 }
 
 /** The five collection lines a delivery order carries, as rows. A line needs
@@ -124,8 +193,9 @@ export function isCancelled(d) {
  *   same as zero, and the difference matters: a plot with no figures must not
  *   read as a plot with none left.
  */
-export function figuresFor(block) {  // eslint-disable-line no-unused-vars
-  return null;
+export function figuresFor(block) {
+  if (!block || !(block.transplant > 0)) return null;
+  return { transplant: block.transplant, balance: block.balance };
 }
 
 /**
@@ -135,8 +205,8 @@ export function figuresFor(block) {  // eslint-disable-line no-unused-vars
  * shown and still be refused a percentage — a balance the ledger cannot
  * explain should be visible, not silently rated.
  */
-export function hasFigures(row) {  // eslint-disable-line no-unused-vars
-  return false;
+export function hasFigures(row) {
+  return !!row && row.transplant > 0 && row.balance >= 0;
 }
 
 /**
@@ -147,8 +217,8 @@ export function hasFigures(row) {  // eslint-disable-line no-unused-vars
  * block is named and its balance shown, but no rate is offered, because a
  * rate worked out from a figure that does not add up reads as a healthy plot.
  */
-export function figuresBroken(block) {  // eslint-disable-line no-unused-vars
-  return false;
+export function figuresBroken(block) {
+  return !!block && block.transplant > 0 && block.balance < 0;
 }
 
 /**
@@ -159,6 +229,10 @@ export function figuresBroken(block) {  // eslint-disable-line no-unused-vars
  * @returns {number} a fraction — 0.1 is ten percent. NaN when there is no
  *   rate to be had, which the screen shows as a dash rather than as 0%.
  */
-export function rateFor({ balance, transplant, inang }) {  // eslint-disable-line no-unused-vars
-  return NaN;
+export function rateFor({ balance, transplant, inang }) {
+  if (!(transplant > 0)) return NaN;
+  /* Pokok inang screened out are kept back, so they come off what would
+     otherwise be culled. Before any are counted `inang` is nothing and the
+     rate is simply what is left as a share of what went in. */
+  return (balance - (inang || 0)) / transplant;
 }
