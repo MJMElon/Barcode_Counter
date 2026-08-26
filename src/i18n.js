@@ -63,7 +63,9 @@ const en = {
   'cull.raiseFailed': 'Could not raise the case — try again.',
   'cull.balance': 'Balance',
   'cull.collected': 'Collected',
+  'cull.transplantedIn': 'Transplanted in',
   'cull.checkStock': 'Check stock',
+  'cull.batchField': 'Batch',
   'cull.negativeNote': 'More has been culled and sold off this plot than was transplanted in. No rate until the stock ledger is corrected.',
   'cull.actDrone': 'Request drone flight',
 
@@ -233,6 +235,16 @@ const en = {
   'mt.newTitle': 'Record Maintenance Work',
   'mt.editTitle': 'Edit Maintenance Record',
   'mt.pickPlot': '— Choose plot —',
+  'mt.verify': '+ Verify this work',
+  'mt.verifiedBy': 'Verified by {name}',
+  'mt.unverify': 'Tap to undo',
+  'mt.byNobody': 'no name recorded',
+  'mt.verifySetupNeeded': 'Run shared/add_maint_field_verify.sql first — the verify columns are missing.',
+  'mt.whoDidIt': 'Who did this work',
+  'mt.whoDidItHint': 'Leave blank if you did it yourself. Tick a worker if you are keying it for them — a broken phone, a PIN that will not take.',
+  'mt.whoDidItPicked': '{n} ticked',
+  'mt.whoDidItShared': 'The job will be recorded as shared between them.',
+  'mt.keyedBy': 'keyed by {name}',
 
   // top nav / offline
 
@@ -531,7 +543,9 @@ const ms = {
   'cull.raiseFailed': 'Kes tidak dapat dibuka — cuba lagi.',
   'cull.balance': 'Baki',
   'cull.collected': 'Diambil',
+  'cull.transplantedIn': 'Ditransplant masuk',
   'cull.checkStock': 'Semak stok',
+  'cull.batchField': 'Batch',
   'cull.negativeNote': 'Lebih banyak telah dibuang dan dijual dari plot ini daripada yang ditransplant masuk. Tiada kadar sehingga lejar stok dibetulkan.',
   'cull.actDrone': 'Mohon drone terbang',
 
@@ -701,6 +715,16 @@ const ms = {
   'mt.newTitle': 'Rekod Kerja Penyelenggaraan',
   'mt.editTitle': 'Ubah Rekod Penyelenggaraan',
   'mt.pickPlot': '— Pilih plot —',
+  'mt.verify': '+ Sahkan kerja ini',
+  'mt.verifiedBy': 'Disahkan oleh {name}',
+  'mt.unverify': 'Ketik untuk batal',
+  'mt.byNobody': 'tiada nama direkod',
+  'mt.verifySetupNeeded': 'Jalankan shared/add_maint_field_verify.sql dahulu — lajur pengesahan tiada.',
+  'mt.whoDidIt': 'Siapa buat kerja ini',
+  'mt.whoDidItHint': 'Biar kosong jika anda sendiri yang buat. Tanda pekerja jika anda merekod bagi pihak mereka — telefon rosak, PIN tidak boleh masuk.',
+  'mt.whoDidItPicked': '{n} ditanda',
+  'mt.whoDidItShared': 'Kerja ini akan direkod sebagai dikongsi antara mereka.',
+  'mt.keyedBy': 'direkod oleh {name}',
 
   // top nav / offline
 

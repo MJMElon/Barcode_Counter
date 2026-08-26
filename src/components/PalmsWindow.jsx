@@ -127,6 +127,12 @@ export default function PalmsWindow({ onClose, onDayChange }) {
 
   function onPointerDown(e) {
     if (!wide || !pos) return;
+    /* Not on a control. The title bar is the drag handle, and it captures the
+       pointer so a drag survives the cursor leaving it — but a capture also
+       redirects the pointerup, and without a pointerup on the button the
+       browser fires no click at all. So pressing × started a one-pixel drag
+       and closed nothing. The cog beside it was just as dead. */
+    if (e.target.closest('button, a, input, select, textarea, [role="button"]')) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     drag.current = { dx: e.clientX - pos.x, dy: e.clientY - pos.y };
     setDragging(true);

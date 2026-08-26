@@ -64,13 +64,25 @@ export default function WorkerCover() {
             <input
               /* Not type="password": this is a door number, the worker is
                  standing in a field, and a PIN they cannot see is a PIN they
-                 key wrong. type="tel" is what brings up the number pad —
-                 inputMode alone does not, on older Android. */
-              type="tel"
-              inputMode="numeric"
+                 key wrong.
+
+                 Not type="tel" either, though a number pad would suit a PIN
+                 of digits. A PIN is letters and digits now (see the office
+                 repo's shared/allow_npayroll_worker_pin_letters.sql), and a
+                 number pad cannot type AB12 at all — the worker would be left
+                 tapping at a keyboard with no way to key their own PIN.
+
+                 Kept to the characters the column actually allows, and
+                 uppercased as it is keyed: the register stores capitals, so
+                 what a worker sees in the box is what is on their slip. */
+              type="text"
+              inputMode="text"
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck={false}
               autoComplete="off"
               value={pin}
-              onChange={(e) => setPin(e.target.value.replace(/[^0-9]/g, ''))}
+              onChange={(e) => setPin(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
               onKeyDown={(e) => e.key === 'Enter' && handleSignIn()}
               placeholder={t('wk.pin')}
               className="bk-field"

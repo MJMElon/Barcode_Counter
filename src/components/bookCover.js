@@ -2,12 +2,12 @@
  * The 555 exercise book cover — one stylesheet, a pile of colours.
  *
  * Every MJM portal signs in on the same cover: the house name, the 555
- * logotype as the hero, the portal name under it, and dotted lines ruled
- * near the foot where you write your name. Only the colour of the board
- * differs, exactly like the books themselves:
+ * logotype as the hero, the portal name under it, and the boxes you fill
+ * in below that. Only the colour of the board differs, exactly like the
+ * books themselves:
  *
  *     FC Portal        blue      src/components/AuthScreen.jsx
- *     Worker Portal    green     src/worker/WorkerCover.jsx
+ *     Worker Portal    ochre     src/worker/WorkerCover.jsx
  *     Auditor Portal   pink      the office repo, audit/audit_index.html
  *     Admin Portal     manila    the office repo
  *
