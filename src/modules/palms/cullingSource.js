@@ -54,7 +54,8 @@ import { nurseryOfPlot } from './data.js';
  * being emptied on their own timetables, and rolling them into one row would
  * average away the only figures worth having.
  *
- * @returns {Promise<Array<{ key, plot, batch, nursery, collected, lastDate }>>}
+ * @returns {Promise<Array<{ key, plot, batch, nursery, collected, firstDate,
+ *   lastDate, transplant, transplantedOn, balance, daysCollecting }>>}
  *   `key` is what the screen selects on — a plot alone is not unique once its
  *   batches are separated.
  */
@@ -74,6 +75,7 @@ export async function loadPlots() {
     return [];
   }
 
+  const today = new Date().toISOString().slice(0, 10);
   const by = new Map();
   for (const d of res.data || []) {
     if (isCancelled(d)) continue;
@@ -86,13 +88,20 @@ export async function loadPlots() {
           batch: line.batch,
           nursery: nurseryOfPlot(line.plot) || '',
           collected: 0,
-          lastDate: '',
+          firstDate: '',   // when collection opened on this block
+          lastDate: '',    // and the most recent one
         });
       }
       const e = by.get(key);
       e.collected += line.qty;
-      // The most recent collection, which is what says how far along it is.
-      if (String(d.delivery_date || '') > e.lastDate) e.lastDate = d.delivery_date || '';
+      /* Both ends of the collection. The FIRST is when pengambilan opened on
+         this block, which is what says how far through it is; the last is
+         only the most recent order. */
+      const on = String(d.delivery_date || '');
+      if (on) {
+        if (!e.firstDate || on < e.firstDate) e.firstDate = on;
+        if (on > e.lastDate) e.lastDate = on;
+      }
     }
   }
 
@@ -105,11 +114,8 @@ export async function loadPlots() {
     e.transplant = t ? t.qty : 0;
     e.transplantedOn = t ? t.last : '';
     e.balance = e.transplant - e.collected;
-    /* Months from transplanting to the last collection. Collection usually
-       opens seven to nine months after a block goes in, but not always — so
-       this is shown as context and never used to include or exclude a block.
-       A rule made out of a rough guide would quietly hide real work. */
-    e.monthsToCollect = monthsBetween(e.transplantedOn, e.lastDate);
+    // How long collection has been running on this block.
+    e.daysCollecting = daysSince(e.firstDate, today);
   });
 
   /* A 3rd culling against a block means the Field Conductor has already
@@ -117,11 +123,52 @@ export async function loadPlots() {
      again would invite a second count of stock that is no longer standing. */
   return [...by.values()]
     .filter((e) => !finished.has(e.key))
-    .sort(
-    (a, b) =>
-      a.plot.localeCompare(b.plot, undefined, { numeric: true }) ||
-      a.batch.localeCompare(b.batch, undefined, { numeric: true })
+    .sort(byReadiness);
+}
+
+/** Collection runs about a month, so a block a month into it is the one worth
+    walking. */
+export const COLLECTION_DAYS = 30;
+
+/**
+ * How ready a block is to be counted — smaller is sooner.
+ *
+ * A block a month into its collection is nearly empty and is what the Field
+ * Conductor came here for; one that opened last week has nothing to judge yet.
+ * So the list is ordered by how close each is to that month.
+ *
+ * Anything PAST the month is treated as having arrived rather than as having
+ * overshot. Ranking by distance alone would send a block sixty days in to the
+ * back of the list beside one that opened yesterday, and the sixty-day one is
+ * the more overdue of the two, not the less interesting.
+ *
+ * A block with no collection date cannot be placed and goes last.
+ */
+export function readiness(row) {
+  const d = row && row.daysCollecting;
+  if (d == null) return Infinity;
+  return d >= COLLECTION_DAYS ? 0 : COLLECTION_DAYS - d;
+}
+
+/** The order the list is in. Exported so it can be driven on its own —
+    a comparator buried inside the read is a comparator nothing can check. */
+export function byReadiness(a, b) {
+  return (
+    readiness(a) - readiness(b) ||
+    // Among those already past the month, the longest-running first.
+    (b.daysCollecting || 0) - (a.daysCollecting || 0) ||
+    a.plot.localeCompare(b.plot, undefined, { numeric: true }) ||
+    a.batch.localeCompare(b.batch, undefined, { numeric: true })
   );
+}
+
+/** Whole days from a date to another, or null when either is missing. */
+export function daysSince(from, to) {
+  if (!from || !to) return null;
+  const a = Date.parse(from + 'T00:00:00Z');
+  const b = Date.parse(to + 'T00:00:00Z');
+  if (Number.isNaN(a) || Number.isNaN(b)) return null;
+  return Math.round((b - a) / 86400000);
 }
 
 /* Transplanting puts seedlings INTO a plot. Three types, because the Batch
@@ -198,14 +245,6 @@ export function finishedBlocks(rows) {
   return out;
 }
 
-/** Whole months between two dates, or null when either is missing. */
-export function monthsBetween(from, to) {
-  if (!from || !to) return null;
-  const [fy, fm] = from.split('-').map(Number);
-  const [ty, tm] = to.split('-').map(Number);
-  if (!fy || !ty) return null;
-  return (ty * 12 + tm) - (fy * 12 + fm);
-}
 
 /** The same, from rows already in hand — so the rule is testable without a
     database behind it. */

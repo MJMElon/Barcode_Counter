@@ -204,20 +204,12 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
                   {row.transplantedOn && (
                     <span className="text-slate-600 ml-1">{prettyD(row.transplantedOn)}</span>
                   )}
-                  {/* How long it took to reach collection. Usually seven to
-                      nine months, often not — shown as context, never used to
-                      decide whether a block belongs on this screen. */}
-                  {row.monthsToCollect != null && (
-                    <span className="text-slate-600 ml-1">
-                      {t('cull.monthsOn', { n: row.monthsToCollect })}
-                    </span>
-                  )}
                 </span>
                 <span className="text-slate-400">{fmtNum(row.transplant)}</span>
               </div>
               <div className="flex justify-between gap-3">
                 <span>{t('cull.collected')}</span>
-                <span className="text-slate-400">−{fmtNum(row.collected || 0)}</span>
+                <span className="text-slate-400">{fmtNum(row.collected || 0)}</span>
               </div>
             </div>
           )}
