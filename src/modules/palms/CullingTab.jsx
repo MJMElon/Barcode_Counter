@@ -1,37 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { fmtNum, fmtPct } from './cullingData.js';
 import { CULL_LIMIT, actionFor, caseBody } from './cullingActions.js';
-// Every figure on this screen comes from here, and nothing is wired up yet.
-import { figuresFor, hasFigures, loadPlots, rateFor } from './cullingSource.js';
+// Every figure on this screen comes from here.
+import { figuresBroken, figuresFor, hasFigures, loadPlots, rateFor } from './cullingSource.js';
 import { todayStr } from './data.js';
 import { openCasePlots, raiseCase } from '../../lib/nelos.js';
-
-/** '2026-06' → 'Jun 2026'; a spilled intake '2026-06…2026-07' → 'Jun–Jul 2026'. */
-function prettyMonth(label) {
-  if (!label) return '';
-  const one = (m) => {
-    const [y, mo] = m.split('-').map(Number);
-    return new Date(y, mo - 1, 15).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
-  };
-  const [a, b] = label.split('…');
-  if (!b) return one(a);
-  const short = (m) => one(m).split(' ')[0];
-  return `${short(a)}–${one(b)}`;
-}
-
-/** A batch chip in the header strip. */
-function BatchChip({ on, label, onClick }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`shrink-0 rounded-lg px-2 py-1 text-[10px] font-black tabular-nums transition-colors cursor-pointer ${
-        on ? 'bg-emerald-600 text-white' : 'bg-[#1f2a38] text-slate-400 hover:text-slate-200'
-      }`}
-    >
-      {label}
-    </button>
-  );
-}
 
 /**
  * The Culling Calculator.
@@ -60,7 +33,7 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
      says so rather than showing invented numbers. */
   const [rows, setRows] = useState([]);
   const plots = useMemo(
-    () => rows.map((r) => ({ ...r, ...(figuresFor(r.plot) || { transplant: 0, balance: 0 }) })),
+    () => rows.map((r) => ({ ...r, ...(figuresFor(r) || { transplant: 0, balance: 0 }) })),
     [rows, tick]
   );
 
@@ -72,12 +45,10 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
   const reloadRaised = () =>
     openCasePlots({ source: 'scan' }).then(setRaised, () => {});
 
+  /* What is selected. A plot on its own stopped being unique the moment its
+     batches were separated: U4 batch 301 and U4 batch 302 are two blocks of
+     ground, collected on their own timetables. */
   const [plotId, setPlotId] = useState(null);
-  /* Which batch of the intake is being counted, or '' for the whole intake.
-     A plot's batches are separate blocks of ground, transplanted and culled on
-     their own days, so one batch running at eleven percent inside an intake
-     averaging four is worth being able to see on its own. */
-  const [batchId, setBatchId] = useState('');
   const [picking, setPicking] = useState(false);
   const [terms, setTerms] = useState([]);      // the counts already entered
   const [typing, setTyping] = useState('');    // the one being keyed now
@@ -91,28 +62,19 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
     return () => { live = false; };
   }, []);
 
-  const plotRow = plots.find((p) => p.plot === plotId) || plots[0] || null;
-  useEffect(() => { if (!plotId && plotRow) setPlotId(plotRow.plot); }, [plotRow, plotId]);
-  // Changing plot drops back to the whole intake: a batch number means
-  // nothing in the plot next door.
-  useEffect(() => { setBatchId(''); }, [plotId]);
-  // A count belongs to the block it was walked in, so switching blocks clears
-  // it rather than quietly re-attributing it.
-  useEffect(() => { setTerms([]); setTyping(''); }, [batchId]);
+  const plotRow = plots.find((p) => p.key === plotId) || plots[0] || null;
+  useEffect(() => { if (!plotId && plotRow) setPlotId(plotRow.key); }, [plotRow, plotId]);
+  /* A count belongs to the block it was walked in, so moving to another one
+     clears it rather than quietly re-attributing it. */
+  useEffect(() => { setTerms([]); setTyping(''); }, [plotId]);
 
-  /* Batches were part of the intake model that came out with the rest of the
-     calculation. The strip stays in the markup below and simply has nothing to
-     show until something supplies them again. */
-  const lines = (plotRow && plotRow.lines) || [];
-  const line = batchId ? lines.find((l) => l.batch === batchId) : null;
   /* The row the whole screen works from — one object, so the rate, the action
-     and the case cannot read different figures. */
-  const row = line
-    ? { ...plotRow, transplant: line.transplant, balance: line.balance, batch: line.batch }
-    : plotRow;
+     and the case cannot read different figures. It is already one block: a
+     plot and a batch, chosen as a pair. */
+  const row = plotRow;
 
   const known = hasFigures(row);
-  const broken = false; // was: a balance the ledger could not explain
+  const broken = figuresBroken(row);
   const inang = terms.reduce((a, b) => a + b, 0) + (typing === '' ? 0 : Number(typing));
   const rateNow = rateFor({ balance: row?.balance, transplant: row?.transplant, inang: 0 });
   const rateAfter = rateFor({ balance: row?.balance, transplant: row?.transplant, inang });
@@ -150,7 +112,7 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
         inang, rate: rateAfter, terms, by: staffName, date: todayStr(),
         // Which block of the plot was walked. Without it the auditor is sent
         // to a plot and left to work out which part of it was counted.
-        batch: row.batch, intake: row.intake,
+        batch: row.batch,
       }),
       category: action.category,
       priority: action.priority,
@@ -190,24 +152,11 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
             className="flex items-center gap-1.5 text-white font-black text-[15px] cursor-pointer"
           >
             {row ? row.plot : '—'}
+            {row && row.batch && (
+              <span className="font-bold text-slate-400 text-[11px] tabular-nums">{row.batch}</span>
+            )}
             <span className="text-[10px] text-slate-500">▼</span>
           </button>
-          {/* One batch, or the intake whole. Only offered when the intake has
-              more than one batch in it — otherwise the batch IS the intake
-              and a picker with one entry is a button that does nothing. */}
-          {lines.length > 1 && (
-            <div className="flex items-center gap-1 overflow-x-auto no-scrollbar max-w-[190px]">
-              <BatchChip on={!batchId} onClick={() => setBatchId('')} label={t('cull.allBatches')} />
-              {lines.map((l) => (
-                <BatchChip
-                  key={l.batch}
-                  on={batchId === l.batch}
-                  onClick={() => setBatchId(l.batch)}
-                  label={l.batch}
-                />
-              ))}
-            </div>
-          )}
           <div className="text-[13px] font-black tabular-nums">
             <span className="text-slate-500 mr-1">{t('cull.cullShort')} :</span>
             <span className={
@@ -242,14 +191,6 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
           {broken && (
             <div className="text-[10px] font-bold text-amber-500/80 leading-snug pt-0.5">
               {t('cull.negativeNote')}
-            </div>
-          )}
-          {/* Which intake these figures are for. Only worth saying when the
-              plot holds more than one — otherwise the intake IS the plot and
-              naming it is noise. */}
-          {row && row.intakes > 1 && (
-            <div className="text-[10px] font-bold text-sky-400/80 leading-snug pt-0.5">
-              {t('cull.intakeOf', { m: prettyMonth(row.intake), n: row.intakes })}
             </div>
           )}
           {/* Where the rest of the intake went. Nothing has been culled off a
@@ -385,14 +326,14 @@ function PlotPicker({ plots, current, raised, t, onPick, onClose }) {
         <div className="space-y-1.5">
           {plots.map((p) => {
             const known = hasFigures(p);
-            const broken = false; // was: a balance the ledger could not explain
+            const broken = figuresBroken(p);
             const rate = rateFor({ balance: p.balance, transplant: p.transplant, inang: 0 });
             return (
               <button
-                key={p.plot}
-                onClick={() => onPick(p.plot)}
+                key={p.key}
+                onClick={() => onPick(p.key)}
                 className={`w-full flex items-center justify-between gap-3 rounded-xl px-3.5 py-3 text-left cursor-pointer border transition-colors ${
-                  p.plot === current
+                  p.key === current
                     ? 'bg-emerald-600/15 border-emerald-600/50'
                     : 'bg-[#0f1620] border-[#1f2a38] hover:border-slate-600'
                 }`}
@@ -400,6 +341,9 @@ function PlotPicker({ plots, current, raised, t, onPick, onClose }) {
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
                     <span className="font-black text-slate-100 text-[14px]">{p.plot}</span>
+                    {/* The batch, because the plot alone no longer says which
+                        block this row is. */}
+                    <span className="font-bold text-slate-400 text-[11px] tabular-nums">{p.batch}</span>
                     {/* Already handed over. The rate alone cannot say this,
                         and without it the only way to find out is to press
                         the button and be told it was a duplicate. */}
