@@ -13,6 +13,19 @@ import { loadCachedScope, refreshDeliveryScope } from './cullingScope.js';
 import { todayStr } from './data.js';
 import { openCasePlots, raiseCase } from '../../lib/nelos.js';
 
+/** '2026-06' → 'Jun 2026'; a spilled intake '2026-06…2026-07' → 'Jun–Jul 2026'. */
+function prettyMonth(label) {
+  if (!label) return '';
+  const one = (m) => {
+    const [y, mo] = m.split('-').map(Number);
+    return new Date(y, mo - 1, 15).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+  };
+  const [a, b] = label.split('…');
+  if (!b) return one(a);
+  const short = (m) => one(m).split(' ')[0];
+  return `${short(a)}–${one(b)}`;
+}
+
 /**
  * The Culling Calculator.
  *
@@ -200,6 +213,14 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
           {broken && (
             <div className="text-[10px] font-bold text-amber-500/80 leading-snug pt-0.5">
               {t('cull.negativeNote')}
+            </div>
+          )}
+          {/* Which intake these figures are for. Only worth saying when the
+              plot holds more than one — otherwise the intake IS the plot and
+              naming it is noise. */}
+          {row && row.intakes > 1 && (
+            <div className="text-[10px] font-bold text-sky-400/80 leading-snug pt-0.5">
+              {t('cull.intakeOf', { m: prettyMonth(row.intake), n: row.intakes })}
             </div>
           )}
           {/* What the customer has already taken off this plot. The balance

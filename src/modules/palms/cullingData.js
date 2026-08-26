@@ -105,7 +105,18 @@ export async function refreshFigures() {
       const f = figures.get(r.plot.toUpperCase());
       // A plot that has dropped out of the ledger keeps its last known
       // figures rather than silently resetting to an unknown rate.
-      if (f) { r.transplant = f.transplant; r.balance = f.balance; }
+      if (f) {
+        r.transplant = f.transplant;
+        r.balance = f.balance;
+        // Which intake these figures are for, and whether the plot holds more
+        // than one. A plot transplanted twice has two, and the calculator is
+        // counting the one being collected from — worth saying so on screen
+        // rather than leaving the figures to look like the whole plot's.
+        r.intake = f.intake;
+        r.intakes = f.intakes;
+        r.selling = f.selling;
+        r.sellsFrom = f.sellsFrom;
+      }
     }
   }
   persistSessionData();

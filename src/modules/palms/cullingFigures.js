@@ -1,5 +1,6 @@
 import { fetchAllRows, supabase } from '../../lib/supabase.js';
 import { batchKey, plotKey } from '../maintenance/plotBatches.js';
+import { currentCycle, cyclesForPlot } from './cullingCycles.js';
 
 /**
  * The Culling Calculator's two figures, from the Seedling Stock system.
@@ -13,11 +14,12 @@ import { batchKey, plotKey } from '../maintenance/plotBatches.js';
  *   Baki (balance)  what is still standing in the plot right now
  *   Transplant      what was transplanted in to put it there
  *
- * Scoped to the BATCHES CURRENTLY IN THE PLOT, not to the plot's whole
- * history. A plot goes round the cycle again and again; measuring this
- * intake's balance against every seedling ever transplanted into that plot
- * would sink the rate a little further every year until it meant nothing.
- * So the batches standing there now decide the denominator too.
+ * Scoped to ONE INTAKE, not to the plot's whole history and not even to
+ * everything standing in it. A plot transplanted in January and again in June
+ * holds two intakes, and adding them together netted January's leftovers off
+ * against June's stock — which is how a plot came to report a balance below
+ * zero while one of its intakes was perfectly healthy. cullingCycles.js splits
+ * them; the figures here are the intake currently being collected from.
  */
 
 /* The movements that PUT seedlings in a plot. Matches plotBatches.js, which
@@ -33,39 +35,52 @@ export async function loadCullingFigures() {
     loadBalances(),
     fetchAllRows(() => supabase
       .from('shared_inventory_logs')
-      .select('transaction_type, plot_name, batch_name, quantity_change')
+      // The DATE matters as much as the quantity: it is what separates one
+      // intake from the next in the same plot.
+      .select('transaction_type, plot_name, batch_name, quantity_change, transaction_date, created_at')
       .in('transaction_type', TRANSPLANT_TYPES)
       .order('id', { ascending: true })),
   ]);
   if (logs.error) throw logs.error;
 
-  // plotKey → batchKey → transplanted-in quantity
-  const inQty = new Map();
+  // plotKey → its transplanting rows, kept whole so their dates survive.
+  const inBy = new Map();
   for (const l of logs.data || []) {
     const pk = plotKey(l.plot_name);
-    const bk = batchKey(l.batch_name);
-    if (!pk || !bk) continue;
-    if (!inQty.has(pk)) inQty.set(pk, new Map());
-    const m = inQty.get(pk);
-    m.set(bk, (m.get(bk) || 0) + Math.abs(Number(l.quantity_change || 0)));
+    if (!pk || !batchKey(l.batch_name)) continue;
+    if (!inBy.has(pk)) inBy.set(pk, []);
+    inBy.get(pk).push(l);
   }
 
+  const now = new Date().toISOString().slice(0, 7);
   const out = new Map();
   balances.forEach((batches, pk) => {
-    let balance = 0;
-    let transplant = 0;
-    const seen = inQty.get(pk) || new Map();
-    for (const b of batches) {
-      balance += b.qty;
-      transplant += seen.get(batchKey(b.batch)) || 0;
-    }
+    /* The plot's intakes, never added together. A plot transplanted in
+       January and again in June holds two, and summing them netted January's
+       leftovers off against June's stock — which is how a plot came to report
+       a balance below zero while one of its intakes was perfectly healthy. */
+    const cycles = cyclesForPlot(inBy.get(pk) || [], batches.map(toRow), now);
+    const cur = currentCycle(cycles);
     // A plot whose batches were never transplanted in — hand-corrected stock,
     // a batch keyed differently in the two tables — has a balance but no
     // denominator. Reporting 0% there would be a made-up number of exactly
     // the kind this file exists to remove, so it is left out.
-    if (transplant > 0) out.set(pk, { transplant, balance });
+    if (!cur) return;
+    out.set(pk, {
+      transplant: cur.transplant,
+      balance: cur.balance,
+      intake: cur.label,
+      intakes: cycles.filter((c) => c.transplant > 0).length,
+      sellsFrom: cur.opens,
+      selling: cur.selling,
+    });
   });
   return out;
+}
+
+/** The balance map holds { batch, qty }; the cycle model reads batch_name. */
+function toRow(b) {
+  return { batch_name: b.batch, qty: b.qty };
 }
 
 /** → Map(plotKey → [{ batch, qty }]), the batches standing in each plot.
