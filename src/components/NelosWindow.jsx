@@ -208,6 +208,20 @@ function CaseView({ caseId, me, onBack, onChanged }) {
                              : (c.plot_name || '');
   if (c.batch_name) where = (where ? `${where} · ` : '') + `Batch ${c.batch_name}`;
 
+  /* The opening detail is shown above, and every raise path also writes it
+     into the thread as the first comment (shared_nelos.js raiseCase, and the
+     dock's own insert) so the hub reads as one conversation. Shown in both
+     places it is the same words twice on one screen, so the thread drops its
+     copy — the one at the top is the one in the right place.
+
+     Only the FIRST match: a later comment repeating the description word for
+     word is somebody actually saying it again, and dropping that would be
+     editing the conversation. */
+  const opening = c.description
+    ? thread.find((r) => r.kind === 'comment' && r.body === c.description)
+    : null;
+  const visibleThread = opening ? thread.filter((r) => r !== opening) : thread;
+
   const btn = 'px-3.5 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wider text-white cursor-pointer disabled:opacity-50';
   const sec = 'text-[10px] font-black uppercase tracking-[.11em] text-violet-700';
   const kk  = 'text-[8.5px] font-black uppercase tracking-widest text-slate-400';
@@ -307,7 +321,7 @@ function CaseView({ caseId, me, onBack, onChanged }) {
 
       <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-4 mb-1">Thread</div>
       <div className="mb-3">
-        {thread.length ? thread.map((r) => {
+        {visibleThread.length ? visibleThread.map((r) => {
           const sys = r.kind !== 'comment';
           return (
             <div key={r.id || `${r.created_at}-${r.body}`} className="flex gap-2 py-2 border-b border-dashed border-slate-100 last:border-0">
