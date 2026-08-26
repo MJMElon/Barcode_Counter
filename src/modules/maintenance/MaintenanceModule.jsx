@@ -27,6 +27,7 @@ import {
   workTypeByKey,
   workTypeLabel,
 } from './data.js';
+import { generalWorkers } from './helpers.js';
 import PhotoSlots from './PhotoSlots.jsx';
 import ThisWeek from './ThisWeek.jsx';
 import Timeline from './Timeline.jsx';
@@ -214,12 +215,17 @@ export default function MaintenanceModule({
      own worker link uses: the register copies one into the other, but a row
      added since carries only whichever the person keying it used. */
   const nurseryWorkers = useMemo(() => {
-    if (!nursery) return workers;
-    const want = nurseryKey(nursery);
-    return workers.filter((w) => {
-      const mine = nurseryKey(w.nursery) || nurseryKey(w.section);
-      return mine === want;
-    });
+    const want = nursery ? nurseryKey(nursery) : null;
+    const mine = want
+      ? workers.filter((w) => (nurseryKey(w.nursery) || nurseryKey(w.section)) === want)
+      : workers;
+    /* Only the people who actually do maintenance work. The register holds
+       the whole nursery — the conductor, his assistant, drivers, the pump
+       operator, clerks — and offering all of them is offering the wrong
+       answer nineteen ways. Same rule the office's Worker Record uses, so a
+       name on one sheet is a name on the other. Judged per nursery, because
+       the rule asks whether anybody HERE has been labelled. */
+    return generalWorkers(mine);
   }, [workers, nursery]);
 
   const nurseryOptions = useMemo(

@@ -59,6 +59,9 @@ function plotsFromShared(rows) {
   const out = {};
   Object.keys(NURSERIES).forEach((nk) => { out[nk] = []; });
   (rows || []).forEach((r) => {
+    // Hidden in the office — not a plot the Field Conductor should be
+    // offered. Absent column means nothing is hidden.
+    if (r.is_active === false) return;
     const plot = String(r.plot_name || '').trim().toUpperCase();
     const nk = nurseryKeyOf(plot);
     if (!plot || !nk || !out[nk]) return;
@@ -99,7 +102,13 @@ export async function refreshOfficeConfig() {
   let cfg = null;
   try {
     const [plotsRes, stagesRes] = await Promise.all([
-      supabase.from('shared_plots').select('nursery_name, plot_name').order('plot_name'),
+      // is_active is newer than the table (migration_plot_hide.sql). A select
+      // naming a missing column fails the whole read, so this asks for it and
+      // plotsFromShared falls back to "everything" when it is absent.
+      supabase.from('shared_plots').select('nursery_name, plot_name, is_active').order('plot_name')
+        .then((r) => (r.error && /is_active/i.test(r.error.message || '')
+          ? supabase.from('shared_plots').select('nursery_name, plot_name').order('plot_name')
+          : r)),
       supabase.from('nops_plot_status_stages').select('id, name, sort_order, ideal_days').order('sort_order'),
     ]);
     cfg = {

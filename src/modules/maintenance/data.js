@@ -367,7 +367,7 @@ async function loadPlotBatchesFromLedger() {
 export async function loadWorkers() {
   const { data, error } = await supabase
     .from('mjmnpayroll_workers')
-    .select('id, worker_no, full_name, nursery, section')
+    .select('id, worker_no, full_name, nursery, section, role, job_title, maint_general, active')
     .eq('active', true)
     .order('full_name');
   if (error) {

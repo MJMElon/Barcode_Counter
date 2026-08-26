@@ -57,3 +57,56 @@ export function toCsv(rows, lang) {
   }
   return lines.join('\n');
 }
+
+/* ── Who counts as a worker on a maintenance sheet ──────────────────────
+ *
+ * A nursery's payroll register holds everybody on it: general workers, but
+ * also the conductor, his assistant, drivers, the pump operator, clerks. Only
+ * the first of those does maintenance work, and offering the rest on the
+ * "who did this work" list is offering the wrong answer nineteen ways.
+ *
+ * This is the office's rule, from nursery_ops/plot_maintenance_script.js in
+ * the mjm-ai-system repository, and it is a DELIBERATE COPY rather than an
+ * import: the two live in different repositories and there is no shared
+ * bundle between them. Keep the two in step — if the roles list or the
+ * wording changes there, change it here. A worker who appears on one sheet
+ * and not the other is a worker whose pay does not add up.
+ *
+ * The order matters:
+ *   1. maint_general on the row is an explicit answer, either way, and wins
+ *   2. "General Worker" (or Pekerja Am / Buruh Am) is a worker
+ *   3. another role off the register's own list is not
+ *   4. once ANY worker in this nursery has been labelled, an unlabelled one
+ *      is taken as not-a-worker — a half-filled register should not quietly
+ *      include everybody
+ *   5. otherwise, anything that does not read as a non-worker role
+ */
+
+/** The roles the payroll register offers. Kept in step with ROLES there. */
+export const ROLES = ['Field Conductor', 'Assistant Field Conductor',
+                      'Water Pump Operator', 'General Worker', 'Driver', 'Gardener'];
+
+const MAINT_ROLE       = /^general\s*worker$|pekerja am|buruh am/i;
+const NON_GENERAL_ROLE = /driver|pemandu|conductor|kondektor|konduktor|supervisor|penyelia|mandor|mandur|kepala|kerani|clerk|admin|manager|pengurus|executive|eksekutif|mekanik|mechanic|technician|juruteknik|security|pengawal|jaga|foreman|operator|storekeeper|storeman/i;
+
+const roleOf      = (r) => String((r && (r.role || r.job_title)) || '').trim();
+const isKnownRole = (r) => ROLES.some((x) => x.toLowerCase() === String(r).trim().toLowerCase());
+
+export function isGeneralWorker(r, nurseryNamesTheRole) {
+  if (!r || r.active === false) return false;
+  if (r.maint_general === true)  return true;
+  if (r.maint_general === false) return false;
+  const role = roleOf(r);
+  if (MAINT_ROLE.test(role)) return true;
+  if (isKnownRole(role))     return false;
+  if (nurseryNamesTheRole)   return false;
+  return !NON_GENERAL_ROLE.test(role);
+}
+
+/** The general workers among one nursery's register rows. */
+export function generalWorkers(rows) {
+  const list = rows || [];
+  // Rule 4: has anybody here actually been labelled a general worker?
+  const named = list.some((r) => r.active !== false && MAINT_ROLE.test(roleOf(r)));
+  return list.filter((r) => isGeneralWorker(r, named));
+}
