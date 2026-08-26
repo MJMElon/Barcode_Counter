@@ -24,6 +24,9 @@ export { isModuleAdmin, nurseryKey } from '../../lib/access.js';
     SQL to run instead of showing a raw PostgREST error. */
 export const SETUP_NEEDED = 'SETUP_NEEDED';
 
+/** Raised when the verify columns have not been added yet. */
+export const VERIFY_SETUP_NEEDED = 'VERIFY_SETUP_NEEDED';
+
 /** Raised when the batch/week columns have not been added yet. */
 export const BATCH_SETUP_NEEDED = 'BATCH_SETUP_NEEDED';
 
@@ -198,7 +201,7 @@ export async function pendingRecords() {
 
 /** Create or update one record. `id` present = update. */
 export async function saveRecord({ id, plot, workTypeKey, date, qty, chemical, remark, reportedBy,
-                                   batches, weekNo, scheduleMonth, photoUrls, clientUid }) {
+                                   workedBy, batches, weekNo, scheduleMonth, photoUrls, clientUid }) {
   const wt = workTypeByKey(workTypeKey);
   const row = {
     work_date: date,
@@ -225,6 +228,10 @@ export async function saveRecord({ id, plot, workTypeKey, date, qty, chemical, r
   // Written by a queued record so a repeated flush is refused by the unique
   // index rather than saving the same morning's work twice.
   if (clientUid) extra.client_uid = clientUid;
+  /* Who actually did the job, when the conductor keyed it for somebody else.
+     Sent only when there is something to say, so a record made the ordinary
+     way still saves against a table without the column. */
+  if (workedBy && workedBy.length) extra.worked_by = workedBy.join(', ');
 
   const run = (payload) => (id
     ? supabase.from('nops_maint_field_records').update(payload).eq('id', id)
@@ -326,6 +333,61 @@ async function loadPlotBatchesFromLedger() {
   ]);
   if (logsRes.error) throw logsRes.error;
   return batchesByPlot(logsRes.data || [], (dosRes && dosRes.data) || []);
+}
+
+/**
+ * A Field Conductor's signature on a record.
+ *
+ * Workers record their own morning, so a record is a claim until somebody who
+ * answers for the plot has looked at it. This is that: a name and a time, and
+ * nothing else changes — the work still counts for the week either way.
+ *
+ * Passing null un-verifies, for the times it was pressed on the wrong row.
+ *
+ * Columns from shared/add_maint_field_verify.sql. A database without them
+ * says so plainly rather than failing with PostgREST's wording, because the
+ * fix is to run one file.
+ */
+/**
+ * The workers a Field Conductor may credit a job to: the payroll register,
+ * filtered to his nurseries by the caller.
+ *
+ * This is the same roster the 555 Worker Portal signs people in against, so a
+ * name a conductor ticks here and a name a worker records under themselves
+ * are the same string. Two rosters would mean two spellings of one person,
+ * and nothing downstream could add them up.
+ *
+ * NOTE the select list. `pin` is a column on this table and is NEVER asked
+ * for: a PIN is a door number the office hands out, and no screen outside the
+ * Payroll register has business holding one. Do not add it.
+ *
+ * A database without the payroll module returns nothing, and the tick list
+ * simply does not appear.
+ */
+export async function loadWorkers() {
+  const { data, error } = await supabase
+    .from('mjmnpayroll_workers')
+    .select('id, worker_no, full_name, nursery, section, role, job_title, maint_general, active')
+    .eq('active', true)
+    .order('full_name');
+  if (error) {
+    if (isMissingTable(error)) return [];
+    throw error;
+  }
+  return data || [];
+}
+
+export async function setVerified(id, who) {
+  const { error } = await supabase
+    .from('nops_maint_field_records')
+    .update(who
+      ? { verified_by: who, verified_at: new Date().toISOString() }
+      : { verified_by: null, verified_at: null })
+    .eq('id', id);
+  if (error) {
+    if (isMissingColumn(error)) throw new Error(VERIFY_SETUP_NEEDED);
+    throw error;
+  }
 }
 
 export async function deleteRecord(id) {

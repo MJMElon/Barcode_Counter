@@ -541,39 +541,3 @@ export function seedSample() {
   return db;
 }
 
-/* ---------- link for the Culling Calculator ----------
-   A plot reaches the calculator when PALMS says it is at Pengambilan —
-   collection — and not before. Counting pokok inang is a job done against
-   what is being taken out of the plot, so the earlier culling-ish stages
-   (Saringan Anak Bibit, Tunggu buat culling, Culling) used to widen this and
-   listed plots there was nothing to count in yet.
-
-   For a multi-area plot, ANY area at Pengambilan brings the plot in: the
-   collection is happening on the plot even if only part of it is ready. */
-/* Matched by NAME, not by the number 11. The office can rename, reorder and
-   add stages now, so "the collection stage" has to be found rather than
-   assumed to be eleventh. Falls back to the last stage of the cycle, which is
-   what collection is. */
-function pengambilanN() {
-  const named = ACTIVITIES.find((a) => /pengambilan/i.test(a.name || ''));
-  return (named || lastAct() || { n: 11 }).n;
-}
-export function cullingScopePlots() {
-  const db = loadDB();
-  const target = pengambilanN();
-  /* !e.demo matters here. A fresh install seeds itself with generated
-     stages so there is something to look at, and one in eleven of them
-     lands on Pengambilan — which put invented plots in front of a Field
-     Conductor on a screen whose button raises a real case to an auditor.
-     Demo entries are already flagged for sync.js; the calculator has the
-     same reason to refuse them. */
-  const inScope = (key) => currentEntries(db, key).some((e) => e.actN === target && !e.demo);
-  const set = new Set();
-  Object.keys(NURSERIES).forEach((nk) =>
-    plotsOf(nk).forEach((pid) => {
-      const hit = isMulti(pid) ? MULTI[pid].areas.some((a) => inScope(aKey(pid, a))) : inScope(pid);
-      if (hit) set.add(pid);
-    })
-  );
-  return set;
-}

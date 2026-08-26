@@ -4,7 +4,7 @@ import { useAuth } from './context/AuthContext.jsx';
 import AuthScreen from './components/AuthScreen.jsx';
 import Dashboard from './components/Dashboard.jsx';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
-import PalmsDock from './components/PalmsDock.jsx';
+import FloatingDock from './components/FloatingDock.jsx';
 import { useLang } from './context/LanguageContext.jsx';
 import { canScan } from './lib/access.js';
 
@@ -15,6 +15,10 @@ const DoModule = lazy(() => import('./modules/do/DoModule.jsx'));
 const MaintenanceModule = lazy(() => import('./modules/maintenance/MaintenanceModule.jsx'));
 const PalmsModule = lazy(() => import('./modules/palms/PalmsModule.jsx'));
 const CullingModule = lazy(() => import('./modules/palms/CullingModule.jsx'));
+// The 555 Worker Portal — the other front door on this domain. Lazy like the
+// rest: a Field Conductor never loads a byte of it, and a worker never loads
+// the scanner.
+const WorkerPortal = lazy(() => import('./worker/WorkerPortal.jsx'));
 
 function Loading() {
   const { t } = useLang();
@@ -132,6 +136,23 @@ export default function App() {
           </Protected>
         }
       />
+      {/* ── The 555 Worker Portal ──
+          Outside Protected on purpose. Everything above this line is gated on
+          a Supabase session and the ops-access check; a worker has neither,
+          and putting them through that gate would bounce every one of them
+          to the FC login. The portal brings its own gate — see
+          worker/WorkerPortal.jsx — which asks the question that applies to
+          the person actually holding the phone. */}
+      <Route
+        path="/worker/*"
+        element={
+          <ErrorBoundary>
+            <Suspense fallback={<Loading />}>
+              <WorkerPortal />
+            </Suspense>
+          </ErrorBoundary>
+        }
+      />
       {/* The Culling Calculator is its own page and now its own tick, because
           counting pokok inang and keying the day's plot status are different
           jobs done by different people. canScan fails open on a page nobody
@@ -160,7 +181,7 @@ export default function App() {
           the first job of the morning, and a control that only exists on the
           dashboard is one a Field Conductor can walk past all day. It hides
           itself inside PALMS and for anyone without the module. */}
-      <PalmsDock />
+      <FloatingDock />
     </>
   );
 }

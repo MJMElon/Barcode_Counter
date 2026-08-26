@@ -40,6 +40,29 @@ async function findOpenDuplicate({ source, category, plot }) {
 }
 
 /**
+ * Which plots already have an open case, so a screen can say so before
+ * somebody raises a second one. Same question findOpenDuplicate() asks,
+ * asked once for every plot rather than one at a time.
+ *
+ * Returns a Set of plot names — empty on any failure, because "we could
+ * not check" must read as "no badge", never as "already raised".
+ */
+export async function openCasePlots({ source = 'scan', category } = {}) {
+  try {
+    let q = supabase.from('nelos_cases')
+      .select('plot_name')
+      .in('status', PENDING)
+      .eq('source_module', source);
+    if (category) q = q.eq('category', category);
+    const { data, error } = await q.limit(500);
+    if (error || !Array.isArray(data)) return new Set();
+    return new Set(data.map((r) => r.plot_name).filter(Boolean));
+  } catch (e) {
+    return new Set();
+  }
+}
+
+/**
  * raiseCase({ title, description, category, priority, source, sourceRef,
  *             nursery, plot, batch, by, byId, dedupe })
  *
@@ -61,7 +84,19 @@ export async function raiseCase(opts) {
       category: opts.category || null,
       priority: PRIORITIES.includes(opts.priority) ? opts.priority : 'normal',
       status: 'open',
-      source_module: opts.source || 'fc_portal',
+      /* 'scan' is the FC Portal's key in nelos_modules, and every other
+         part of Nelos spells it that way — SOURCE_LABEL, the module
+         filter, and nelos_routes, whose source_module is a foreign key
+         to that table.
+
+         This used to default to 'fc_portal', which is not a module key
+         anywhere. No route row could exist for it (the foreign key
+         forbids one), so nelos_route_case() found no rule and fell
+         through to its last line — assigned_module := source_module —
+         and every case raised here was assigned straight back to the
+         people who raised it. That is the "PIC shows FC Portal" the
+         case list was reporting. */
+      source_module: opts.source || 'scan',
       source_ref: opts.sourceRef || null,
       nursery_name: opts.nursery || null,
       plot_name: opts.plot || null,
@@ -95,4 +130,134 @@ export async function raiseCase(opts) {
   } catch (e) {
     return { data: null, error: e };
   }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   WHAT IS WAITING FOR ME
+
+   The other direction: not raising a case but reading the ones already
+   raised. Same model as the portal's floating dock
+   (mjm-ai-system/shared/shared_nelos_dock.js) and the Admin Portal's block,
+   and it has to stay that way — three surfaces showing three different
+   answers to "what is pending for me" is worse than two of them not
+   existing.
+
+     • pending   = status in (open, in_progress)
+     • order     = due date first (nulls last), then created; priority
+                   re-sorted here, because it is a word in the database
+     • scope     = nelos_my_scope(), the pin set on the User Setting page
+     • queue     = assigned_module, falling back to source_module
+
+   Everything fails soft and returns { rows: [], failed: true }: a case log
+   that cannot be read must not break the screen it was opened over.
+   ══════════════════════════════════════════════════════════════════════ */
+
+const PRIORITY_RANK = { urgent: 0, high: 1, normal: 2, low: 3 };
+
+/* BASE_COLS is what migration_nelos.sql created. ROUTED_COLS adds what the
+   routing and seat migrations added later. Asking for a column that does not
+   exist does not return it as null — PostgREST rejects the WHOLE select with
+   a 400, which is how the portal's dock once vanished from every page at
+   once. So the routed set is tried first and the base set is the fallback. */
+const BASE_COLS =
+  'id,case_no,title,category,priority,status,source_module,nursery_name,' +
+  'plot_name,batch_name,assignee_id,assignee_name,due_date,created_at';
+const ROUTED_COLS = `${BASE_COLS},assigned_module,assigned_seat_no`;
+
+export const queueOf = (c) => c.assigned_module || c.source_module;
+export const todayISO = () => new Date().toISOString().slice(0, 10);
+export const isOverdue = (c) => !!c.due_date && c.due_date < todayISO();
+
+/* Who sees which cases. A person is pinned to one home module and from that
+   pin sees their home module's queue plus anything assigned to them
+   personally, anywhere. Not pinned, Nelos admin, or the lookup fails → no
+   restriction: a scope check that cannot run must never HIDE cases. */
+async function myScope(uid) {
+  const open = { unrestricted: true };
+  if (!uid) return open;
+  try {
+    const { data, error } = await supabase.rpc('nelos_my_scope', {});
+    if (error) return open;
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row || row.is_admin || row.sees_all || !row.primary_module) return open;
+    const list = Array.isArray(row.categories) ? row.categories.filter(Boolean) : [];
+    return {
+      unrestricted: false,
+      home: row.primary_module,
+      seatNo: row.seat_no ?? null,
+      cats: list.length ? new Set(list) : null,
+      userId: uid,
+    };
+  } catch (e) {
+    return open;
+  }
+}
+
+function inScope(c, sc) {
+  if (!sc || sc.unrestricted) return true;
+  // My name on it — mine wherever it sits, and never category-filtered.
+  if (sc.userId && c.assignee_id && c.assignee_id === sc.userId) return true;
+  if (queueOf(c) !== sc.home) return false;
+  if (c.assigned_seat_no && c.assigned_seat_no !== sc.seatNo) return false;
+  if (!sc.cats) return true;
+  return !!c.category && sc.cats.has(c.category);
+}
+
+/**
+ * pendingCases({ module })
+ *
+ * What is waiting in this portal's queue, plus anything with your name on it
+ * wherever it was routed — that is yours to answer from whichever screen you
+ * are on. Returns { rows, uid, failed }.
+ */
+export async function pendingCases({ module = 'scan' } = {}) {
+  let uid = null;
+  try {
+    const { data: sess } = await supabase.auth.getSession();
+    uid = sess?.session?.user?.id || null;
+  } catch (e) {
+    return { rows: [], uid: null, failed: true };
+  }
+  if (!uid) return { rows: [], uid: null, failed: true };
+
+  const ask = (cols) =>
+    supabase
+      .from('nelos_cases')
+      .select(cols)
+      .in('status', PENDING)
+      .order('due_date', { ascending: true, nullsFirst: false })
+      .order('created_at', { ascending: true })
+      .limit(50);
+
+  let data;
+  let error;
+  try {
+    ({ data, error } = await ask(ROUTED_COLS));
+  } catch (e) {
+    return { rows: [], uid, failed: true };
+  }
+  if (error) {
+    // 42703 = undefined column: this database has not run the routing and
+    // seat migrations. Ask for what it does have rather than standing down.
+    if (error.code === '42703') {
+      try {
+        ({ data, error } = await ask(BASE_COLS));
+      } catch (e) {
+        return { rows: [], uid, failed: true };
+      }
+    }
+    if (error) return { rows: [], uid, failed: true };
+  }
+
+  const rows = (data || [])
+    .slice()
+    .sort((a, b) => (PRIORITY_RANK[a.priority] ?? 9) - (PRIORITY_RANK[b.priority] ?? 9));
+
+  const sc = await myScope(uid);
+  const seen = sc.unrestricted ? rows : rows.filter((c) => inScope(c, sc));
+  return {
+    rows: seen.filter((c) => queueOf(c) === module || c.assignee_id === uid),
+    uid,
+    failed: false,
+  };
 }
