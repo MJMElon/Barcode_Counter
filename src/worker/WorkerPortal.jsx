@@ -1,0 +1,82 @@
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { useLang } from '../context/LanguageContext.jsx';
+import { WorkerAuthProvider, useWorker } from './WorkerAuthContext.jsx';
+import WorkerCover from './WorkerCover.jsx';
+import WorkerHome from './WorkerHome.jsx';
+import WorkerMaintenance from './WorkerMaintenance.jsx';
+import WorkerSettings from './WorkerSettings.jsx';
+
+/*
+ * The 555 Worker Portal — the second front door on scan.mjmnursery.com.
+ *
+ * One app, one build, one domain, two portals:
+ *
+ *     scan.mjmnursery.com/#/           the FC Portal, blue cover, e-mail login
+ *     scan.mjmnursery.com/#/worker     the Worker Portal, green cover, PIN
+ *
+ * They share the code that is genuinely the same — the cover, the work types,
+ * the language switch, the table jobs are written to — and share nothing that
+ * only looks the same. In particular they do not share a way in: the FC gate
+ * asks Supabase who you are, this one asks the database whose PIN that was.
+ *
+ * The whole subtree is wrapped in its own provider, so a worker's session and
+ * a Field Conductor's can sit on one phone without either noticing the other.
+ */
+
+function Loading() {
+  const { t } = useLang();
+  return (
+    <div className="min-h-screen grid place-items-center bg-[#14100e]">
+      <div className="text-emerald-400 font-mono text-xs uppercase tracking-[0.3em] animate-pulse">
+        {t('common.loading')}
+      </div>
+    </div>
+  );
+}
+
+/* Signed in or not. Nothing inside the portal renders until that is known —
+   showing the cover to somebody already signed in, and then snatching it
+   away, is worse than a moment's wait. */
+function Gate({ children }) {
+  const { identity, loading } = useWorker();
+  if (loading) return <Loading />;
+  if (!identity) return <WorkerCover />;
+  return children;
+}
+
+/* A module the worker's access does not include is not reachable by typing
+   its address either. The home screen hides the card; this refuses the room. */
+function ModuleGate({ name, children }) {
+  const { modules } = useWorker();
+  if (!modules[name]) return <Navigate to="/worker" replace />;
+  return children;
+}
+
+export default function WorkerPortal() {
+  return (
+    <WorkerAuthProvider>
+      <Gate>
+        <Routes>
+          <Route index element={<WorkerHome />} />
+          <Route
+            path="maintenance"
+            element={
+              <ModuleGate name="maintenance">
+                <WorkerMaintenance />
+              </ModuleGate>
+            }
+          />
+          <Route
+            path="settings"
+            element={
+              <ModuleGate name="settings">
+                <WorkerSettings />
+              </ModuleGate>
+            }
+          />
+          <Route path="*" element={<Navigate to="/worker" replace />} />
+        </Routes>
+      </Gate>
+    </WorkerAuthProvider>
+  );
+}
