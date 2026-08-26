@@ -16,8 +16,10 @@ import { nurseryOfPlot } from './data.js';
  *                 the sum of those collections is what has gone.
  *   transplanting The Batch Report's Transplanting tab, which records the
  *                 date, the plot, the batch and the quantity that went in.
- *   3rd culling   Also the Batch Report. A 3rd culling against a block means
- *                 that block is finished, and it leaves the screen.
+ *   3rd culling   Also the Batch Report. A block leaves this screen when its
+ *                 3rd culling row carries a drone MAP QUANTITY — not when it
+ *                 carries a culled figure, which goes in while the counting
+ *                 is still under way.
  *
  * and the balance is the difference:
  *
@@ -129,9 +131,9 @@ export async function loadPlots() {
     e.daysCollecting = daysSince(e.firstDate, today);
   });
 
-  /* A 3rd culling against a block means the Field Conductor has already
-     judged what was left and culled it. The block is finished: offering it
-     again would invite a second count of stock that is no longer standing.
+  /* A map quantity against a block means the drone has flown it and the count
+     is settled. The block is finished: offering it again would invite a
+     second count of stock that is no longer standing.
 
      And a block the transplanting report has never heard of is dropped
      outright. A delivery order's batch column is typed by hand, so B11 batch
@@ -245,7 +247,7 @@ function whyNot(d, p, b, q, planted, finished) {
   if (isOldBatch(b)) return `batch ${b} is before ${MIN_BATCH}`;
   const key = `${p}#${b}`;
   if (!planted.has(key)) return `the batch report has no batch ${b} transplanted into ${p}`;
-  if (finished.has(key)) return 'a 3rd culling amount is already recorded against it';
+  if (finished.has(key)) return 'the 3rd culling map qty is in — this block is done';
   return 'LISTED';
 }
 
@@ -322,23 +324,13 @@ export async function loadTransplanting() {
   return transplantedByBlock(res.data || []);
 }
 
-/* The end of a block's life on this screen. A 3rd culling is the last cull
-   there is, and once it is on the ledger the block has been judged and
-   cleared.
-
-   Cull3_Transfer counts as one: it is a 3rd culling whose seedlings were
-   moved rather than written off, and one log carries both sides — plot_name
-   is where they landed, and the remark names the plot they LEFT. It is the
-   plot they left that has been culled. */
-const FINISH_TYPES = ['3rd_Culling', 'Cull3_Transfer'];
-
-/** → Set of "PLOT#BATCH" that a 3rd culling has finished. */
+/** → Set of "PLOT#BATCH" the 3rd culling has finished. */
 export async function loadFinished() {
   const res = await fetchAllRows(() =>
     supabase
       .from('shared_inventory_logs')
-      .select('transaction_type, plot_name, batch_name, quantity_change, remark')
-      .in('transaction_type', FINISH_TYPES)
+      .select('plot_name, batch_name, remark')
+      .eq('transaction_type', '3rd_Culling')
       .order('id', { ascending: true })
   );
   if (res.error) {
@@ -349,29 +341,47 @@ export async function loadFinished() {
 }
 
 /**
+ * The drone MAP QUANTITY is what ends a block.
+ *
+ * Not the culled figure, and not the row existing. The 3rd Culling Records
+ * report opens a row for every plot a batch went into, and a Field Conductor
+ * fills the culled quantity in while the work is still going on — so both of
+ * those say "being counted", not "counted". The Map qty is the drone's own
+ * number, keyed once the map is back and the count is settled, and until it
+ * is there the block still has work in it.
+ *
+ * That is why B4 batch 242 and U17 batches 237 and 242 went missing: they had
+ * a culled figure against them and no map quantity yet, and the old rule read
+ * the figure as the end of the job.
+ *
+ * The Batch Report leaves it in the remark — " MapQty: 151", written only
+ * when the field was filled — and this reads it back with that page's own
+ * expression so the two cannot drift apart.
+ */
+export function mapQty(remark) {
+  const m = /MapQty:\s*(\d+)/.exec(String(remark || ''));
+  return m ? parseInt(m[1], 10) : 0;
+}
+
+/**
  * The same, from rows already in hand.
  *
- * A CULLED AMOUNT is what finishes a block — the figure in the 3rd Culling
- * Records report, not merely a row existing there. The report opens a row for
- * every plot a batch was transplanted into, long before anybody has been out
- * to judge them, so treating the row itself as the end would take a block off
- * this screen while the Field Conductor still had it to walk.
+ * Only 3rd_Culling rows are read. A Cull3_Transfer used to end a block too,
+ * on the reasoning that seedlings moved off a plot have left it — but a
+ * transfer carries no map quantity, so treating it as the end would take a
+ * block off this screen by a route the Map qty rule does not govern. The
+ * transfer is the movement; the map quantity on the plot's own culling row is
+ * the finish.
  */
 export function finishedBlocks(rows) {
   const out = new Set();
   for (const l of rows || []) {
-    const qty = Math.abs(Number(l.quantity_change || 0));
+    if (l.transaction_type && l.transaction_type !== '3rd_Culling') continue;
     const batch = batchKey(l.batch_name);
-    if (!qty || !batch) continue;
-    if (l.transaction_type === 'Cull3_Transfer') {
-      // The plot it LEFT, which only the remark names.
-      const from = String(l.remark || '').match(/From:\s*\[([^\]|]+)\|/);
-      const plot = from ? plotKey(from[1]) : '';
-      if (plot) out.add(`${plot}#${batch}`);
-      continue;
-    }
     const plot = plotKey(l.plot_name);
-    if (plot) out.add(`${plot}#${batch}`);
+    if (!batch || !plot) continue;
+    if (!(mapQty(l.remark) > 0)) continue;
+    out.add(`${plot}#${batch}`);
   }
   return out;
 }
