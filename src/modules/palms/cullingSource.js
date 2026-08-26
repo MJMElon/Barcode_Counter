@@ -82,6 +82,7 @@ export async function loadPlots() {
     if (isCancelled(d)) continue;
     for (const line of collectionLines(d)) {
       if (isReplantPlot(line.plot)) continue;
+      if (isOldBatch(line.batch)) continue;
       const key = `${line.plot}#${line.batch}`;
       if (!by.has(key)) {
         by.set(key, {
@@ -122,9 +123,15 @@ export async function loadPlots() {
 
   /* A 3rd culling against a block means the Field Conductor has already
      judged what was left and culled it. The block is finished: offering it
-     again would invite a second count of stock that is no longer standing. */
+     again would invite a second count of stock that is no longer standing.
+
+     And a block the transplanting report has never heard of is dropped
+     outright. A delivery order's batch column is typed by hand, so B11 batch
+     232 can be collected against on paper when no batch 232 ever went into
+     B11 — there is no transplanted-in figure to subtract from, so there is no
+     balance and nothing here to judge. */
   return [...by.values()]
-    .filter((e) => !finished.has(e.key))
+    .filter((e) => e.transplant > 0 && !finished.has(e.key))
     .sort(byReadiness);
 }
 
@@ -303,6 +310,25 @@ export function isReplantPlot(plot) {
   return /-R\d*$/.test(String(plot || ''));
 }
 
+/**
+ * The oldest batch this screen carries.
+ *
+ * Everything before 224 is old ground that has been through its culling
+ * already, and a stray delivery order against one of them is history rather
+ * than work. So the list starts here.
+ *
+ * 224 itself is kept — "before 224" is what is left out.
+ */
+export const MIN_BATCH = 224;
+
+/** Whether a batch is older than the screen goes back. */
+export function isOldBatch(batch) {
+  const n = parseInt(batchKey(batch), 10);
+  // A batch with no number in it cannot be placed either side of the line,
+  // and collectionLines has already refused it, so it never reaches here.
+  return Number.isFinite(n) && n < MIN_BATCH;
+}
+
 /** A cancelled order collected nothing. The office has recorded cancellation
     two ways — a status, and a marker left in the remark — so both are read;
     missing either would put a plot here that nobody is collecting from. */
@@ -316,9 +342,9 @@ export function isCancelled(d) {
  * @param   {{ plot: string, batch: string }} block  a plot AND a batch — the
  *          list is split by batch, so figures are per block, not per plot.
  * @returns {{ transplant: number, balance: number } | null}
- *   null means "cannot say", which the screen shows as a dash. It is not the
- *   same as zero, and the difference matters: a plot with no figures must not
- *   read as a plot with none left.
+ *   null means "cannot say". A block loadPlots hands over never answers null,
+ *   because a block with nothing transplanted into it is not listed at all —
+ *   the guard is kept so that stays true rather than being assumed.
  */
 export function figuresFor(block) {
   if (!block || !(block.transplant > 0)) return null;

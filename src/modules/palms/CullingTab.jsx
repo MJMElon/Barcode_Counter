@@ -28,9 +28,12 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
   const [tick, setTick] = useState(0);
   const refresh = () => setTick((n) => n + 1);
 
-  /* The plots to list, and the figures behind each. Both come from
-     cullingSource.js, which is empty — so the list is empty and the screen
-     says so rather than showing invented numbers. */
+  /* The plots to list, and the figures behind each — both from
+     cullingSource.js, which only ever hands over blocks it has figures for.
+     A collection against a batch that was never transplanted into that plot
+     is left out at the source, so there is no "cannot say" row to render:
+     every plot here has a transplanted-in figure, a collected figure and a
+     balance between them. */
   const [rows, setRows] = useState([]);
   const plots = useMemo(
     () =>
@@ -40,7 +43,7 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
            delivery orders replaced the old plot source — a BNN-only Field
            Conductor was being offered UNN blocks. */
         .filter((r) => !r.nursery || !nurseryKeys?.length || nurseryKeys.includes(r.nursery))
-        .map((r) => ({ ...r, ...(figuresFor(r) || { transplant: 0, balance: 0 }) })),
+        .map((r) => ({ ...r, ...figuresFor(r) })),
     [rows, tick, nurseryKeys]
   );
 
@@ -170,7 +173,7 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
               broken ? 'text-amber-400'
                 : known && rateNow > CULL_LIMIT ? 'text-rose-400' : 'text-emerald-400'
             }>
-              {known ? fmtPct(rateNow) : broken ? t('cull.checkStock') : '—'}
+              {known ? fmtPct(rateNow) : t('cull.checkStock')}
             </span>
           </div>
         </div>
@@ -187,7 +190,7 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
           <div className={`text-[28px] font-light tabular-nums leading-tight ${
             broken ? 'text-amber-400' : 'text-slate-300'
           }`}>
-            {known || broken ? fmtNum(row.balance) : '—'}
+            {fmtNum(row.balance)}
           </div>
           {/* Below zero means the stock ledger for this plot does not add up:
               more has been culled and sold off it than was ever transplanted
@@ -203,7 +206,7 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
           {/* The balance in full, so nobody has to work out where the rest
               went: what the Batch Report says went in, less what the delivery
               orders have taken out. */}
-          {row && row.transplant > 0 && (
+          {row && (
             <div className="text-[10px] font-bold text-slate-500 tabular-nums leading-snug pt-1 space-y-0.5">
               <div className="flex justify-between gap-3">
                 <span>
@@ -337,7 +340,6 @@ function PlotPicker({ plots, current, raised, t, onPick, onClose }) {
         </div>
         <div className="space-y-1.5">
           {plots.map((p) => {
-            const known = hasFigures(p);
             const broken = figuresBroken(p);
             const rate = rateFor({ balance: p.balance, transplant: p.transplant, inang: 0 });
             return (
@@ -366,7 +368,7 @@ function PlotPicker({ plots, current, raised, t, onPick, onClose }) {
                     )}
                   </div>
                   <div className="text-[11px] font-semibold text-slate-500">
-                    {p.nursery} · {t('cull.balance')} {known || broken ? fmtNum(p.balance) : '—'}
+                    {p.nursery} · {t('cull.balance')} {fmtNum(p.balance)}
                   </div>
                 </div>
                 {/* A minus balance is not a good rate, so it does not get a
@@ -377,9 +379,9 @@ function PlotPicker({ plots, current, raised, t, onPick, onClose }) {
                   </div>
                 ) : (
                   <div className={`text-[13px] font-black tabular-nums shrink-0 ${
-                    !known ? 'text-slate-600' : rate > CULL_LIMIT ? 'text-rose-400' : 'text-emerald-400'
+                    rate > CULL_LIMIT ? 'text-rose-400' : 'text-emerald-400'
                   }`}>
-                    {known ? fmtPct(rate) : '—'}
+                    {fmtPct(rate)}
                   </div>
                 )}
               </button>
