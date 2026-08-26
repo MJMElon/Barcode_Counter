@@ -47,7 +47,8 @@ import { nurseryOfPlot } from './data.js';
  * Customer Order Monitoring page is where that is said: a Delivery Order names
  * the plot and the batch the seedlings came from. So a collection on a D/O is
  * what puts a plot on this screen, and nothing else does — a plot nobody is
- * collecting from never appears.
+ * collecting from never appears, and nor does a -R plot however much is
+ * collected off it.
  *
  * One entry per plot AND batch, not per plot. A D/O collects from a named
  * batch, so a plot holding three of them is three separate blocks of ground
@@ -80,6 +81,7 @@ export async function loadPlots() {
   for (const d of res.data || []) {
     if (isCancelled(d)) continue;
     for (const line of collectionLines(d)) {
+      if (isReplantPlot(line.plot)) continue;
       const key = `${line.plot}#${line.batch}`;
       if (!by.has(key)) {
         by.set(key, {
@@ -285,6 +287,20 @@ export function collectionLines(d) {
     out.push({ plot, batch, qty });
   }
   return out;
+}
+
+/**
+ * The -R plots, which do not belong on this screen.
+ *
+ * B4 and B4-R are different ground, and only the first is counted here. The
+ * suffix is kept by plotKey rather than trimmed, which is what makes them
+ * possible to tell apart at all — so the two never share a row, and the -R one
+ * simply never opens one.
+ *
+ * A trailing number is allowed for, so B4-R and B4-R2 are both left out.
+ */
+export function isReplantPlot(plot) {
+  return /-R\d*$/.test(String(plot || ''));
 }
 
 /** A cancelled order collected nothing. The office has recorded cancellation
