@@ -33,8 +33,15 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
      says so rather than showing invented numbers. */
   const [rows, setRows] = useState([]);
   const plots = useMemo(
-    () => rows.map((r) => ({ ...r, ...(figuresFor(r) || { transplant: 0, balance: 0 }) })),
-    [rows, tick]
+    () =>
+      rows
+        /* Only the nurseries this person works. Which ones those are comes
+           from FC Portal user access, and the list lost that filter when the
+           delivery orders replaced the old plot source — a BNN-only Field
+           Conductor was being offered UNN blocks. */
+        .filter((r) => !r.nursery || !nurseryKeys?.length || nurseryKeys.includes(r.nursery))
+        .map((r) => ({ ...r, ...(figuresFor(r) || { transplant: 0, balance: 0 }) })),
+    [rows, tick, nurseryKeys]
   );
 
   /* Plots that already have an open case. Read once and refreshed after a
