@@ -102,16 +102,22 @@ export function sellWindow(months) {
  * balance with nothing behind it must not move an intake's rate.
  */
 export function cyclesForPlot(transplantLogs, balanceRows, nowMonth) {
-  // batch → { qty transplanted in, months it came in }
+  /* batch → { qty transplanted in, months it came in }
+     The quantity is counted whether or not the row carries a readable date.
+     Dates decide which intake a batch belongs to; they must not decide
+     whether it is counted at all. Dropping undated rows quietly understated
+     the plot's total, which is worse than putting them in the wrong intake —
+     and worse still because nothing on screen would say a row had been left
+     out. */
   const inBy = new Map();
   for (const l of transplantLogs || []) {
     const bk = batchKey(l.batch_name);
-    const m = monthOf(l);
-    if (!bk || !m) continue;
+    if (!bk) continue;
     if (!inBy.has(bk)) inBy.set(bk, { qty: 0, months: [] });
     const e = inBy.get(bk);
     e.qty += Math.abs(Number(l.quantity_change || 0));
-    e.months.push(m);
+    const m = monthOf(l);
+    if (m) e.months.push(m);
   }
   inBy.forEach((e) => e.months.sort());
 
@@ -121,6 +127,7 @@ export function cyclesForPlot(transplantLogs, balanceRows, nowMonth) {
   const indexOfMonth = new Map();
   clusters.forEach((c, i) => c.forEach((m) => indexOfMonth.set(m, i)));
 
+  const orphan = { months: [], batches: [], transplant: 0, balance: 0, opens: '', by: '' };
   const cycles = clusters.map((months) => ({
     months,
     batches: [],
@@ -128,10 +135,16 @@ export function cyclesForPlot(transplantLogs, balanceRows, nowMonth) {
     balance: 0,
     ...sellWindow(months),
   }));
-  const orphan = { months: [], batches: [], transplant: 0, balance: 0, opens: '', by: '' };
-
   inBy.forEach((e, bk) => {
-    const c = cycles[indexOfMonth.get(e.months[0])];
+    /* A batch with no dated transplanting has no month to place it by. If the
+       plot has exactly one intake there is only one place it can belong, so
+       it goes there; with two it cannot be told apart and is held aside
+       rather than guessed into the wrong one. */
+    const c = e.months.length
+      ? cycles[indexOfMonth.get(e.months[0])]
+      : cycles.length === 1
+        ? cycles[0]
+        : orphan;
     c.batches.push(bk);
     c.transplant += e.qty;
   });
