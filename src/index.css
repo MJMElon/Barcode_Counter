@@ -146,61 +146,57 @@ body {
    The train belongs to PALMS — it is the engine that keeps the round's
    progress, and stays in the fan as PALMS's own button. The trigger that
    opens the fan itself is neither module's, so it wears no module's icon:
-   a coin instead, the way a Mario coin sits waiting for you to reach it —
-   a rim, a shine that sweeps across it, and every few seconds a small hop.
+   a round gold coin with an M stamped in it, the way a coin in a Mario
+   level sits waiting for you to reach it — then, every so often, it hops
+   and spins once on the spot before settling flat again.
 
-   A single cycle carries both: the hop happens first, the shine follows
-   once it lands, then it holds still until the cycle comes back around.
-   Holding still most of the time is the point — a button that never stops
-   moving stops being noticed at all. */
-.dock-coin {
+   Two elements share the job. .dock-coin-disc is only the look — the
+   gold, the rim, the M — and sits on its own inner span so the button's
+   corner badges (the red count, the green tick) stay flat and legible
+   while the disc spins; putting the animation on the whole button would
+   have flipped the badges along with it. .dock-coin-motion is only the
+   motion, kept apart so a coin being dragged can still look like a coin
+   with the animation switched off, rather than fighting the drag's own
+   inline transform on the same property. */
+.dock-coin-disc {
   background: radial-gradient(circle at 32% 28%, #fef3c7, #fbbf24 46%, #b45309 100%);
-  border-color: #92400e !important;
+  box-shadow:
+    inset 0 0 0 2px rgba(146,64,14,.65),
+    inset 0 2px 4px rgba(255,255,255,.65),
+    inset 0 -3px 6px rgba(120,53,15,.4);
 }
-/* The hop and the shine are their own class, apart from the coin's colours,
-   so a coin being dragged can keep looking like a coin without its
-   animated transform fighting the drag's own inline transform. */
-.dock-coin-motion {
-  animation: dock-coin-hop 4.2s cubic-bezier(.34,1.4,.64,1) infinite;
-}
-.dock-coin-motion::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: 9999px;
-  pointer-events: none;
-  background: linear-gradient(
-    115deg, transparent 0%, transparent 42%,
-    rgba(255,255,255,.85) 50%, transparent 58%, transparent 100%
-  );
-  background-size: 260% 260%;
-  background-position: -140% -140%;
-  animation: dock-coin-shine 4.2s ease-in-out infinite;
+.dock-coin-m {
+  font-family: 'Outfit', system-ui, sans-serif;
+  font-size: 23px;
+  font-weight: 900;
+  line-height: 1;
+  color: #78350f;
+  text-shadow: 0 1px 0 rgba(255,255,255,.55);
+  user-select: none;
 }
 
-@keyframes dock-coin-hop {
-  0%, 55%, 100% { transform: translateY(0); }
-  8%  { transform: translateY(-9px); }
-  16% { transform: translateY(0); }
-  22% { transform: translateY(-4px); }
-  28% { transform: translateY(0); }
+/* One hop-and-spin, then a long rest — most of the cycle is stillness, on
+   purpose: a button that never stops moving stops being noticed. 40s end
+   to end; the motion itself is the first ~8% of that, under 3.5s. */
+.dock-coin-motion {
+  animation: dock-coin-cycle 40s cubic-bezier(.32,1.6,.5,1) infinite;
 }
-@keyframes dock-coin-shine {
-  0%, 20% { background-position: -140% -140%; }
-  38%, 100% { background-position: 140% 140%; }
+@keyframes dock-coin-cycle {
+  0%       { transform: translateY(0) rotateY(0deg); }
+  2%       { transform: perspective(480px) translateY(-15px) rotateY(120deg); }
+  4%       { transform: perspective(480px) translateY(-20px) rotateY(200deg); }
+  6%       { transform: perspective(480px) translateY(-8px)  rotateY(300deg); }
+  8%, 100% { transform: translateY(0) rotateY(360deg); }
 }
 
 /* ── Motion ──
    Anyone who has asked their device to reduce motion gets a still train,
-   and a coin that shines without hopping around the screen. */
+   and a coin that sits flat instead of hopping and spinning. */
 @media (prefers-reduced-motion: reduce) {
   .animate-puff {
     animation: none !important;
   }
   .dock-coin-motion {
-    animation: none !important;
-  }
-  .dock-coin-motion::before {
     animation: none !important;
   }
 }
