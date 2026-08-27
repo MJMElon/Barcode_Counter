@@ -56,14 +56,16 @@ export const MAINT_FUNCTIONS = [
     label: 'wk.fnRecord',
     children: [
       { key: 'batches', icon: '🌱', label: 'wk.fnBatches' },
-      /* The roster and the camera are the FC Portal's alone: a worker signed
-         in with a PIN is `anon`, which has no upload path to the documents
-         bucket and is deliberately never handed a list of colleagues to
-         credit work to. Shown in the worker's list anyway, greyed, so the two
-         screens are visibly the same list rather than two lists to compare. */
-      { key: 'workers', icon: '👷', label: 'wk.fnWorkers', fcOnly: true },
+      { key: 'workers', icon: '👷', label: 'wk.fnWorkers' },
       { key: 'gps',     icon: '📍', label: 'wk.fnGps' },
-      { key: 'photos',  icon: '📷', label: 'wk.fnPhotos', fcOnly: true },
+      /* The one switch that is stored but not yet acted on for a worker. A
+         PIN sign-in is `anon`; the documents bucket takes uploads from
+         `authenticated`, and the anon key is public, so opening the bucket to
+         it would open it to anybody who reads the app bundle. Offered anyway,
+         because which functions a worker gets is the office's decision and
+         not this file's — and marked, so it is not discovered on a phone in a
+         plot. workerMaintSource.js is what actually refuses it. */
+      { key: 'photos',  icon: '📷', label: 'wk.fnPhotos', notYet: true },
       { key: 'remark',  icon: '✏️', label: 'wk.fnRemark' },
     ],
   },

@@ -156,12 +156,29 @@ export function makeWorkerMaintSource(token) {
       }
     },
 
-    /* No roster. The tick list exists so a conductor can key a job for
-       somebody whose phone is broken; a worker signing in with their own PIN
-       has already answered the question, and handing them a list of
-       colleagues to credit work to would be handing them a way to credit it
-       to the wrong person. The module offers it only when a source has one. */
-    loadWorkers: null,
+    /* The colleagues this worker may credit a job to.
+     *
+     * This used to be null — no roster for a PIN sign-in at all — on the
+     * reasoning that a worker recording their own morning has already
+     * answered the question, and a list of colleagues is a way to credit work
+     * to the wrong person. That is a judgement about how a nursery is run,
+     * not a fact about the software, and it is the office's to make: it is a
+     * switch now, in System Setting and on the worker's own row, and this
+     * just answers when asked.
+     *
+     * Names only, and only inside the boundary — worker_maint_roster, not the
+     * Settings screen's roster. The module asks only when the `workers`
+     * switch is on, and a database without the function simply has no tick
+     * list rather than a broken form.
+     */
+    async loadWorkers() {
+      try {
+        return await api.maintRoster(token);
+      } catch (e) {
+        console.warn('[worker-maint] roster unavailable:', e && e.message);
+        return [];
+      }
+    },
 
     deleteRecord() {
       return Promise.reject(new Error('Only the office can remove a record.'));
@@ -205,9 +222,17 @@ export function makeWorkerMaintSource(token) {
  * set there is left absent so functions.js can apply the documented default
  * rather than this file inventing a second one.
  *
- * Two of those keys can never be honoured here and are forced off: a PIN
- * sign-in is `anon`, which has no upload path for a photo and is deliberately
- * never handed the roster. The Settings screen says so beside them.
+ * `workers` used to be forced off here and is not any more — the tick list is
+ * the office's decision, and worker_maint_roster answers it with names inside
+ * the boundary and nothing else.
+ *
+ * `photos` is still forced off, and this one is not a judgement: there is no
+ * upload path for a PIN sign-in at all. The documents bucket takes uploads
+ * from `authenticated`, a worker is `anon`, and the anon key is public — so
+ * opening that bucket to it would open it to anybody who reads the app
+ * bundle. Honouring the switch needs a way for a worker to upload that does
+ * not hand the internet a writable bucket, and until there is one the tick
+ * is refused here rather than failing on the phone every time it is pressed.
  */
 export function workerPermissions(boundary, actions, company) {
   const nurseries = boundary && boundary.nurseries;
@@ -223,7 +248,6 @@ export function workerPermissions(boundary, actions, company) {
         record: a.record === false ? false : true,
         edit: false,
         export: false,
-        workers: false,
         photos: false,
       },
     },

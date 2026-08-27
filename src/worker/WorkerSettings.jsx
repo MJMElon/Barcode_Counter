@@ -285,26 +285,22 @@ export default function WorkerSettings() {
                                       under it and only while it is on. */}
                                   {!!fn.children && fnOn(d, fn.key) && (
                                     <div className="flex gap-2 flex-wrap mt-2 ml-4 pl-3 border-l-2 border-slate-200">
+                                      {/* Every one of them settable. Which a
+                                          worker gets is the office's call,
+                                          so nothing is withheld here — but
+                                          one is stored ahead of being acted
+                                          on, and says so rather than being
+                                          discovered on a phone in a plot. */}
                                       {fn.children.map((sub) => (
-                                        sub.fcOnly ? (
-                                          /* Cannot be honoured for a PIN
-                                             sign-in whatever this says — see
-                                             workerMaintSource.js. Shown, so
-                                             the two portals are visibly the
-                                             same list, and said plainly
-                                             rather than quietly ignored. */
-                                          <span key={sub.key}
-                                                title={t('wk.fnNotInPortal')}
-                                                className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-dashed border-slate-200 bg-slate-50 text-slate-300 cursor-not-allowed">
-                                            {sub.icon} {t(sub.label)}
-                                          </span>
-                                        ) : (
-                                          <button key={sub.key}
-                                                  onClick={() => setFn(sub.key, !fnOn(d, sub.key))}
-                                                  className={tick(fnOn(d, sub.key))}>
-                                            {sub.icon} {t(sub.label)}
-                                          </button>
-                                        )
+                                        <button key={sub.key}
+                                                title={sub.notYet ? t('wk.fnNotYet') : undefined}
+                                                onClick={() => setFn(sub.key, !fnOn(d, sub.key))}
+                                                className={`${tick(fnOn(d, sub.key))} ${
+                                                  sub.notYet && fnOn(d, sub.key)
+                                                    ? '!bg-amber-500 !border-amber-500' : ''}`}>
+                                          {sub.icon} {t(sub.label)}
+                                          {sub.notYet && <span className="ml-1 opacity-70">*</span>}
+                                        </button>
                                       ))}
                                     </div>
                                   )}
@@ -312,7 +308,7 @@ export default function WorkerSettings() {
                               ))}
                             </div>
                             <div className="text-[11px] font-semibold text-slate-400 mb-4 -mt-2">
-                              {t('wk.fnNotInPortalHint')}
+                              {t('wk.fnNotYetHint')}
                             </div>
                           </>
                         )}

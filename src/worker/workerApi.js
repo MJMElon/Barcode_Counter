@@ -119,6 +119,15 @@ export async function roster(token) {
   return unwrap(await supabase.rpc('worker_roster', { p_token: token })) || [];
 }
 
+/* The colleagues a worker may credit a job to — names only, inside their own
+   boundary. A different function from roster() above on purpose: that one is
+   behind the Settings module and answers with portal settings and who has a
+   PIN, which is not something the tick list on a record form has any business
+   knowing. See worker_maint_roster in create_worker_portal.sql. */
+export async function maintRoster(token) {
+  return unwrap(await supabase.rpc('worker_maint_roster', { p_token: token })) || [];
+}
+
 export async function setPortal(token, workerId, portal) {
   return unwrap(
     await supabase.rpc('worker_set_portal', {
