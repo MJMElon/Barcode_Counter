@@ -212,8 +212,11 @@ export function makeWorkerMaintSource(token) {
  *
  *   record   yes, that is the whole point of the portal — unless a supervisor
  *            has switched it off in the Worker Portal's Settings
- *   edit     no — and isModuleAdmin stays false, which is what the module
- *            actually gates deleting on
+ *   edit     no, and `delete` likewise. Both are answered here rather than
+ *            left absent, because an absent one now falls back to "is this an
+ *            Operation admin" and a worker must not depend on that staying
+ *            false. There is no worker_* function to change or remove a record
+ *            with either, so the buttons would fail on the phone.
  *   export   no; a worker does not need the nursery's month as a spreadsheet
  *
  * `actions` is the worker's own row of switches — portal.actions.maintenance,
@@ -247,6 +250,7 @@ export function workerPermissions(boundary, actions, company) {
         view: true,
         record: a.record === false ? false : true,
         edit: false,
+        delete: false,
         export: false,
         photos: false,
       },

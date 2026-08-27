@@ -104,3 +104,34 @@ export function canMaintFn(permissions, key) {
   if (isCompanyOn(permissions, 'maintenance', key)) return true;
   return MAINT_FUNCTION_DEFAULT[key] === true;
 }
+
+/**
+ * May this person change or remove a record that is already saved?
+ *
+ * `edit` and `delete` are two ticks on Setting → a person → Maintenance, and
+ * they are deliberately separate: correcting a figure and making a morning's
+ * record disappear are different acts, and somebody trusted to fix a typo is
+ * not automatically somebody trusted to erase the row.
+ *
+ * THE ONLY THING THAT SAYS YES IS THE TICK. This is the one rule in the file
+ * that does not fail open, and the exception is deliberate.
+ *
+ * Everything else here answers an absent switch with "nobody has been asked",
+ * because a deploy must not take away access somebody already relies on. That
+ * reasoning does not survive contact with Delete. An unticked box that still
+ * lets somebody erase a month of records is the screen lying in the direction
+ * that costs data, and there is no reading of a blank answer that should mean
+ * "yes, remove it". So absent is off, the box shows off, and the two agree.
+ *
+ * What this changes: correcting a record used to fall to whoever ran the
+ * Operation module, without a tick anywhere saying so. Anybody who was
+ * relying on that now needs Edit work done ticked on their row — which is the
+ * point, because now the screen shows who can.
+ *
+ * A closed page closes both, the same way canScan does.
+ */
+export function canMaintCorrect(permissions, key) {
+  if (!canScan(permissions, 'maintenance', 'view')) return false;
+  const acts = (permissions && permissions.scan_actions && permissions.scan_actions.maintenance) || {};
+  return acts[key] === true;
+}

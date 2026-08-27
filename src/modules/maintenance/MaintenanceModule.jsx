@@ -27,7 +27,7 @@ import {
   workTypeByKey,
   workTypeLabel,
 } from './data.js';
-import { canMaintFn } from './functions.js';
+import { canMaintFn, canMaintCorrect } from './functions.js';
 import { generalWorkers } from './helpers.js';
 import { formatDistance, mapsUrl } from './track/track.js';
 import GpsTrack from './GpsTrack.jsx';
@@ -137,13 +137,21 @@ export default function MaintenanceModule({
   // This page's own nursery list — Maintenance and PALMS are set separately.
   const allowed = allowedNurseries(permissions, 'maintenance');
   const mayRecord = canMaintain(permissions, 'record');
-  // Changing or removing a record already made is an admin's job. A Field
-  // Conductor records the work; correcting the books is not the same act, and
-  // the office is who answers for it. The maintenance 'edit' tick still has to
-  // be on, so an admin can also be kept out of a module they do not run.
-  const isAdmin   = isModuleAdmin(permissions, 'operation');
-  const mayEdit   = isAdmin && canMaintain(permissions, 'edit');
+  /* Changing a record already made, and removing one, are two ticks now —
+     Setting → a person → Maintenance → Edit work done / Delete work done —
+     because they are two different acts. Correcting a quantity somebody
+     mis-keyed is bookkeeping; making the morning disappear is not.
+
+     Neither falls open. An unticked box that still erases records would be
+     the screen lying in the expensive direction. See canMaintCorrect. */
+  const mayEdit   = canMaintCorrect(permissions, 'edit');
+  const mayDelete = canMaintCorrect(permissions, 'delete');
   const mayExport = canMaintain(permissions, 'export');
+  /* Not a permission — what the work sheet uses to decide whether a job
+     already ticked off can be opened again. Nothing is changed or removed by
+     it; it re-opens a form. That is why it is still the plain admin question
+     and not one of the two ticks above. */
+  const isAdmin   = isModuleAdmin(permissions, 'operation');
   /* Signing off a worker's morning.
    *
    * TWO conditions, and they are different in kind. The tick — Setting → a
@@ -436,7 +444,7 @@ export default function MaintenanceModule({
   }
 
   async function handleDelete(rec) {
-    if (!mayEdit) return flash(t('mt.noPermEdit'));
+    if (!mayDelete) return flash(t('mt.noPermDelete'));
     if (!window.confirm(t('mt.confirmDelete'))) return;
     try {
       await source.deleteRecord(rec.id);
@@ -809,20 +817,27 @@ export default function MaintenanceModule({
                     </div>
                   )}
 
-                  {mayEdit && !r._pending && (
+                  {/* Each button behind its own tick, so somebody given Edit
+                      and not Delete gets a full-width Edit rather than an Edit
+                      with a dead button beside it. */}
+                  {(mayEdit || mayDelete) && !r._pending && (
                     <div className="flex gap-2 mt-2.5">
-                      <button
-                        onClick={() => setEditing({ record: r })}
-                        className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-[11px] uppercase tracking-widest rounded-xl py-2"
-                      >
-                        {t('mt.edit')}
-                      </button>
-                      <button
-                        onClick={() => handleDelete(r)}
-                        className="px-4 bg-rose-50 hover:bg-rose-100 text-rose-600 font-black text-[11px] uppercase tracking-widest rounded-xl py-2"
-                      >
-                        {t('mt.delete')}
-                      </button>
+                      {mayEdit && (
+                        <button
+                          onClick={() => setEditing({ record: r })}
+                          className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-[11px] uppercase tracking-widest rounded-xl py-2"
+                        >
+                          {t('mt.edit')}
+                        </button>
+                      )}
+                      {mayDelete && (
+                        <button
+                          onClick={() => handleDelete(r)}
+                          className={`${mayEdit ? 'px-4' : 'flex-1'} bg-rose-50 hover:bg-rose-100 text-rose-600 font-black text-[11px] uppercase tracking-widest rounded-xl py-2`}
+                        >
+                          {t('mt.delete')}
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
