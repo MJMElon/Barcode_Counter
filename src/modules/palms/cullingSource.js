@@ -86,13 +86,18 @@ async function loadDeliveryOrders() {
 /**
  * Which plots PALMS says are at Pengambilan, right now.
  *
- * THIS is what puts a plot on the Culling Calculator — the Field Conductor
- * moving it to Pengambilan, and nothing else. Not a delivery order: a D/O is
- * evidence that collection has started, but it is typed by hand on another
- * screen by another person, and a plot can be named on one while the field
- * still has it growing. When the D/O screen learns to move the status itself,
- * this rule keeps working unchanged — the status is still the gate, something
- * else is just setting it.
+ * ONE of the two things that puts a plot on the Culling Calculator; a customer
+ * collecting off it is the other, and either is enough. The status is the
+ * better signal — the Field Conductor moving a plot to Pengambilan is the
+ * field saying so directly, and it arrives before the first delivery order
+ * does, which is how a plot becomes countable on its first day.
+ *
+ * But it must not be the ONLY signal, because it can be lost. Every activity
+ * left out of a day's selection is recorded as finished, so one save from a
+ * screen that had not finished syncing closed Pengambilan on an entire
+ * nursery — and with the status as the sole gate, that emptied the calculator
+ * while customers were still collecting. Ground being emptied is work whether
+ * or not anybody remembered to tick it.
  *
  * Matched by NAME rather than by "the last stage in the list", because the
  * list is the office's to extend: a nursery that adds a stage after
@@ -135,12 +140,12 @@ export async function pengambilanPlots() {
 }
 
 export async function loadPlots() {
-  /* The gate first. A plot the field has not moved to Pengambilan is not on
-     this screen whatever the paperwork says, so there is no point reading the
-     rest for it. */
-  const atPengambilan = await pengambilanPlots();
-  if (!atPengambilan) return [];          // could not read the status — say nothing
-  if (!atPengambilan.size) return [];
+  /* Two ways onto this screen, and either is enough: PALMS says the plot is
+     at Pengambilan, or a customer is collecting off it. Neither can be
+     required on its own — a plot moved this morning has no delivery order
+     yet, and a status can be closed by a stray save while collection carries
+     on regardless. */
+  const atPengambilan = (await pengambilanPlots()) || new Set();
 
   const dos = await loadDeliveryOrders();
   if (!dos) return [];
@@ -168,6 +173,8 @@ export async function loadPlots() {
       firstDate: '',
       lastDate: '',
       orders: [],
+      // Which of the two signals put it here, for the diagnosis to report.
+      viaStatus: true,
     });
   });
 
@@ -176,9 +183,9 @@ export async function loadPlots() {
     for (const line of collectionLines(d)) {
       if (isReplantPlot(line.plot)) continue;
       if (isOldBatch(line.batch)) continue;
-      // The status is the gate, so a collection against a plot that is not at
-      // Pengambilan is not a reason to list it.
-      if (!atPengambilan.has(line.plot)) continue;
+      /* A collection IS a reason to list the plot, whatever the status says.
+         Seedlings leaving on a delivery order is the ground being emptied,
+         and that is the work this screen exists for. */
       const key = `${line.plot}#${line.batch}`;
       if (!by.has(key)) {
         by.set(key, {
@@ -194,6 +201,7 @@ export async function loadPlots() {
              has no answer from the number alone — least of all when no single
              order carries it, because it is their sum. */
           orders: [],
+          viaStatus: atPengambilan.has(line.plot),
         });
       }
       const e = by.get(key);
@@ -360,12 +368,10 @@ export async function plantedNear(plot = '', batch = '') {
    diagnosis rather than inside it so the wording of each answer sits next to
    the rule it reports on. */
 function whyNot(d, p, b, q, planted, finished, atPengambilan) {
-  /* The status gate is first here because it is first in loadPlots. Without
-     it this said LISTED for lines the list does not carry, which is the one
-     thing a diagnosis must never do. */
-  if (atPengambilan && !atPengambilan.has(p)) {
-    return `PALMS does not have ${p} at Pengambilan — the field moves it there, and that is what puts it on the screen`;
-  }
+  /* The status is no longer a gate on a collection — a delivery order lists
+     the plot on its own — so it is reported rather than refused. Saying
+     LISTED for a line the list does not carry is the one thing a diagnosis
+     must never do, and so is the reverse. */
   if (isCancelled(d)) return 'the order is cancelled';
   if (!p) return 'no plot on this line';
   if (!b) return 'no batch on this line — the calculator cannot tell the plot’s batches apart without one';
@@ -375,7 +381,9 @@ function whyNot(d, p, b, q, planted, finished, atPengambilan) {
   const key = `${p}#${b}`;
   if (!planted.has(key)) return `the batch report has no batch ${b} transplanted into ${p}`;
   if (finished.has(key)) return 'the 3rd culling map qty is in — this block is done';
-  return 'LISTED';
+  return atPengambilan && !atPengambilan.has(p)
+    ? 'LISTED (on the collection — PALMS does not have this plot at Pengambilan)'
+    : 'LISTED';
 }
 
 /** Collection runs about a month, so a block a month into it is the one worth

@@ -177,14 +177,53 @@ export default function EntryTab({ db, t, staffName, refresh, flash, nurseryKeys
   const allKeys = useMemo(() => plots.flatMap(keysOfPlot), [nursery]);
 
   const [draft, setDraft] = useState(() => seedDraft(db, allKeys));
+  /* Which units somebody has actually keyed on this screen. Anything not in
+     here is only a copy of the day as the device knows it, and is safe to
+     replace when the device learns better. Per unit rather than one flag for
+     the screen: keying B1 must not freeze B2 to B21 at whatever they happened
+     to say at the time. */
+  const touched = useRef(new Set());
   // Switching nursery starts a fresh draft for that nursery's plots.
   useEffect(() => {
     setDraft(seedDraft(db, allKeys));
+    touched.current = new Set();
     setConfirming(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nursery]);
 
-  const setActs = (key, acts) => setDraft((d) => ({ ...d, [key]: acts }));
+  /* The day arrives AFTER this screen does.
+
+     PALMS syncs on open, and the pull lands a moment later — so a device with
+     nothing stored yet, or a stale copy of the day, seeds its draft from that
+     and then keeps it. The carriages read their labels from the draft while
+     the ticks beside them read the freshly synced day, and the two disagree in
+     the worst possible direction: every plot ticked as reported, every plot
+     showing no activity running. Other Field Conductors, whose phones already
+     held the day when they opened it, see the real statuses.
+
+     Worse than looking wrong, it is dangerous to save. Anything left out of a
+     selection is recorded as FINISHED, so pressing save on an empty draft
+     closes every activity in the nursery — for everybody.
+
+     So every unit nobody has keyed follows the device; the ones somebody has
+     keyed are theirs, and a late sync leaves those alone. */
+  const savedSig = allKeys.map((k) => savedActs(db, k).join('.')).join('|');
+  const seeded = useRef(savedSig);
+  useEffect(() => {
+    if (savedSig === seeded.current) return;
+    seeded.current = savedSig;
+    setDraft((d) => {
+      const next = { ...d };
+      allKeys.forEach((k) => { if (!touched.current.has(k)) next[k] = savedActs(db, k); });
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedSig]);
+
+  const setActs = (key, acts) => {
+    touched.current.add(key);
+    setDraft((d) => ({ ...d, [key]: acts }));
+  };
 
   const dirtyKeys = allKeys.filter((k) => !sameSel(draft[k] || [], savedActs(db, k)));
   const doneToday = allKeys.filter((k) => tickedToday(db, k)).length;
