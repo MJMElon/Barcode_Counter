@@ -205,8 +205,13 @@ export default function FloatingDock() {
     setDragging(false);
     if (!d) return;
     if (d.moved < DRAG_SLOP) {
-      // One thing behind the button is not a fan — tapping opens it.
-      if (soloRef.current) { setOpen(soloRef.current); return; }
+      // One thing behind the button is not a fan — tapping opens it, and
+      // tapping it again is how you pop it back in, now that there is no
+      // backdrop behind the window to tap instead.
+      if (soloRef.current) {
+        if (open === soloRef.current) closeCurrent(); else setOpen(soloRef.current);
+        return;
+      }
       setFan((v) => !v);
       return;
     }
@@ -259,9 +264,18 @@ export default function FloatingDock() {
   const miniCls =
     'fixed grid place-items-center rounded-full bg-white border-2 shadow-[0_6px_18px_rgba(0,0,0,.2)] cursor-pointer select-none';
 
+  // What the × on each window already does on close, shared with the two
+  // other ways a window now closes without it: tapping the trigger again,
+  // and picking the same fan action a second time.
+  function closeCurrent() {
+    if (open === 'palms') refreshPalms();
+    else if (open === 'nelos') refreshCases();
+    setOpen(null);
+  }
+
   function choose(which) {
     setFan(false);
-    setOpen(which);
+    if (open === which) closeCurrent(); else setOpen(which);
   }
 
   return (
@@ -316,8 +330,8 @@ export default function FloatingDock() {
           transition: dragging ? 'none' : 'box-shadow .15s, transform .15s',
           transform: dragging ? 'scale(1.06)' : 'none',
         }}
-        className={`relative grid place-items-center rounded-full border-2 shadow-[0_8px_24px_rgba(0,0,0,.22)] select-none ${
-          fan ? 'bg-white border-slate-300' : 'border-amber-800'
+        className={`relative grid place-items-center rounded-full shadow-[0_8px_24px_rgba(0,0,0,.22)] select-none ${
+          fan ? 'border-2 bg-white border-slate-300' : ''
         }`}
       >
         {/* Closed, it is a coin — neither module's, which the train was.
@@ -344,7 +358,8 @@ export default function FloatingDock() {
         <PalmsWindow onClose={() => { setOpen(null); refreshPalms(); }} onDayChange={refreshPalms} />
       )}
       {open === 'nelos' && (
-        <NelosWindow onClose={() => { setOpen(null); refreshCases(); }} onCount={setCases} />
+        <NelosWindow onClose={() => { setOpen(null); refreshCases(); }} onCount={setCases}
+          anchor={{ x: pos.x, y: pos.y, size: SIZE }} />
       )}
     </>
   );
