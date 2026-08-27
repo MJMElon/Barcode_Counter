@@ -69,12 +69,17 @@ function payloadOf(args) {
     batch_name: batches && batches.length ? batches.join(', ') : null,
     week_no:    weekNo || null,
     schedule_month: scheduleMonth || null,
-    // Where the phone was, when the GPS switch is on for this worker. The
-    // function writes it only if the columns are there, so a database part
-    // way through the migrations still records the job.
-    gps_lat:      (gps && gps.lat) ?? null,
-    gps_lng:      (gps && gps.lng) ?? null,
-    gps_accuracy: (gps && gps.accuracy) ?? null,
+    // The track walked, when the GPS switch is on for this worker and they
+    // recorded one. worker_submit_maint writes these only if the columns are
+    // there, so a database part way through the migrations still takes the job.
+    gps_lat:        (gps && gps.lat) ?? null,
+    gps_lng:        (gps && gps.lng) ?? null,
+    gps_accuracy:   (gps && gps.accuracy) ?? null,
+    gps_track:      (gps && gps.track) || null,
+    gps_points:     (gps && gps.points) ?? null,
+    gps_distance_m: (gps && gps.distance_m) ?? null,
+    gps_started_at: (gps && gps.started_at) || null,
+    gps_ended_at:   (gps && gps.ended_at) || null,
   };
 }
 

@@ -124,6 +124,8 @@ export function queuedAsRecord(job) {
     gps_lat: (a.gps && a.gps.lat) ?? null,
     gps_lng: (a.gps && a.gps.lng) ?? null,
     gps_accuracy: (a.gps && a.gps.accuracy) ?? null,
+    gps_points: (a.gps && a.gps.points) ?? null,
+    gps_distance_m: (a.gps && a.gps.distance_m) ?? null,
   };
 }
 
@@ -236,14 +238,24 @@ export async function saveRecord({ id, plot, workTypeKey, date, qty, chemical, r
      Sent only when there is something to say, so a record made the ordinary
      way still saves against a table without the column. */
   if (workedBy && workedBy.length) extra.worked_by = workedBy.join(', ');
-  /* Where the phone was when the record was written, when the GPS switch is
-     on for this person and the phone actually answered. Columns from
+  /* The track walked while the job was done, when the GPS switch is on for
+     this person and they actually recorded one. Columns from
      shared/add_maint_field_gps.sql; a database without them falls into the
-     retry below and the job itself still saves. */
+     retry below and the job itself still saves.
+
+     The summary is written into its own columns beside the track rather than
+     being worked out from it later: the office lists a nursery's month, and
+     adding up a thousand points per row to show one distance is not a query
+     anybody wants to run. */
   if (gps && gps.lat != null && gps.lng != null) {
     extra.gps_lat = gps.lat;
     extra.gps_lng = gps.lng;
-    if (gps.accuracy != null) extra.gps_accuracy = gps.accuracy;
+    if (gps.accuracy != null)   extra.gps_accuracy   = gps.accuracy;
+    if (gps.track)              extra.gps_track      = gps.track;
+    if (gps.points != null)     extra.gps_points     = gps.points;
+    if (gps.distance_m != null) extra.gps_distance_m = gps.distance_m;
+    if (gps.started_at)         extra.gps_started_at = gps.started_at;
+    if (gps.ended_at)           extra.gps_ended_at   = gps.ended_at;
   }
 
   const run = (payload) => (id

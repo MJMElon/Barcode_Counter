@@ -29,8 +29,8 @@ import {
 } from './data.js';
 import { canMaintFn } from './functions.js';
 import { generalWorkers } from './helpers.js';
-import { mapsUrl } from '../../lib/geo.js';
-import GpsStamp from './GpsStamp.jsx';
+import { formatDistance, mapsUrl } from './track/track.js';
+import GpsTrack from './GpsTrack.jsx';
 import PhotoSlots from './PhotoSlots.jsx';
 import ThisWeek from './ThisWeek.jsx';
 import Timeline from './Timeline.jsx';
@@ -710,24 +710,33 @@ export default function MaintenanceModule({
                         <div className="text-[12px] text-slate-500 mt-1.5 italic break-words">{r.remark}</div>
                       )}
 
-                      {/* Where the phone was when the record was written.
-                          Shown to whoever can see the record, not only to
-                          whoever may capture one — a conductor checking a
-                          morning's work is exactly the person the stamp is
-                          for. Tapping opens the spot in a map. */}
+                      {/* The track walked while the job was done. Shown to
+                          whoever can see the record, not only to whoever may
+                          record one — a conductor checking a morning's work is
+                          exactly the person it is for.
+
+                          The distance is the thing being read; the link opens
+                          where the track started. The line itself is not drawn
+                          on a list of five hundred rows. */}
                       {r.gps_lat != null && r.gps_lng != null && (
                         <a
                           href={mapsUrl(r.gps_lat, r.gps_lng)}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex items-center gap-1 mt-1.5 text-[11px] font-bold text-slate-500 tabular-nums"
+                          className="inline-flex items-center gap-1.5 mt-1.5 text-[11px] font-bold text-slate-500 tabular-nums"
                         >
-                          <span aria-hidden="true">📍</span>
-                          {Number(r.gps_lat).toFixed(6)}, {Number(r.gps_lng).toFixed(6)}
-                          {r.gps_accuracy != null && (
-                            <span className="text-slate-400">
-                              · {t('mt.gpsAccuracy', { n: Math.round(Number(r.gps_accuracy)) })}
-                            </span>
+                          <span aria-hidden="true">🛰️</span>
+                          {r.gps_distance_m != null ? (
+                            <>
+                              {formatDistance(r.gps_distance_m)}
+                              {r.gps_points != null && (
+                                <span className="text-slate-400">
+                                  · {t('mt.trkPointsN', { n: r.gps_points })}
+                                </span>
+                              )}
+                            </>
+                          ) : (
+                            <>{Number(r.gps_lat).toFixed(6)}, {Number(r.gps_lng).toFixed(6)}</>
                           )}
                         </a>
                       )}
@@ -861,12 +870,23 @@ function EntrySheet({ record, plots, batchMap, onClose, onSave, allowPhotos = tr
       ? String(record.batch_name).split(',').map((b) => b.trim()).filter(Boolean)
       : []
   );
-  // Where the phone is. Only asked for when the switch is on; an edit keeps
-  // the stamp the record already carries rather than replacing it with where
-  // the office happens to be sitting.
+  /* The track walked for this job. Only offered when the switch is on, and an
+     edit keeps the track the record already carries rather than replacing it
+     with a walk round the office. The points come back only when the record
+     was read with the full row; without them the summary still shows, so
+     correcting a remark never silently drops somebody's track. */
   const [gps, setGps] = useState(
     record && record.gps_lat != null && record.gps_lng != null
-      ? { lat: record.gps_lat, lng: record.gps_lng, accuracy: record.gps_accuracy ?? null }
+      ? {
+          track: record.gps_track || null,
+          points: record.gps_points ?? null,
+          distance_m: record.gps_distance_m ?? null,
+          started_at: record.gps_started_at || null,
+          ended_at: record.gps_ended_at || null,
+          lat: record.gps_lat,
+          lng: record.gps_lng,
+          accuracy: record.gps_accuracy ?? null,
+        }
       : null
   );
   const [photos, setPhotos] = useState(() => {
@@ -1023,7 +1043,7 @@ function EntrySheet({ record, plots, batchMap, onClose, onSave, allowPhotos = tr
           <WhoDidIt workers={workers} value={workedBy} onChange={setWorkedBy} t={t} />
         )}
 
-        {showGps && <GpsStamp value={gps} onChange={setGps} />}
+        {showGps && <GpsTrack value={gps} onChange={setGps} />}
 
         {allowPhotos && <>
         <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLang } from '../../context/LanguageContext.jsx';
-import GpsStamp from './GpsStamp.jsx';
+import GpsTrack from './GpsTrack.jsx';
 import { workTypeLabel } from './helpers.js';
 import PhotoSlots from './PhotoSlots.jsx';
 import WhoDidIt from './WhoDidIt.jsx';
@@ -240,7 +240,7 @@ export default function WorkSheet({
                 <WhoDidIt workers={workers} value={workedBy} onChange={setWorkedBy} t={t} />
               )}
 
-              {showGps && <GpsStamp value={gps} onChange={setGps} />}
+              {showGps && <GpsTrack value={gps} onChange={setGps} />}
 
               {allowPhotos && <>
                 <span className={label}>{t('mt.photos', { n: MAX_PHOTOS })}</span>
