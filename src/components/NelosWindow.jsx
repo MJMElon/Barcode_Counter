@@ -95,7 +95,6 @@ function CaseView({ caseId, me, onBack, onChanged }) {
   const [thread, setThread] = useState([]);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [resolving, setResolving] = useState(false);
   const [flash, setFlash] = useState(null);
   const [shot, setShot] = useState(null);   // the photo of the fix, if one was taken
   const resolutionRef = useRef(null);
@@ -181,7 +180,7 @@ function CaseView({ caseId, me, onBack, onChanged }) {
     if (url) fields.resolution_photo_url = url;
 
     const ok = await patch(fields, `Resolved — ${me.name}`);
-    if (ok) { setResolving(false); setShot(null); setFlash({ ok: true, msg: 'Case resolved.' }); }
+    if (ok) { setShot(null); setFlash({ ok: true, msg: 'Case resolved.' }); }
   }
 
   async function closeCase() {
@@ -295,16 +294,18 @@ function CaseView({ caseId, me, onBack, onChanged }) {
 
       <div className="flex flex-wrap gap-2 mt-3">
         {s === 'open' && <button className={`${btn} bg-violet-600`} disabled={busy} onClick={start}>▶ Start Work</button>}
-        {(s === 'open' || s === 'in_progress') && (
-          <button className={`${btn} bg-emerald-600`} disabled={busy} onClick={() => setResolving((v) => !v)}>✓ Mark Resolved</button>
-        )}
         {s === 'resolved' && <button className={`${btn} bg-slate-600`} disabled={busy} onClick={closeCase}>🔒 Close Case</button>}
         {(s === 'resolved' || s === 'closed') && (
           <button className={`${btn} bg-orange-600`} disabled={busy} onClick={reopen}>↩ Reopen</button>
         )}
       </div>
 
-      {resolving && (
+      {/* Solving is the whole reason a pending case gets opened, so the block
+          to do it is ON SCREEN — the dock's case pane works this way and this
+          did not: it hid the photo and the remark behind a "Mark Resolved"
+          button, so opening a case showed no way to solve it until you had
+          pressed something that sounded like it would solve it already. */}
+      {pending && (
         <div className="mt-4 pt-3.5 border-t border-violet-100">
           <div className={sec}>Solve Case</div>
 
@@ -330,9 +331,9 @@ function CaseView({ caseId, me, onBack, onChanged }) {
               is gone the moment anybody types, so the one thing saying what
               the box is for disappears as they start filling it in. */}
           <div className="text-[10px] font-black uppercase tracking-wider text-slate-500 mt-3 mb-1.5">Solve Case Remark</div>
-          <textarea ref={resolutionRef} rows={3} autoFocus
+          <textarea ref={resolutionRef} rows={3}
             className="w-full border-[1.5px] border-slate-200 rounded-xl px-3 py-2 text-[13px] font-semibold outline-none focus:border-violet-400" />
-          <button className={`${btn} bg-emerald-600 mt-2`} disabled={busy} onClick={confirmResolve}>Confirm Resolved</button>
+          <button className={`${btn} bg-emerald-600 mt-2`} disabled={busy} onClick={confirmResolve}>Save &amp; Solve</button>
         </div>
       )}
 
