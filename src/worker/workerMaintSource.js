@@ -55,7 +55,8 @@ function asBatchMap(rows) {
 
 /** What the phone actually sends when a job is recorded. */
 function payloadOf(args) {
-  const { plot, workTypeKey, date, qty, chemical, remark, batches, weekNo, scheduleMonth } = args || {};
+  const { plot, workTypeKey, date, qty, chemical, remark, batches, weekNo, scheduleMonth,
+          gps } = args || {};
   const wt = workTypeByKey(workTypeKey);
   return {
     plot_name:  plot && plot.plot_name,
@@ -68,6 +69,12 @@ function payloadOf(args) {
     batch_name: batches && batches.length ? batches.join(', ') : null,
     week_no:    weekNo || null,
     schedule_month: scheduleMonth || null,
+    // Where the phone was, when the GPS switch is on for this worker. The
+    // function writes it only if the columns are there, so a database part
+    // way through the migrations still records the job.
+    gps_lat:      (gps && gps.lat) ?? null,
+    gps_lng:      (gps && gps.lng) ?? null,
+    gps_accuracy: (gps && gps.accuracy) ?? null,
   };
 }
 
@@ -180,19 +187,39 @@ export function makeWorkerMaintSource(token) {
  * the rules, and a worker's boundary is just another way of arriving at the
  * same two answers — which nurseries, and which actions.
  *
- *   record   yes, that is the whole point of the portal
+ *   record   yes, that is the whole point of the portal — unless a supervisor
+ *            has switched it off in the Worker Portal's Settings
  *   edit     no — and isModuleAdmin stays false, which is what the module
  *            actually gates deleting on
  *   export   no; a worker does not need the nursery's month as a spreadsheet
+ *
+ * `actions` is the worker's own row of switches — portal.actions.maintenance,
+ * set per worker in Settings, the same keys the office sets per Field
+ * Conductor. It goes in LAST so a supervisor's answer wins, and anything not
+ * set there is left absent so functions.js can apply the documented default
+ * rather than this file inventing a second one.
+ *
+ * Two of those keys can never be honoured here and are forced off: a PIN
+ * sign-in is `anon`, which has no upload path for a photo and is deliberately
+ * never handed the roster. The Settings screen says so beside them.
  */
-export function workerPermissions(boundary) {
+export function workerPermissions(boundary, actions) {
   const nurseries = boundary && boundary.nurseries;
+  const a = (actions && actions.maintenance) || {};
   return {
     manage_users: false,
     modules: {},
     scan_nurseries: Array.isArray(nurseries) ? { maintenance: nurseries } : {},
     scan_actions: {
-      maintenance: { view: true, record: true, edit: false, export: false },
+      maintenance: {
+        ...a,
+        view: true,
+        record: a.record === false ? false : true,
+        edit: false,
+        export: false,
+        workers: false,
+        photos: false,
+      },
     },
   };
 }

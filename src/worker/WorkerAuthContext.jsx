@@ -87,6 +87,11 @@ export function WorkerAuthProvider({ children }) {
     token: identity ? identity.token : null,
     worker: identity ? identity.worker : null,
     modules: (identity && identity.modules) || {},
+    /* Which functions inside a module this worker gets — the same switches
+       the office sets per Field Conductor, set here per worker in Settings.
+       Absent on a database that has not re-run create_worker_portal.sql, and
+       absent means the defaults, so the portal works either way. */
+    actions: (identity && identity.actions) || {},
     boundary: (identity && identity.boundary) || {},
     loading,
     offline,

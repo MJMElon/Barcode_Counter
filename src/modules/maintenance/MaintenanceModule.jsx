@@ -27,7 +27,10 @@ import {
   workTypeByKey,
   workTypeLabel,
 } from './data.js';
+import { canMaintFn } from './functions.js';
 import { generalWorkers } from './helpers.js';
+import { mapsUrl } from '../../lib/geo.js';
+import GpsStamp from './GpsStamp.jsx';
 import PhotoSlots from './PhotoSlots.jsx';
 import ThisWeek from './ThisWeek.jsx';
 import Timeline from './Timeline.jsx';
@@ -148,6 +151,23 @@ export default function MaintenanceModule({
      under Schedule Maintenance Work; a worker's own portal never offers it,
      because nobody verifies their own work. */
   const mayVerify = !!source.setVerified && canMaintain(permissions, 'verify');
+
+  /* The functions inside Maintenance, switched on one at a time — the office
+     sets them per Field Conductor on the FC Portal's Setting screen, and per
+     worker in the Worker Portal's Settings. Same keys, same defaults, one
+     list: see functions.js.
+
+     Every one of them defaults ON, so a person whose access predates the
+     switches keeps the form they had. GPS is the exception and stays off
+     until it is asked for. */
+  const maySchedule = canMaintFn(permissions, 'schedule');
+  const fnBatches   = canMaintFn(permissions, 'batches');
+  const fnWorkers   = canMaintFn(permissions, 'workers');
+  const fnGps       = canMaintFn(permissions, 'gps');
+  // The camera needs both: the switch, and a door that can actually upload.
+  // A worker signed in with a PIN is `anon` and has neither.
+  const fnPhotos    = allowPhotos && canMaintFn(permissions, 'photos');
+  const fnRemark    = canMaintFn(permissions, 'remark');
 
   const flash = (text) => {
     setToast(text);
@@ -333,7 +353,7 @@ export default function MaintenanceModule({
     return acc;
   }, {}), [tasksByWeek, allRecords, month]);
 
-  async function handleSheetSave({ task, batches, remark, photos, qty, workedBy }) {
+  async function handleSheetSave({ task, batches, remark, photos, qty, workedBy, gps }) {
     const plot = visiblePlots.find((p) => p.plot_name === task.plot)
       || { plot_name: task.plot, nursery_name: task.nursery || nursery || null };
     setSaving(true);
@@ -353,6 +373,7 @@ export default function MaintenanceModule({
         reportedBy: staffName,
         workedBy,
         photos,
+        gps,
       });
       if (queued) {
         flash(t('mt.savedOffline', { plot: task.plot }));
@@ -385,6 +406,7 @@ export default function MaintenanceModule({
         workedBy: form.workedBy,
         batches: form.batches,
         photos: form.photos,
+        gps: form.gps,
       });
       if (queued) {
         flash(t('mt.savedOffline', { plot: plot.plot_name }));
@@ -505,7 +527,7 @@ export default function MaintenanceModule({
         {/* The week in hand, first and at full width — a Field Conductor
             opens this standing in a nursery with a job to start, not to read
             a month's plan. Only the jobs actually due appear. */}
-        {!setup && schedule.length > 0 && mayRecord && (
+        {!setup && schedule.length > 0 && maySchedule && mayRecord && (
           <>
             <div className="flex items-baseline justify-between pt-1">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
@@ -544,8 +566,14 @@ export default function MaintenanceModule({
             record it against the plots the office asked for. */}
         {/* Always drawn once the table exists. It used to disappear entirely
             when a Field Conductor was not allowed to record, which looks
-            exactly like the feature not being there. */}
-        {!setup && (
+            exactly like the feature not being there.
+
+            Unless the office has switched Schedule Maintenance Work off for
+            this person, which is a deliberate answer rather than an accident:
+            some nurseries want the work recorded without the month's plan on
+            the phone at all. Recording still works — the RECORD WORK button
+            above does not need the plan. */}
+        {!setup && maySchedule && (
           <>
             <div className="flex items-baseline justify-between pt-1">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
@@ -602,8 +630,11 @@ export default function MaintenanceModule({
             today={today}
             saving={saving}
             isAdmin={isAdmin}
-            allowPhotos={allowPhotos}
-            workers={nurseryWorkers.length ? nurseryWorkers : null}
+            allowPhotos={fnPhotos}
+            showBatches={fnBatches}
+            showGps={fnGps}
+            showRemark={fnRemark}
+            workers={fnWorkers && nurseryWorkers.length ? nurseryWorkers : null}
             isDone={(task) => isJobDone(allRecords, {
               workTypeKey: sheet.workType.key, plot: task.plot,
               chemical: task.chemical, week: sheet.week, month })}
@@ -677,6 +708,28 @@ export default function MaintenanceModule({
                       )}
                       {r.remark && (
                         <div className="text-[12px] text-slate-500 mt-1.5 italic break-words">{r.remark}</div>
+                      )}
+
+                      {/* Where the phone was when the record was written.
+                          Shown to whoever can see the record, not only to
+                          whoever may capture one — a conductor checking a
+                          morning's work is exactly the person the stamp is
+                          for. Tapping opens the spot in a map. */}
+                      {r.gps_lat != null && r.gps_lng != null && (
+                        <a
+                          href={mapsUrl(r.gps_lat, r.gps_lng)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 mt-1.5 text-[11px] font-bold text-slate-500 tabular-nums"
+                        >
+                          <span aria-hidden="true">📍</span>
+                          {Number(r.gps_lat).toFixed(6)}, {Number(r.gps_lng).toFixed(6)}
+                          {r.gps_accuracy != null && (
+                            <span className="text-slate-400">
+                              · {t('mt.gpsAccuracy', { n: Math.round(Number(r.gps_accuracy)) })}
+                            </span>
+                          )}
+                        </a>
                       )}
                       {r.photo_urls && (
                         <div className="mt-2 flex flex-wrap gap-1.5">
@@ -770,8 +823,11 @@ export default function MaintenanceModule({
           batchMap={batchMap}
           onClose={() => setEditing(null)}
           onSave={handleSave}
-          allowPhotos={allowPhotos}
-          workers={nurseryWorkers.length ? nurseryWorkers : null}
+          allowPhotos={fnPhotos}
+          showBatches={fnBatches}
+          showGps={fnGps}
+          showRemark={fnRemark}
+          workers={fnWorkers && nurseryWorkers.length ? nurseryWorkers : null}
           t={t}
           lang={lang}
         />
@@ -787,7 +843,8 @@ export default function MaintenanceModule({
 }
 
 // Bottom sheet to record a job, or correct one already recorded.
-function EntrySheet({ record, plots, batchMap, onClose, onSave, allowPhotos = true, workers = null, t, lang }) {
+function EntrySheet({ record, plots, batchMap, onClose, onSave, allowPhotos = true, workers = null,
+                      showBatches = true, showGps = false, showRemark = true, t, lang }) {
   const [workTypeKey, setWorkTypeKey] = useState(record ? record.work_type : WORK_TYPES[0].key);
   const [plotName, setPlotName] = useState(record ? record.plot_name : '');
   const [date, setDate] = useState(record ? record.work_date : todayStr());
@@ -803,6 +860,14 @@ function EntrySheet({ record, plots, batchMap, onClose, onSave, allowPhotos = tr
     record && record.batch_name
       ? String(record.batch_name).split(',').map((b) => b.trim()).filter(Boolean)
       : []
+  );
+  // Where the phone is. Only asked for when the switch is on; an edit keeps
+  // the stamp the record already carries rather than replacing it with where
+  // the office happens to be sitting.
+  const [gps, setGps] = useState(
+    record && record.gps_lat != null && record.gps_lng != null
+      ? { lat: record.gps_lat, lng: record.gps_lng, accuracy: record.gps_accuracy ?? null }
+      : null
   );
   const [photos, setPhotos] = useState(() => {
     const a = Array(MAX_PHOTOS).fill(null);
@@ -909,6 +974,7 @@ function EntrySheet({ record, plots, batchMap, onClose, onSave, allowPhotos = tr
           </>
         )}
 
+        {showBatches && <>
         <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
           {t('mt.batchesInPlot')}
         </label>
@@ -951,10 +1017,13 @@ function EntrySheet({ record, plots, batchMap, onClose, onSave, allowPhotos = tr
         <div className="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-3 text-sm font-black text-slate-700 mb-3">
           {qty ? qty.toLocaleString() : '—'}
         </div>
+        </>}
 
         {workers && (
           <WhoDidIt workers={workers} value={workedBy} onChange={setWorkedBy} t={t} />
         )}
+
+        {showGps && <GpsStamp value={gps} onChange={setGps} />}
 
         {allowPhotos && <>
         <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
@@ -965,6 +1034,7 @@ function EntrySheet({ record, plots, batchMap, onClose, onSave, allowPhotos = tr
         </div>
         </>}
 
+        {showRemark && <>
         <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
           {t('mt.remark')}
         </label>
@@ -974,12 +1044,13 @@ function EntrySheet({ record, plots, batchMap, onClose, onSave, allowPhotos = tr
           onChange={(e) => setRemark(e.target.value)}
           className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-sm font-semibold outline-none focus:border-emerald-500 mb-4"
         />
+        </>}
 
         <button
           onClick={async () => {
             setSaving(true);
             await onSave({ workTypeKey, plotName, date, qty, chemical: chemical.trim(),
-                           remark: remark.trim(), batches, workedBy,
+                           remark: remark.trim(), batches, workedBy, gps,
                            photos: photos.filter(Boolean) });
             setSaving(false);
           }}

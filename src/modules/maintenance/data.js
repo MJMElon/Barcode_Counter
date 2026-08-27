@@ -121,6 +121,9 @@ export function queuedAsRecord(job) {
     week_no: a.weekNo || null,
     schedule_month: a.scheduleMonth || null,
     photo_urls: (a.photos || []).join(','),
+    gps_lat: (a.gps && a.gps.lat) ?? null,
+    gps_lng: (a.gps && a.gps.lng) ?? null,
+    gps_accuracy: (a.gps && a.gps.accuracy) ?? null,
   };
 }
 
@@ -201,7 +204,8 @@ export async function pendingRecords() {
 
 /** Create or update one record. `id` present = update. */
 export async function saveRecord({ id, plot, workTypeKey, date, qty, chemical, remark, reportedBy,
-                                   workedBy, batches, weekNo, scheduleMonth, photoUrls, clientUid }) {
+                                   workedBy, batches, weekNo, scheduleMonth, photoUrls, gps,
+                                   clientUid }) {
   const wt = workTypeByKey(workTypeKey);
   const row = {
     work_date: date,
@@ -232,6 +236,15 @@ export async function saveRecord({ id, plot, workTypeKey, date, qty, chemical, r
      Sent only when there is something to say, so a record made the ordinary
      way still saves against a table without the column. */
   if (workedBy && workedBy.length) extra.worked_by = workedBy.join(', ');
+  /* Where the phone was when the record was written, when the GPS switch is
+     on for this person and the phone actually answered. Columns from
+     shared/add_maint_field_gps.sql; a database without them falls into the
+     retry below and the job itself still saves. */
+  if (gps && gps.lat != null && gps.lng != null) {
+    extra.gps_lat = gps.lat;
+    extra.gps_lng = gps.lng;
+    if (gps.accuracy != null) extra.gps_accuracy = gps.accuracy;
+  }
 
   const run = (payload) => (id
     ? supabase.from('nops_maint_field_records').update(payload).eq('id', id)
