@@ -150,14 +150,22 @@ body {
    level sits waiting for you to reach it — then, every so often, it hops
    and spins once on the spot before settling flat again.
 
-   Two elements share the job. .dock-coin-disc is only the look — the
-   gold, the rim, the M — and sits on its own inner span so the button's
-   corner badges (the red count, the green tick) stay flat and legible
-   while the disc spins; putting the animation on the whole button would
-   have flipped the badges along with it. .dock-coin-motion is only the
-   motion, kept apart so a coin being dragged can still look like a coin
-   with the animation switched off, rather than fighting the drag's own
-   inline transform on the same property. */
+   Two elements share the job. .dock-coin-disc is the WHOLE coin — the
+   gold, the rim AND the M all painted on one inner span that fills the
+   button, rather than the rim living on the button and the gold+M on a
+   span inside it. Split that way, hopping the span left the rim behind
+   as a static ring with the gold face leaping up out of it — the M
+   "jumping outside the round" it was supposed to stay inside of. One
+   piece, one edge, moving together, fixes that: the button underneath
+   it carries no border or fill of its own while the coin is showing.
+
+   The span sits apart from the button's corner badges (the red count,
+   the green tick) so those stay flat and legible while the coin spins;
+   putting the animation on the whole button would have flipped the
+   badges along with it. .dock-coin-motion is only the motion, kept
+   apart so a coin being dragged can still look like a coin with the
+   animation switched off, rather than fighting the drag's own inline
+   transform on the same property. */
 .dock-coin-disc {
   background: radial-gradient(circle at 32% 28%, #fef3c7, #fbbf24 46%, #b45309 100%);
   box-shadow:
@@ -167,7 +175,7 @@ body {
 }
 .dock-coin-m {
   font-family: 'Outfit', system-ui, sans-serif;
-  font-size: 23px;
+  font-size: 19px;
   font-weight: 900;
   line-height: 1;
   color: #78350f;

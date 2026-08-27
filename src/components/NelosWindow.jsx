@@ -29,22 +29,57 @@ import NelosNewCase from './NelosNewCase.jsx';
 
 const MODULE = 'scan';                 // this portal's key in nelos_modules
 
-/* Sheet on a phone, a real window on a wider screen — the same split
-   PalmsWindow uses, and the same 640px line Tailwind's own 'sm:' breakpoint
-   draws, so the two float-dock windows change shape at the same width.
+/* Anchored to the dock icon, the way the portal's own Nelos dock
+   (shared/shared_nelos_dock.js, in mjm-ai-system) has always worked: the
+   button and its panel are one thing, and the panel opens attached to
+   wherever the button currently is — not a dialog that appears somewhere
+   else on the screen, unrelated to what was tapped.
 
-   Done in JS rather than with 'sm:' utility classes overriding an inline
-   style: an inline style ALWAYS wins over a class, responsive or not, so
-   the previous version set left:0/right:0/bottom:0 inline and tried to
-   override them with sm:left-1/2/sm:right-auto/sm:bottom-6 classes that
-   could never take effect. With left pinned at 0, right pinned at 0, and a
-   width now fixed by sm:w-[560px] (which — having no inline competitor —
-   DID apply), the box was over-constrained; per the CSS box-positioning
-   rules that drops 'left' and keeps 'right', which is what put a supposedly
-   centred dialog flush against the right edge and the very bottom of a
-   desktop screen instead of centred a little above it. */
-const WIDE = 640;
-const isWide = () => window.innerWidth >= WIDE;
+   That file keeps the fab and the panel as flex siblings inside one
+   positioned wrapper, so the panel simply falls in beside the button. A
+   window opened from a separate React tree cannot be a flex sibling of
+   the button that opened it, so this gets the same result with maths
+   instead: given where the button sits (anchor) and which quarter of the
+   screen its centre is in, pick the edge of the button the panel grows
+   away from, and how much room that direction actually has.
+
+   PANEL is the reference dock's own DEF_W/MIN_W/MIN_H (shared_nelos_dock.js)
+   — one size, everywhere, rather than a phone shape and a desktop shape
+   fighting over which one is "right". */
+const GAP = 10;
+const PANEL = { w: 370, minW: 280, minH: 220 };
+
+function anchoredFrame(anchor) {
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const ax = anchor?.x ?? vw - 78, ay = anchor?.y ?? vh - 168;
+  const size = anchor?.size ?? 62;
+  const cx = ax + size / 2, cy = ay + size / 2;
+
+  const openLeft = cx <= vw / 2;   // icon on the left half -> panel grows rightward from it
+  const openUp = cy > vh / 2;      // icon in the bottom half -> panel grows upward from it
+
+  const width = Math.max(PANEL.minW, Math.min(PANEL.w, vw - 24));
+  const maxHeight = openUp
+    ? Math.max(PANEL.minH, ay - GAP - 12)
+    : Math.max(PANEL.minH, vh - (ay + size) - GAP - 12);
+
+  /* Always resolved to a single 'left' value, clamped inside the viewport,
+     rather than picking 'left' or 'right' the way the vertical axis picks
+     'top' or 'bottom'. The reference dock (shared_nelos_dock.js) can get
+     away with that because its fab naturally rests in a corner; this one
+     can be dragged anywhere along the width of the screen, including the
+     middle, where a 370px-wide panel aligned flush to one edge of a
+     62px icon would run off the OTHER edge of a narrow phone. Clamping
+     keeps it beside the icon everywhere that fits, and at the nearest
+     screen edge instead of off it everywhere else. */
+  const idealLeft = openLeft ? ax : ax + size - width;
+  const left = Math.min(Math.max(idealLeft, 12), Math.max(12, vw - width - 12));
+
+  const frame = { position: 'fixed', left, width, maxWidth: 'calc(100vw - 24px)', maxHeight };
+  frame[openUp ? 'bottom' : 'top'] = openUp
+    ? Math.max(12, vh - ay + GAP) : Math.max(12, ay + size + GAP);
+  return frame;
+}
 
 const PRIORITY_LABEL = { urgent: 'Urgent', high: 'High', normal: 'Normal', low: 'Low' };
 const SOURCE_LABEL = {
@@ -395,9 +430,12 @@ function Row({ c, onOpen }) {
   );
 }
 
-export default function NelosWindow({ onClose, onCount }) {
+export default function NelosWindow({ onClose, onCount, anchor }) {
   const { session } = useAuth();
-  const [wide, setWide] = useState(isWide);
+  /* Bumped on resize so the anchored frame — computed fresh from
+     window.innerWidth/innerHeight on every render — is recomputed when
+     neither the anchor nor anything else here changes, only the window. */
+  const [, forceResize] = useState(0);
   const [state, setState] = useState({ status: 'loading', rows: [], uid: null });
   const [openId, setOpenId] = useState(null);
   const [adding, setAdding] = useState(false);
@@ -419,10 +457,19 @@ export default function NelosWindow({ onClose, onCount }) {
   useEffect(() => { reload(); }, [reload]);
 
   useEffect(() => {
-    const onResize = () => setWide(isWide());
+    const onResize = () => forceResize((n) => n + 1);
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
+
+  // Escape closes it, the same as every other window on the device —
+  // there is no dark backdrop to tap any more (see the transparent
+  // click-catcher below), so the keyboard needs its own way out too.
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   const { rows, uid } = state;
   const mine = (c) => !!uid && c.assignee_id === uid;
@@ -433,21 +480,18 @@ export default function NelosWindow({ onClose, onCount }) {
   const groups = [over.length, restMine.length, restOther.length].filter(Boolean).length;
   const head = 'px-4 pt-2.5 pb-1 text-[9px] font-black uppercase tracking-widest text-slate-400';
 
-  // The two shapes, computed rather than fought over with CSS: a bottom
-  // sheet spanning the phone, or a centred window near the bottom of a
-  // wider screen — never both rules pulling at the same edge.
-  const frame = wide
-    ? { position: 'fixed', left: '50%', bottom: 24, transform: 'translateX(-50%)',
-        width: 560, maxWidth: 'calc(100vw - 32px)', maxHeight: '92vh' }
-    : { position: 'fixed', left: 0, right: 0, bottom: 0, maxHeight: '92vh' };
+  const frame = anchoredFrame(anchor);
 
   return (
     <>
-      <div onClick={onClose} className="fixed inset-0 z-[55] bg-slate-900/55 backdrop-blur-[2px]" />
+      {/* No dark backdrop — a pop-out beside the icon reads as attached to
+          it, not as a dialog that has taken over the screen; a full-screen
+          tint would say the latter. This catcher is only for a tap
+          somewhere else to close it, same as the icon itself does. */}
+      <div onClick={onClose} className="fixed inset-0 z-[55]" />
       <div
         style={{ ...frame, zIndex: 56 }}
-        className={`bg-white shadow-[0_-24px_70px_rgba(0,0,0,.35)] flex flex-col overflow-hidden ${
-          wide ? 'rounded-3xl' : 'rounded-t-3xl'}`}
+        className="bg-white rounded-2xl shadow-[0_16px_50px_rgba(0,0,0,.28)] border border-slate-200 flex flex-col overflow-hidden"
         role="dialog" aria-modal="true" aria-label="Nelos"
       >
         <div className="shrink-0 bg-white border-b border-slate-200 px-4 py-2.5 flex items-center gap-2">
