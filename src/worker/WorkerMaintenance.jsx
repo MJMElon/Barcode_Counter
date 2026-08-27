@@ -25,7 +25,9 @@ import WorkerNav from './WorkerNav.jsx';
  *   identity     the worker's name, and a permissions object built from their
  *                boundary so the module's own access checks answer correctly
  *   plotFilter   the plot half of a boundary, which a nursery list cannot say
- *   allowPhotos  off — there is no upload path for anon
+ *   (the camera is NOT passed here any more — it is a switch like every other
+ *   part of the form, and workerMaintSource forces it off because a PIN
+ *   sign-in has no upload path, which is a fact about the door not the view)
  *   nav          the worker's own bar; the FC one signs out of Supabase, and
  *                there is no Supabase session here to sign out of
  */
@@ -47,7 +49,6 @@ export default function WorkerMaintenance() {
       source={source}
       identity={{ name: worker ? worker.name : '', permissions }}
       plotFilter={plotFilter}
-      allowPhotos={false}
       nav={<WorkerNav title={t('wk.maintTitle')} back="/worker" />}
     />
   );

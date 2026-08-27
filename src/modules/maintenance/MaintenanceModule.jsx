@@ -108,9 +108,6 @@ export default function MaintenanceModule({
   /* A worker's boundary can name individual plots, which a nursery list
      cannot express. Absent means every plot in the allowed nurseries. */
   plotFilter = null,
-  /* The documents bucket takes uploads from `authenticated` only, so the
-     camera is offered to a Field Conductor and not to a worker. */
-  allowPhotos = true,
   subtitle = 'FC Portal',
   back = '/dashboard',
 }) {
@@ -147,9 +144,18 @@ export default function MaintenanceModule({
   const isAdmin   = isModuleAdmin(permissions, 'operation');
   const mayEdit   = isAdmin && canMaintain(permissions, 'edit');
   const mayExport = canMaintain(permissions, 'export');
-  /* Signing off a worker's morning. Set on the FC Scan Portal's User Access
-     under Schedule Maintenance Work; a worker's own portal never offers it,
-     because nobody verifies their own work. */
+  /* Signing off a worker's morning.
+   *
+   * TWO conditions, and they are different in kind. The tick — Setting → a
+   * person → Maintenance → Verify work done — is who the office has decided
+   * may sign. `source.setVerified` is whether signing is possible at all from
+   * this door, and the Worker Portal's source deliberately has none: there is
+   * no worker_* function to verify with, so a worker holds no button whatever
+   * anybody ticks. Nobody signs off their own morning.
+   *
+   * Which is why a record a worker saves appears in the completed list with
+   * nothing to press, and the same record in the FC Portal carries the button
+   * — one board, one list, and the difference is who is holding the phone. */
   const mayVerify = !!source.setVerified && canMaintain(permissions, 'verify');
 
   /* The functions inside Maintenance, switched on one at a time — the office
@@ -164,9 +170,14 @@ export default function MaintenanceModule({
   const fnBatches   = canMaintFn(permissions, 'batches');
   const fnWorkers   = canMaintFn(permissions, 'workers');
   const fnGps       = canMaintFn(permissions, 'gps');
-  // The camera needs both: the switch, and a door that can actually upload.
-  // A worker signed in with a PIN is `anon` and has neither.
-  const fnPhotos    = allowPhotos && canMaintFn(permissions, 'photos');
+  /* The camera, like everything else on this form, is the switch and nothing
+     else. It used to be the switch AND a prop the Worker Portal passed as
+     false, which made the two portals differ for a reason that was not on any
+     screen. A worker still gets no camera — a PIN sign-in is `anon` and the
+     documents bucket takes uploads from `authenticated` only — but that is
+     now said in ONE place, workerMaintSource.js, as a permission the worker
+     cannot have, rather than as a second hidden rule here. */
+  const fnPhotos    = canMaintFn(permissions, 'photos');
   const fnRemark    = canMaintFn(permissions, 'remark');
 
   const flash = (text) => {
