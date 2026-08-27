@@ -46,11 +46,18 @@ import { nurseryOfPlot } from './data.js';
 /**
  * Which plots are in pengambilan, and which batch of each.
  *
- * A plot is here because PALMS has it at Pengambilan. Delivery orders say how
- * much has gone; they do not decide whether the plot belongs. A plot moved
- * this morning with nothing collected yet still appears, with a balance equal
- * to what was transplanted in — which is exactly the plot somebody has been
- * sent to count. A -R plot never appears however much is collected off it.
+ * A BLOCK is here because a customer has collected from it. That is the only
+ * evidence that a batch is open for collection at all, and this screen is
+ * opened when collection is nearly done — so a batch nobody has taken a
+ * seedling from has nothing on it to judge, whatever the plot's status says.
+ *
+ * PALMS's Pengambilan status is therefore not a gate. It was, for a while,
+ * and it failed in both directions: losing the status emptied the screen
+ * while customers were still collecting, and trusting it listed every batch
+ * standing in the plot, young stock included. It is still read, but only so
+ * the diagnosis can point out a plot being collected that nobody has moved.
+ *
+ * A -R plot never appears however much is collected off it.
  *
  * One entry per plot AND batch, not per plot. A D/O collects from a named
  * batch, so a plot holding three of them is three separate blocks of ground
@@ -86,18 +93,22 @@ async function loadDeliveryOrders() {
 /**
  * Which plots PALMS says are at Pengambilan, right now.
  *
- * ONE of the two things that puts a plot on the Culling Calculator; a customer
- * collecting off it is the other, and either is enough. The status is the
- * better signal — the Field Conductor moving a plot to Pengambilan is the
- * field saying so directly, and it arrives before the first delivery order
- * does, which is how a plot becomes countable on its first day.
+ * Read for the DIAGNOSIS, not for the list. The status answers a question
+ * about a plot — is the field collecting from it — and the calculator's
+ * question is about a batch: is this block nearly empty. One does not answer
+ * the other. A plot at Pengambilan holds batches months apart in age, and
+ * the young ones have nothing to judge.
  *
- * But it must not be the ONLY signal, because it can be lost. Every activity
- * left out of a day's selection is recorded as finished, so one save from a
- * screen that had not finished syncing closed Pengambilan on an entire
- * nursery — and with the status as the sole gate, that emptied the calculator
- * while customers were still collecting. Ground being emptied is work whether
- * or not anybody remembered to tick it.
+ * It is not a gate for a second reason: it can be lost. Every activity left
+ * out of a day's PALMS selection is recorded as finished, so one save from a
+ * screen that had not finished syncing closed Pengambilan across a whole
+ * nursery. Gating on it emptied the calculator while customers were still
+ * collecting.
+ *
+ * So what it does now is report. cullDebug names a plot being collected from
+ * that nobody has moved to Pengambilan, which is a missing status worth
+ * fixing — but it is the field's problem to fix, not a reason to hide the
+ * work from the Field Conductor standing in front of it.
  *
  * Matched by NAME rather than by "the last stage in the list", because the
  * list is the office's to extend: a nursery that adds a stage after
@@ -140,52 +151,29 @@ export async function pengambilanPlots() {
 }
 
 export async function loadPlots() {
-  /* Two ways onto this screen, and either is enough: PALMS says the plot is
-     at Pengambilan, or a customer is collecting off it. Neither can be
-     required on its own — a plot moved this morning has no delivery order
-     yet, and a status can be closed by a stray save while collection carries
-     on regardless. */
-  const atPengambilan = (await pengambilanPlots()) || new Set();
-
   const dos = await loadDeliveryOrders();
   if (!dos) return [];
 
   const today = new Date().toISOString().slice(0, 10);
   const by = new Map();
 
-  /* Every batch that went INTO one of those plots is a block, whether or not
-     anything has been collected off it yet. A plot moved to Pengambilan this
-     morning has no delivery order against it and still has to be countable —
-     that is the whole point of moving it. Collections are added on top. */
-  const planted0 = await loadTransplanting();
-  planted0.forEach((t, key) => {
-    const plot = key.split('#')[0];
-    if (!atPengambilan.has(plot)) return;
-    if (isReplantPlot(plot)) return;
-    const batch = key.slice(plot.length + 1);
-    if (isOldBatch(batch)) return;
-    by.set(key, {
-      key,
-      plot,
-      batch,
-      nursery: nurseryOfPlot(plot) || '',
-      collected: 0,
-      firstDate: '',
-      lastDate: '',
-      orders: [],
-      // Which of the two signals put it here, for the diagnosis to report.
-      viaStatus: true,
-    });
-  });
+  /* A COLLECTION is what opens a block, and nothing else does.
 
+     Being collected from is the only reliable evidence that a batch is open
+     for collection at all. A plot at Pengambilan holds young stock beside
+     ready stock — B4 was collecting batches 238 and 242 while 261 sat there
+     months off being touched — so listing every batch in the plot offered the
+     Field Conductor ground with nothing on it to judge.
+
+     Nor is anything lost by waiting for the first delivery order. This
+     calculator is opened when collection is nearly DONE, to ask whether the
+     balance is over ten percent. A batch nobody has taken a seedling from is
+     not nearly done; it has not started. */
   for (const d of dos) {
     if (isCancelled(d)) continue;
     for (const line of collectionLines(d)) {
       if (isReplantPlot(line.plot)) continue;
       if (isOldBatch(line.batch)) continue;
-      /* A collection IS a reason to list the plot, whatever the status says.
-         Seedlings leaving on a delivery order is the ground being emptied,
-         and that is the work this screen exists for. */
       const key = `${line.plot}#${line.batch}`;
       if (!by.has(key)) {
         by.set(key, {
@@ -201,7 +189,6 @@ export async function loadPlots() {
              has no answer from the number alone — least of all when no single
              order carries it, because it is their sum. */
           orders: [],
-          viaStatus: atPengambilan.has(line.plot),
         });
       }
       const e = by.get(key);
@@ -221,8 +208,7 @@ export async function loadPlots() {
   /* What went in, and what has finished. Both are matched on the same
      plot-and-batch key the collections were gathered under, so a figure can
      only ever meet the block it actually belongs to. */
-  const planted = planted0;
-  const finished = await loadFinished();
+  const [planted, finished] = await Promise.all([loadTransplanting(), loadFinished()]);
   by.forEach((e) => {
     const t = planted.get(e.key);
     e.transplant = t ? t.qty : 0;
@@ -368,8 +354,7 @@ export async function plantedNear(plot = '', batch = '') {
    diagnosis rather than inside it so the wording of each answer sits next to
    the rule it reports on. */
 function whyNot(d, p, b, q, planted, finished, atPengambilan) {
-  /* The status is no longer a gate on a collection — a delivery order lists
-     the plot on its own — so it is reported rather than refused. Saying
+  /* The status is not a gate, so it is reported rather than refused. Saying
      LISTED for a line the list does not carry is the one thing a diagnosis
      must never do, and so is the reverse. */
   if (isCancelled(d)) return 'the order is cancelled';
@@ -382,7 +367,7 @@ function whyNot(d, p, b, q, planted, finished, atPengambilan) {
   if (!planted.has(key)) return `the batch report has no batch ${b} transplanted into ${p}`;
   if (finished.has(key)) return 'the 3rd culling map qty is in — this block is done';
   return atPengambilan && !atPengambilan.has(p)
-    ? 'LISTED (on the collection — PALMS does not have this plot at Pengambilan)'
+    ? 'LISTED — but PALMS does not have this plot at Pengambilan, which is a missing status'
     : 'LISTED';
 }
 
