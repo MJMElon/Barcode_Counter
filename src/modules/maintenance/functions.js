@@ -19,7 +19,7 @@
  */
 
 import { canScan } from '../../lib/access.js';
-import { isVetoed } from '../../lib/portalSettings.js';
+import { isCompanyOn, isVetoed } from '../../lib/portalSettings.js';
 
 /**
  * What each switch means when nobody has said.
@@ -83,12 +83,24 @@ export const MAINT_FUNCTIONS = [
  */
 export function canMaintFn(permissions, key) {
   if (!canScan(permissions, 'maintenance', 'view')) return false;
-  // The company's master switch, which can only ever say no. canScan checks it
-  // too, but only for the page and the action it was asked about — these keys
-  // never go through it, so the check has to be here as well.
+
+  /* The company's switch, in the only order that makes all three layers say
+     what they look like they say:
+
+       1. switched OFF by the company   → off, whatever anybody else says
+       2. this person has an answer     → that answer
+       3. switched ON by the company    → on, for anybody never asked
+       4. nobody has said anything      → the documented default
+
+     Two and three that way round is the whole point: a master switch decides
+     for the people nobody has decided about, and does not overrule the ones
+     somebody has. */
   if (isVetoed(permissions, 'maintenance', key)) return false;
+
   const acts = (permissions && permissions.scan_actions && permissions.scan_actions.maintenance) || {};
   const v = acts[key];
-  if (v === undefined) return MAINT_FUNCTION_DEFAULT[key] === true;
-  return !!v;
+  if (v !== undefined) return !!v;
+
+  if (isCompanyOn(permissions, 'maintenance', key)) return true;
+  return MAINT_FUNCTION_DEFAULT[key] === true;
 }

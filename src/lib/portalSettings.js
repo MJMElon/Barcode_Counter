@@ -59,6 +59,24 @@ export function functionVetoed(company, moduleKey, fnKey) {
 export const VETO_KEY = '_companyVeto';
 
 /**
+ * And where an explicit ON from the company is kept.
+ *
+ * A module switch stays a pure veto — switching Maintenance on hands the
+ * module to nobody. But a FUNCTION switched on is different, and has to be,
+ * or the panel lies about itself: GPS is the one function that defaults to
+ * off, so a veto-only master switch means ticking "GPS track record" on the
+ * company panel does precisely nothing, for ever, until somebody also ticks
+ * it on every person's row. A switch that cannot switch anything on is not a
+ * switch.
+ *
+ * So an explicit ON raises the DEFAULT for everybody: a person who has never
+ * been asked about GPS now gets it. It is still not an override — a person
+ * the office has explicitly turned it off for stays off. Off beats on; this
+ * only decides what happens when nobody has said.
+ */
+export const ON_KEY = '_companyOn';
+
+/**
  * A person's permissions, with the company's vetoes attached.
  *
  * Returns a NEW object; the original is untouched, because the same
@@ -89,24 +107,54 @@ export function applyCompanySwitches(permissions, company) {
   if (!company || (!company.modules && !company.actions)) return p;
 
   const veto = {};
+  const on = {};
 
   Object.keys(MODULE_TO_PAGE).forEach((moduleKey) => {
     const page = MODULE_TO_PAGE[moduleKey];
     const acts = ((company.actions || {})[moduleKey]) || {};
     const vetoedFns = Object.keys(acts).filter((k) => acts[k] === false);
+    const onFns     = Object.keys(acts).filter((k) => acts[k] === true);
     const vetoedModule = moduleVetoed(company, moduleKey);
-    if (!vetoedModule && !vetoedFns.length) return;
 
-    const entry = {};
-    // The page itself off closes everything inside it; canScan reads `view`
-    // that way already, so one flag says the whole thing.
-    if (vetoedModule) entry.view = true;
-    vetoedFns.forEach((k) => { entry[k] = true; });
-    veto[page] = entry;
+    if (vetoedModule || vetoedFns.length) {
+      const entry = {};
+      // The page itself off closes everything inside it; canScan reads `view`
+      // that way already, so one flag says the whole thing.
+      if (vetoedModule) entry.view = true;
+      vetoedFns.forEach((k) => { entry[k] = true; });
+      veto[page] = entry;
+    }
+
+    /* An explicit ON, which raises the default rather than granting anything.
+       Only for FUNCTIONS: a module switched on stays a no-op, because handing
+       somebody a whole module they were never given is not something a
+       company-wide switch should be able to do by accident. */
+    if (onFns.length) {
+      on[page] = {};
+      onFns.forEach((k) => { on[page][k] = true; });
+    }
   });
 
-  if (!Object.keys(veto).length) return p;
-  return { ...p, [VETO_KEY]: veto };
+  const hasVeto = Object.keys(veto).length;
+  const hasOn = Object.keys(on).length;
+  if (!hasVeto && !hasOn) return p;
+
+  const next = { ...p };
+  if (hasVeto) next[VETO_KEY] = veto;
+  if (hasOn) next[ON_KEY] = on;
+  return next;
+}
+
+/**
+ * Has the company switched this function on for everybody?
+ *
+ * Only meaningful where the person has no answer of their own — see
+ * canMaintFn, which asks in that order.
+ */
+export function isCompanyOn(permissions, page, action) {
+  const o = (permissions || {})[ON_KEY];
+  const entry = o && o[page];
+  return !!(entry && entry[action]);
 }
 
 /**
