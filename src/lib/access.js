@@ -51,6 +51,14 @@ export function allowedNurseries(permissions, page) {
     }
   }
 
+  /* The FC Portal's own nursery list, from the five-door Setting screen.
+     A page with no list of its own follows the portal it is in — that is the
+     hierarchy those doors are for, and it is why one list on the portal
+     replaced five identical copies on the pages. Absent means every nursery,
+     exactly as it did before this existed. */
+  const area = p.scan_area_nurseries;
+  if (area && Array.isArray(area.fc)) return area.fc;
+
   const legacy = p.plot_status_nurseries;
   return Array.isArray(legacy) ? legacy : null;
 }
