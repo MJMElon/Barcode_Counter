@@ -29,6 +29,23 @@ import NelosNewCase from './NelosNewCase.jsx';
 
 const MODULE = 'scan';                 // this portal's key in nelos_modules
 
+/* Sheet on a phone, a real window on a wider screen — the same split
+   PalmsWindow uses, and the same 640px line Tailwind's own 'sm:' breakpoint
+   draws, so the two float-dock windows change shape at the same width.
+
+   Done in JS rather than with 'sm:' utility classes overriding an inline
+   style: an inline style ALWAYS wins over a class, responsive or not, so
+   the previous version set left:0/right:0/bottom:0 inline and tried to
+   override them with sm:left-1/2/sm:right-auto/sm:bottom-6 classes that
+   could never take effect. With left pinned at 0, right pinned at 0, and a
+   width now fixed by sm:w-[560px] (which — having no inline competitor —
+   DID apply), the box was over-constrained; per the CSS box-positioning
+   rules that drops 'left' and keeps 'right', which is what put a supposedly
+   centred dialog flush against the right edge and the very bottom of a
+   desktop screen instead of centred a little above it. */
+const WIDE = 640;
+const isWide = () => window.innerWidth >= WIDE;
+
 const PRIORITY_LABEL = { urgent: 'Urgent', high: 'High', normal: 'Normal', low: 'Low' };
 const SOURCE_LABEL = {
   operation: 'Seedling Stock',
@@ -379,6 +396,7 @@ function Row({ c, onOpen }) {
 
 export default function NelosWindow({ onClose, onCount }) {
   const { session } = useAuth();
+  const [wide, setWide] = useState(isWide);
   const [state, setState] = useState({ status: 'loading', rows: [], uid: null });
   const [openId, setOpenId] = useState(null);
   const [adding, setAdding] = useState(false);
@@ -399,6 +417,12 @@ export default function NelosWindow({ onClose, onCount }) {
 
   useEffect(() => { reload(); }, [reload]);
 
+  useEffect(() => {
+    const onResize = () => setWide(isWide());
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
   const { rows, uid } = state;
   const mine = (c) => !!uid && c.assignee_id === uid;
   const over = rows.filter(isOverdue);
@@ -408,12 +432,21 @@ export default function NelosWindow({ onClose, onCount }) {
   const groups = [over.length, restMine.length, restOther.length].filter(Boolean).length;
   const head = 'px-4 pt-2.5 pb-1 text-[9px] font-black uppercase tracking-widest text-slate-400';
 
+  // The two shapes, computed rather than fought over with CSS: a bottom
+  // sheet spanning the phone, or a centred window near the bottom of a
+  // wider screen — never both rules pulling at the same edge.
+  const frame = wide
+    ? { position: 'fixed', left: '50%', bottom: 24, transform: 'translateX(-50%)',
+        width: 560, maxWidth: 'calc(100vw - 32px)', maxHeight: '92vh' }
+    : { position: 'fixed', left: 0, right: 0, bottom: 0, maxHeight: '92vh' };
+
   return (
     <>
       <div onClick={onClose} className="fixed inset-0 z-[55] bg-slate-900/55 backdrop-blur-[2px]" />
       <div
-        style={{ position: 'fixed', left: 0, right: 0, bottom: 0, maxHeight: '92vh', zIndex: 56 }}
-        className="bg-white rounded-t-3xl shadow-[0_-24px_70px_rgba(0,0,0,.35)] flex flex-col overflow-hidden sm:left-1/2 sm:right-auto sm:-translate-x-1/2 sm:w-[560px] sm:bottom-6 sm:rounded-3xl"
+        style={{ ...frame, zIndex: 56 }}
+        className={`bg-white shadow-[0_-24px_70px_rgba(0,0,0,.35)] flex flex-col overflow-hidden ${
+          wide ? 'rounded-3xl' : 'rounded-t-3xl'}`}
         role="dialog" aria-modal="true" aria-label="Nelos"
       >
         <div className="shrink-0 bg-white border-b border-slate-200 px-4 py-2.5 flex items-center gap-2">
