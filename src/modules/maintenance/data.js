@@ -41,6 +41,13 @@ function isMissingTable(error) {
   return /relation .* does not exist|Could not find the table|schema cache/i.test(m);
 }
 
+/** Told no, as opposed to not answered — a setup problem, not a wobble. */
+function isPermissionDenied(error) {
+  const m = String((error && error.message) || '');
+  const code = String((error && error.code) || '');
+  return code === '42501' || /permission denied|not authori[sz]ed|insufficient privilege/i.test(m);
+}
+
 export async function loadMaintenanceData() {
   const [plotsRes, recRes] = await Promise.all([
     supabase.from('shared_plots').select('nursery_name, plot_name').order('plot_name'),
@@ -317,10 +324,31 @@ export async function loadPlotBatches() {
     .select('plot_key, plot_name, batch_name, qty')
     .order('plot_key', { ascending: true }));
   if (!view.error) return mapFromBalances(view.data || []);
-  // Any trouble with the view at all — not created yet, not granted, renamed —
-  // falls back to the long way rather than leaving a Field Conductor standing
-  // in a plot with no batches to tick. Same figures, just more of them moved.
-  console.warn('[maintenance] plot balance view unavailable, reading the ledger:',
+
+  /* The long way round is for a view that is NOT THERE — never created, not
+     granted, renamed. It is emphatically NOT for a view that merely failed to
+     answer, and it used to be used for both.
+
+     That mattered, because of when it fires. A database under strain is
+     exactly when the view read fails, and the old rule answered a failure by
+     paging the ENTIRE inventory ledger — tens of thousands of rows, a
+     thousand at a time — from every phone that opened Maintenance. So the
+     moment the database started struggling, every Field Conductor's phone
+     began doing the single most expensive thing this module knows how to do.
+     A wobble became a stampede, and the stampede kept the wobble going.
+
+     A missing view is a permanent condition and a one-off cost, and still
+     takes the long way. A failure is transient and is raised: the caller
+     already draws a board with no batches, which is a form a conductor can
+     still work with — and the read is retried next time it is opened rather
+     than a hundred times in the same minute. */
+  if (!isMissingTable(view.error) && !isPermissionDenied(view.error)) {
+    console.warn('[maintenance] plot balances could not be read, and the ledger is ' +
+      'not a substitute for a database that is already struggling:', view.error.message);
+    throw view.error;
+  }
+
+  console.warn('[maintenance] plot balance view is not there, reading the ledger:',
     view.error.message);
   return loadPlotBatchesFromLedger();
 }
