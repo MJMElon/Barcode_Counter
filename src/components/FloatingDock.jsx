@@ -77,6 +77,25 @@ function NelosMark() {
   );
 }
 
+/* The trigger's own face -- neither module's. It used to wear the train,
+   which is PALMS's engine and stays there, in the fan, as PALMS's own
+   button below. What opens the fan belongs to both, so it wears a coin
+   instead: a sprout stamped into it, the one thing PALMS and Nelos are
+   both actually about. The coin's colour and shine are a CSS class
+   (.dock-coin / .dock-coin-motion, index.css) rather than styled here, so
+   they can be turned off while the button is being dragged without
+   fighting the drag's own inline transform. */
+function CoinFace() {
+  return (
+    <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+      <path d="M12 20c-2.8 0-4.6-2-4.6-4.3 0-3.6 3.1-6.1 4.6-9.7 1.5 3.6 4.6 6.1 4.6 9.7 0 2.3-1.8 4.3-4.6 4.3z"
+            fill="#78350f" opacity=".8" />
+      <path d="M12 17.4c-1 0-3-1.6-1-4.4" stroke="#fef3c7" strokeWidth="1.1"
+            fill="none" strokeLinecap="round" opacity=".8" />
+    </svg>
+  );
+}
+
 export default function FloatingDock() {
   const { session, allowed, permissions } = useAuth();
   const { t } = useLang();
@@ -291,18 +310,19 @@ export default function FloatingDock() {
           transition: dragging ? 'none' : 'box-shadow .15s, transform .15s',
           transform: dragging ? 'scale(1.06)' : 'none',
         }}
-        className={`grid place-items-center rounded-full border-2 bg-white shadow-[0_8px_24px_rgba(0,0,0,.22)] select-none ${
-          total ? 'border-slate-300' : 'border-teal-500'
+        className={`grid place-items-center rounded-full border-2 shadow-[0_8px_24px_rgba(0,0,0,.22)] select-none ${
+          fan
+            ? 'bg-white border-slate-300'
+            : `dock-coin ${dragging ? '' : 'dock-coin-motion'}`
         }`}
       >
-        {/* Closed, it keeps the train: that is the face this button has always
-            had, and the round is still the first job of the day. Fanned open
-            it becomes a cross — the train is already in the fan, and the same
-            engine twice, one above the other, reads as two PALMS rather than
-            "close this". */}
+        {/* Closed, it is a coin — neither module's, which the train was.
+            Fanned open it becomes a cross: the train is already in the fan
+            as PALMS's own button, and the same engine twice, one above the
+            other, would read as two PALMS rather than "close this". */}
         {fan
           ? <span className="text-[26px] leading-none font-black text-slate-500">×</span>
-          : <Train steaming={!total} />}
+          : <CoinFace />}
 
         {!fan && total > 0 && (
           <span className="absolute -top-1 -right-1 min-w-[22px] h-[22px] px-1 grid place-items-center rounded-full bg-rose-600 text-white text-[11px] font-black tabular-nums border-2 border-white">

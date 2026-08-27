@@ -142,10 +142,65 @@ body {
 }
 .btn-open:hover { background: #10b981; color: white; border-color: #10b981; }
 
+/* ── The float dock's trigger, as a coin ──
+   The train belongs to PALMS — it is the engine that keeps the round's
+   progress, and stays in the fan as PALMS's own button. The trigger that
+   opens the fan itself is neither module's, so it wears no module's icon:
+   a coin instead, the way a Mario coin sits waiting for you to reach it —
+   a rim, a shine that sweeps across it, and every few seconds a small hop.
+
+   A single cycle carries both: the hop happens first, the shine follows
+   once it lands, then it holds still until the cycle comes back around.
+   Holding still most of the time is the point — a button that never stops
+   moving stops being noticed at all. */
+.dock-coin {
+  background: radial-gradient(circle at 32% 28%, #fef3c7, #fbbf24 46%, #b45309 100%);
+  border-color: #92400e !important;
+}
+/* The hop and the shine are their own class, apart from the coin's colours,
+   so a coin being dragged can keep looking like a coin without its
+   animated transform fighting the drag's own inline transform. */
+.dock-coin-motion {
+  animation: dock-coin-hop 4.2s cubic-bezier(.34,1.4,.64,1) infinite;
+}
+.dock-coin-motion::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  pointer-events: none;
+  background: linear-gradient(
+    115deg, transparent 0%, transparent 42%,
+    rgba(255,255,255,.85) 50%, transparent 58%, transparent 100%
+  );
+  background-size: 260% 260%;
+  background-position: -140% -140%;
+  animation: dock-coin-shine 4.2s ease-in-out infinite;
+}
+
+@keyframes dock-coin-hop {
+  0%, 55%, 100% { transform: translateY(0); }
+  8%  { transform: translateY(-9px); }
+  16% { transform: translateY(0); }
+  22% { transform: translateY(-4px); }
+  28% { transform: translateY(0); }
+}
+@keyframes dock-coin-shine {
+  0%, 20% { background-position: -140% -140%; }
+  38%, 100% { background-position: 140% 140%; }
+}
+
 /* ── Motion ──
-   Anyone who has asked their device to reduce motion gets a still train. */
+   Anyone who has asked their device to reduce motion gets a still train,
+   and a coin that shines without hopping around the screen. */
 @media (prefers-reduced-motion: reduce) {
   .animate-puff {
+    animation: none !important;
+  }
+  .dock-coin-motion {
+    animation: none !important;
+  }
+  .dock-coin-motion::before {
     animation: none !important;
   }
 }
