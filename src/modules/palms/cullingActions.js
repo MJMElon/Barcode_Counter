@@ -52,7 +52,10 @@ export const CULLING_ACTIONS = [
     titleKey: 'cull.actRecheck',
     caseTitle: (plot) => `Request auditor to plot "${plot}" for high culling rate audit`,
     category: 'From Culling Calculator - Request Final Check For Pokok Inang',
-    priority: 'high',
+    // Normal, like everything else. Nelos does not show a priority any
+    // more, so raising at 'high' only wrote a word nobody reads — and when
+    // every case a rule raises is high, high is not a priority.
+    priority: 'normal',
     tone: 'warn',
   },
 ];

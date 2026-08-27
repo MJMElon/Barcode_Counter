@@ -64,10 +64,19 @@ export async function openCasePlots({ source = 'scan', category } = {}) {
 
 /**
  * raiseCase({ title, description, category, priority, source, sourceRef,
- *             nursery, plot, batch, by, byId, dedupe })
+ *             nursery, plot, batch, by, byId, dedupe,
+ *             assignedModule, assigneeId, assigneeName, dueDate, photoUrl })
  *
  * Returns { data, error, deduped }. `data` is the case row, so the caller can
  * quote its case_no back to the person who raised it.
+ *
+ * The last five are what a person filling in the form can say and a screen
+ * raising a case by itself cannot. They are all optional and all omitted
+ * from the row when absent — an automatic raise (CullingTab, the batch
+ * report) sends none of them and falls through nelos_route_case() exactly
+ * as it always has. Naming a destination overrides that routing, which is
+ * the trigger's own rule: "an explicit destination wins: routing is the
+ * default, not a rule."
  */
 export async function raiseCase(opts) {
   if (!opts || !opts.title) return { data: null, error: new Error('Nelos: title is required') };
@@ -104,6 +113,18 @@ export async function raiseCase(opts) {
       raised_by: opts.by || null,
       raised_by_id: opts.byId || null,
     };
+
+    /* Only ever SENT when set. assigned_module absent lets the routing
+       trigger decide, and photo_url is a column migration_nelos_case_tools
+       added later — a database without it still takes the insert as long as
+       nobody names it. */
+    if (opts.assignedModule) row.assigned_module = opts.assignedModule;
+    if (opts.assigneeId) {
+      row.assignee_id = opts.assigneeId;
+      row.assignee_name = opts.assigneeName || null;
+    }
+    if (opts.dueDate) row.due_date = opts.dueDate;
+    if (opts.photoUrl) row.photo_url = opts.photoUrl;
 
     const { data, error } = await supabase.from('nelos_cases').insert([row]).select().single();
     if (error) return { data: null, error };

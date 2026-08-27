@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { fmtNum, fmtPct } from './cullingData.js';
 import { CULL_LIMIT, actionFor, caseBody } from './cullingActions.js';
 // Every figure on this screen comes from here.
-import { figuresBroken, figuresFor, hasFigures, loadPlots, rateFor } from './cullingSource.js';
+import {
+  diagnose, figuresBroken, figuresFor, hasFigures, loadPlots, plantedNear, rateFor,
+} from './cullingSource.js';
 import { prettyD, todayStr } from './data.js';
 import { openCasePlots, raiseCase } from '../../lib/nelos.js';
 
@@ -28,9 +30,12 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
   const [tick, setTick] = useState(0);
   const refresh = () => setTick((n) => n + 1);
 
-  /* The plots to list, and the figures behind each. Both come from
-     cullingSource.js, which is empty — so the list is empty and the screen
-     says so rather than showing invented numbers. */
+  /* The plots to list, and the figures behind each — both from
+     cullingSource.js, which only ever hands over blocks it has figures for.
+     A collection against a batch that was never transplanted into that plot
+     is left out at the source, so there is no "cannot say" row to render:
+     every plot here has a transplanted-in figure, a collected figure and a
+     balance between them. */
   const [rows, setRows] = useState([]);
   const plots = useMemo(
     () =>
@@ -40,7 +45,7 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
            delivery orders replaced the old plot source — a BNN-only Field
            Conductor was being offered UNN blocks. */
         .filter((r) => !r.nursery || !nurseryKeys?.length || nurseryKeys.includes(r.nursery))
-        .map((r) => ({ ...r, ...(figuresFor(r) || { transplant: 0, balance: 0 }) })),
+        .map((r) => ({ ...r, ...figuresFor(r) })),
     [rows, tick, nurseryKeys]
   );
 
@@ -59,6 +64,7 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
   const [picking, setPicking] = useState(false);
   const [terms, setTerms] = useState([]);      // the counts already entered
   const [typing, setTyping] = useState('');    // the one being keyed now
+  const [showOrders, setShowOrders] = useState(false);
   const [busy, setBusy] = useState(false);
 
   // Best effort: a read that fails leaves the screen empty rather than broken.
@@ -66,22 +72,103 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
     let live = true;
     loadPlots().then((p) => { if (live) { setRows(p || []); refresh(); } }, () => {});
     openCasePlots({ source: 'scan' }).then((s) => { if (live) setRaised(s); }, () => {});
+    /* A plot that ought to be on this list and is not has been stopped by one
+       of the rules behind it, and the screen cannot say which — it simply
+       does not have the row. So the answer is put within reach: with the
+       calculator open, cullDebug('B4') or cullDebug('U17', '237') in the
+       browser console prints every collection line and the rule it fell at. */
+    window.cullDebug = async (plot, batch) => {
+      const lines = await diagnose(plot, batch);
+      console.log('%cdelivery order lines', 'font-weight:bold');
+      console.table(lines);
+      /* Which orders make up the figure on screen. "N15 batch 244 collected
+         186 — from which D/O?" is asked of a number, and the answer is the
+         orders that were counted into it, named and totalled, so the screen
+         and the paperwork can be squared without adding a column up by
+         hand. */
+      const counted = lines.filter((l) => l.why === 'LISTED');
+      if (counted.length) {
+        const total = counted.reduce((n, l) => n + Math.abs(Number(l.qty || 0)), 0);
+        console.log(
+          `%ccollected ${total.toLocaleString()} on ${counted.length} order` +
+            `${counted.length === 1 ? '' : 's'}: ` +
+            counted.map((l) => `${l.do || '(no number)'} ${l.qty}`).join(', '),
+          'font-weight:bold'
+        );
+      }
+      if (plot) {
+        console.log('%cwhat the batch report holds', 'font-weight:bold');
+        console.table(await plantedNear(plot, batch));
+      }
+      return lines;
+    };
     return () => { live = false; };
   }, []);
 
-  const plotRow = plots.find((p) => p.key === plotId) || plots[0] || null;
+  /* One row per PLOT, with its batches underneath.
+     
+     The list was one row per plot AND batch, which is right for the figures —
+     a batch is the block of ground actually being emptied — but wrong for
+     choosing: a Field Conductor is sent to a PLOT, and being asked which of
+     B4's three batches he means before he has stood in it is the wrong
+     question in the wrong order. So the plot is the choice, and the batch is
+     a second, optional one made beside it.
+
+     ALL sums the batches. That is the honest whole-plot figure: transplanted
+     in is what went in across all of them, collected is what has come off,
+     and the balance is the difference — the same arithmetic one batch gets,
+     over more ground. */
+  const plotList = useMemo(() => {
+    const by = new Map();
+    plots.forEach((b) => {
+      if (!by.has(b.plot)) {
+        by.set(b.plot, {
+          key: b.plot, plot: b.plot, batch: '', nursery: b.nursery,
+          transplant: 0, collected: 0, balance: 0,
+          firstDate: '', lastDate: '', orders: [], blocks: [],
+        });
+      }
+      const e = by.get(b.plot);
+      e.blocks.push(b);
+      e.transplant += b.transplant || 0;
+      e.collected += b.collected || 0;
+      e.balance += b.balance || 0;
+      e.orders = e.orders.concat(b.orders || []);
+      if (b.firstDate && (!e.firstDate || b.firstDate < e.firstDate)) e.firstDate = b.firstDate;
+      if (b.lastDate && b.lastDate > e.lastDate) e.lastDate = b.lastDate;
+      // Collection on the plot opened when its FIRST batch opened.
+      e.daysCollecting = Math.max(e.daysCollecting || 0, b.daysCollecting || 0);
+    });
+    by.forEach((e) => {
+      e.orders.sort((a, b2) => String(a.on).localeCompare(String(b2.on))
+        || String(a.do).localeCompare(String(b2.do)));
+      e.blocks.sort((a, b2) => String(a.batch).localeCompare(String(b2.batch)));
+    });
+    return [...by.values()];
+  }, [plots]);
+
+  const plotRow = plotList.find((p) => p.key === plotId) || plotList[0] || null;
   useEffect(() => { if (!plotId && plotRow) setPlotId(plotRow.key); }, [plotRow, plotId]);
+
+  /* Which batch of it, or ALL. Reset whenever the plot changes: a batch
+     number means nothing on a different plot. */
+  const [batchId, setBatchId] = useState('ALL');
+  useEffect(() => { setBatchId('ALL'); }, [plotId]);
+  const batches = plotRow ? plotRow.blocks : [];
+  const picked = batchId === 'ALL' ? null : batches.find((b) => b.batch === batchId) || null;
   /* A count belongs to the block it was walked in, so moving to another one
      clears it rather than quietly re-attributing it. */
-  useEffect(() => { setTerms([]); setTyping(''); }, [plotId]);
+  useEffect(() => { setTerms([]); setTyping(''); setShowOrders(false); }, [plotId, batchId]);
 
   /* The row the whole screen works from — one object, so the rate, the action
-     and the case cannot read different figures. It is already one block: a
-     plot and a batch, chosen as a pair. */
-  const row = plotRow;
+     and the case cannot read different figures. Either the plot as a whole or
+     the one batch chosen beside its name; nothing downstream needs to know
+     which, because both carry the same fields. */
+  const row = picked || plotRow;
 
   const known = hasFigures(row);
   const broken = figuresBroken(row);
+  const orders = row?.orders || [];
   const inang = terms.reduce((a, b) => a + b, 0) + (typing === '' ? 0 : Number(typing));
   const rateNow = rateFor({ balance: row?.balance, transplant: row?.transplant, inang: 0 });
   const rateAfter = rateFor({ balance: row?.balance, transplant: row?.transplant, inang });
@@ -117,9 +204,16 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
       description: caseBody({
         t, plot: row.plot, nursery: row.nursery, balance: row.balance,
         inang, rate: rateAfter, terms, by: staffName, date: todayStr(),
-        // Which block of the plot was walked. Without it the auditor is sent
-        // to a plot and left to work out which part of it was counted.
-        batch: row.batch,
+        /* Which block of the plot was walked. Without it the auditor is sent
+           to a plot and left to work out which part of it was counted — and
+           an ALL count has to SAY it covered the whole plot, naming the
+           batches, or a blank line reads as "we forgot to write it down". */
+        batch: picked
+          ? picked.batch
+          : (batches.length > 1
+              ? t('cull.allBatchesOf', { n: batches.length }) + ' — ' +
+                batches.map((b) => b.batch).join(', ')
+              : (batches[0] && batches[0].batch) || ''),
       }),
       category: action.category,
       priority: action.priority,
@@ -154,23 +248,43 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
             counting. Apple puts the clock here; the plot is what this
             calculator is always about, so it takes that place. */}
         <div className="flex items-center justify-between px-2 pt-1">
-          <button
-            onClick={() => setPicking(true)}
-            className="flex items-center gap-1.5 text-white font-black text-[15px] cursor-pointer"
-          >
-            {row ? row.plot : '—'}
-            {row && row.batch && (
-              <span className="font-bold text-slate-400 text-[11px] tabular-nums">{row.batch}</span>
+          <div className="flex items-center gap-2 min-w-0">
+            <button
+              onClick={() => setPicking(true)}
+              className="flex items-center gap-1.5 text-white font-black text-[15px] cursor-pointer"
+            >
+              {plotRow ? plotRow.plot : '—'}
+              <span className="text-[10px] text-slate-500">▼</span>
+            </button>
+            {/* Which batch, beside the plot rather than folded into choosing
+                it. Only when there is more than one: with a single batch ALL
+                and that batch are the same figures, and a dropdown offering
+                one real answer is furniture. */}
+            {batches.length > 1 && (
+              <select
+                value={batchId}
+                onChange={(e) => setBatchId(e.target.value)}
+                className="bg-[#1a1a1f] border border-[#2a2a33] text-slate-200 font-bold text-[11px]
+                           rounded-lg px-2 py-1 tabular-nums cursor-pointer outline-none max-w-[130px]"
+                aria-label={t('cull.batch')}
+              >
+                <option value="ALL">{t('cull.allBatches')}</option>
+                {batches.map((b) => (
+                  <option key={b.batch} value={b.batch}>{b.batch}</option>
+                ))}
+              </select>
             )}
-            <span className="text-[10px] text-slate-500">▼</span>
-          </button>
+            {batches.length === 1 && batches[0].batch && (
+              <span className="font-bold text-slate-400 text-[11px] tabular-nums">{batches[0].batch}</span>
+            )}
+          </div>
           <div className="text-[13px] font-black tabular-nums">
             <span className="text-slate-500 mr-1">{t('cull.cullShort')} :</span>
             <span className={
               broken ? 'text-amber-400'
                 : known && rateNow > CULL_LIMIT ? 'text-rose-400' : 'text-emerald-400'
             }>
-              {known ? fmtPct(rateNow) : broken ? t('cull.checkStock') : '—'}
+              {known ? fmtPct(rateNow) : t('cull.checkStock')}
             </span>
           </div>
         </div>
@@ -187,7 +301,7 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
           <div className={`text-[28px] font-light tabular-nums leading-tight ${
             broken ? 'text-amber-400' : 'text-slate-300'
           }`}>
-            {known || broken ? fmtNum(row.balance) : '—'}
+            {fmtNum(row.balance)}
           </div>
           {/* Below zero means the stock ledger for this plot does not add up:
               more has been culled and sold off it than was ever transplanted
@@ -203,7 +317,7 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
           {/* The balance in full, so nobody has to work out where the rest
               went: what the Batch Report says went in, less what the delivery
               orders have taken out. */}
-          {row && row.transplant > 0 && (
+          {row && (
             <div className="text-[10px] font-bold text-slate-500 tabular-nums leading-snug pt-1 space-y-0.5">
               <div className="flex justify-between gap-3">
                 <span>
@@ -214,10 +328,38 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
                 </span>
                 <span className="text-slate-400">{fmtNum(row.transplant)}</span>
               </div>
-              <div className="flex justify-between gap-3">
-                <span>{t('cull.collected')}</span>
+              {/* Collected is a SUM. A block emptied over four delivery
+                  orders shows one figure, and looking for an order carrying
+                  it finds nothing, because no single one does — so the number
+                  opens onto the orders it is made of. */}
+              <button
+                onClick={() => setShowOrders((v) => !v)}
+                className="w-full flex justify-between gap-3 cursor-pointer hover:text-slate-400"
+              >
+                <span>
+                  {t('cull.collected')}
+                  {orders.length > 1 && (
+                    <span className="text-slate-600 ml-1">
+                      ×{orders.length} {showOrders ? '▴' : '▾'}
+                    </span>
+                  )}
+                </span>
                 <span className="text-slate-400">{fmtNum(row.collected || 0)}</span>
-              </div>
+              </button>
+              {showOrders && (
+                <div className="pt-1 space-y-0.5 border-t border-[#1c1c1f] mt-1">
+                  {orders.map((o, i) => (
+                    <div key={`${o.do}-${o.on}-${i}`} className="flex justify-between gap-3">
+                      <span className="text-slate-600 truncate">
+                        {o.do || '—'}
+                        {o.on && <span className="ml-1.5">{prettyD(o.on)}</span>}
+                      </span>
+                      <span className="text-slate-500">{fmtNum(o.qty)}</span>
+                    </div>
+                  ))}
+                  {!orders.length && <div className="text-slate-600">—</div>}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -276,7 +418,7 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
 
       {picking && (
         <PlotPicker
-          plots={plots}
+          plots={plotList}
           current={plotId}
           raised={raised}
           t={t}
@@ -322,9 +464,15 @@ function Keypad({ onPress }) {
   );
 }
 
-/* Which plot. Every plot at Pengambilan that this person may see, with the
-   rate it stands at, so the choice is made on the figures rather than by
-   remembering plot numbers. */
+/* Which plot. Every block a customer is COLLECTING from that this person may
+   see, with the rate it stands at, so the choice is made on the figures
+   rather than by remembering plot numbers.
+
+   Not "every plot at Pengambilan" — that is what this said, and it stopped
+   being true when cullingSource.js moved the list onto the delivery orders.
+   A plot is here because a D/O collects from it, whatever PALMS says its
+   stage is; the two disagreeing is a real mismatch to chase in the nursery,
+   not something this screen resolves. */
 function PlotPicker({ plots, current, raised, t, onPick, onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
@@ -337,7 +485,6 @@ function PlotPicker({ plots, current, raised, t, onPick, onClose }) {
         </div>
         <div className="space-y-1.5">
           {plots.map((p) => {
-            const known = hasFigures(p);
             const broken = figuresBroken(p);
             const rate = rateFor({ balance: p.balance, transplant: p.transplant, inang: 0 });
             return (
@@ -353,9 +500,17 @@ function PlotPicker({ plots, current, raised, t, onPick, onClose }) {
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
                     <span className="font-black text-slate-100 text-[14px]">{p.plot}</span>
-                    {/* The batch, because the plot alone no longer says which
-                        block this row is. */}
-                    <span className="font-bold text-slate-400 text-[11px] tabular-nums">{p.batch}</span>
+                    {/* How many batches are standing in it, since the row is
+                        the whole plot now and its figures are their sum. The
+                        batch itself is chosen after, beside the plot name. */}
+                    {p.blocks && p.blocks.length > 1 && (
+                      <span className="font-bold text-slate-400 text-[11px] tabular-nums">
+                        {p.blocks.length} {t('cull.batches')}
+                      </span>
+                    )}
+                    {p.blocks && p.blocks.length === 1 && p.blocks[0].batch && (
+                      <span className="font-bold text-slate-400 text-[11px] tabular-nums">{p.blocks[0].batch}</span>
+                    )}
                     {/* Already handed over. The rate alone cannot say this,
                         and without it the only way to find out is to press
                         the button and be told it was a duplicate. */}
@@ -366,7 +521,7 @@ function PlotPicker({ plots, current, raised, t, onPick, onClose }) {
                     )}
                   </div>
                   <div className="text-[11px] font-semibold text-slate-500">
-                    {p.nursery} · {t('cull.balance')} {known || broken ? fmtNum(p.balance) : '—'}
+                    {p.nursery} · {t('cull.balance')} {fmtNum(p.balance)}
                   </div>
                 </div>
                 {/* A minus balance is not a good rate, so it does not get a
@@ -377,9 +532,9 @@ function PlotPicker({ plots, current, raised, t, onPick, onClose }) {
                   </div>
                 ) : (
                   <div className={`text-[13px] font-black tabular-nums shrink-0 ${
-                    !known ? 'text-slate-600' : rate > CULL_LIMIT ? 'text-rose-400' : 'text-emerald-400'
+                    rate > CULL_LIMIT ? 'text-rose-400' : 'text-emerald-400'
                   }`}>
-                    {known ? fmtPct(rate) : '—'}
+                    {fmtPct(rate)}
                   </div>
                 )}
               </button>

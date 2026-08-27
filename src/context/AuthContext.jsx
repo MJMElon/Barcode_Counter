@@ -37,6 +37,13 @@ function cachedSession() {
   }
 }
 
+/* How long the app will wait for Supabase to say whether somebody is signed
+   in before drawing itself anyway. Long enough that a slow phone on a nursery
+   connection is not pushed to the sign-in screen while its answer is still in
+   flight, short enough that a check which is never coming does not cost a
+   Field Conductor his morning. */
+export const AUTH_WAIT_MS = 8000;
+
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(cachedSession);
   // Already signed in ⇒ nothing to wait for before drawing the app.
@@ -73,15 +80,47 @@ export function AuthProvider({ children }) {
   }
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session: sess } }) => {
-      // Knowing there IS a session is enough to render the app. The ops gate
-      // is a network round-trip; waiting for it put a loading screen in front
-      // of every entry. It now resolves behind the app and only bounces
-      // somebody out if it comes back denied.
-      setSession(sess);
+    let answered = false;
+    supabase.auth.getSession().then(
+      ({ data: { session: sess } }) => {
+        // Knowing there IS a session is enough to render the app. The ops gate
+        // is a network round-trip; waiting for it put a loading screen in front
+        // of every entry. It now resolves behind the app and only bounces
+        // somebody out if it comes back denied.
+        answered = true;
+        setSession(sess);
+        setLoading(false);
+        if (sess) runOpsGate(sess);
+      },
+      (e) => {
+        /* It failed rather than hung. Stop waiting, but do NOT throw away the
+           session read out of storage — a failed check is not a sign-out. */
+        answered = true;
+        console.warn('[auth] the session check failed:', e);
+        setLoading(false);
+      }
+    );
+
+    /* And a promise can fail to settle at all. supabase-js takes a cross-tab
+       lock before reading the token and goes to the network to refresh one
+       that has expired, so a lock another tab never released, or a request
+       that neither answers nor fails, leaves this pending for as long as the
+       browser is open. Neither handler above ever runs, `loading` stays true,
+       and the portal sits on its loading screen with no way past it — not
+       even a reload, which begins the same wait again.
+
+       So the waiting ends. Whatever has arrived by then is what the app is
+       drawn from: with a session it opens, without one it shows the sign-in
+       screen, and either is somewhere a person can act. A late answer is
+       still honoured — the handler above and onAuthStateChange below both
+       apply it whenever it comes. */
+    const watchdog = setTimeout(() => {
+      if (!answered) {
+        console.warn('[auth] the session check did not answer in ' + AUTH_WAIT_MS +
+                     'ms — drawing the app with what we have');
+      }
       setLoading(false);
-      if (sess) runOpsGate(sess);
-    });
+    }, AUTH_WAIT_MS);
 
     const { data: sub } = supabase.auth.onAuthStateChange((event, sess) => {
       if (event === 'PASSWORD_RECOVERY') {
@@ -101,7 +140,7 @@ export function AuthProvider({ children }) {
       setTimeout(() => runOpsGate(sess), 0);
     });
 
-    return () => sub.subscription.unsubscribe();
+    return () => { clearTimeout(watchdog); sub.subscription.unsubscribe(); };
   }, []);
 
   async function signOut() {
