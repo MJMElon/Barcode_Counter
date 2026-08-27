@@ -1,5 +1,31 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
+import { applyCompanySwitches } from '../lib/portalSettings.js';
+
+/**
+ * The company's master switches for THIS portal — Worker Portal Manage →
+ * System Setting → Portal View & Function.
+ *
+ * Fails open, and that matters more than it looks. This read sits in front of
+ * every page in the portal, so a table that has not been created yet, a
+ * policy that refuses, or a nursery connection that drops must all mean "no
+ * vetoes" rather than "no access". A switchboard that locks the building when
+ * it cannot be reached is worse than no switchboard.
+ */
+async function loadCompanySwitches() {
+  try {
+    const { data, error } = await supabase
+      .from('shared_portal_settings')
+      .select('modules, actions')
+      .eq('portal', 'fc')
+      .maybeSingle();
+    if (error || !data) return null;
+    return { modules: data.modules || {}, actions: data.actions || {} };
+  } catch (e) {
+    console.warn('[portal-switches] unreadable, so nothing is vetoed:', e);
+    return null;
+  }
+}
 
 const AuthContext = createContext(null);
 
@@ -63,14 +89,25 @@ export function AuthProvider({ children }) {
   async function runOpsGate(sess) {
     let ok = true;
     try {
-      const resp = await supabase
-        .from('shared_profiles')
-        .select('role, user_type, permissions')
-        .eq('id', sess.user.id)
-        .maybeSingle();
+      /* Both at once. The company's switches are a second round trip that
+         every page waits behind, and asking for them after the profile would
+         put one on top of the other for no reason. */
+      const [resp, company] = await Promise.all([
+        supabase
+          .from('shared_profiles')
+          .select('role, user_type, permissions')
+          .eq('id', sess.user.id)
+          .maybeSingle(),
+        loadCompanySwitches(),
+      ]);
       if (resp && !resp.error) {
         ok = hasOpsAccess(resp.data);
-        setPermissions((resp.data && resp.data.permissions) || {});
+        /* The person's own access, with the company's vetoes taken out of it.
+           Applied HERE, at the one place permissions enter the app, rather
+           than in each module: every screen then reads one answer and none of
+           them has to remember there are two layers. Off beats on. */
+        setPermissions(applyCompanySwitches(
+          (resp.data && resp.data.permissions) || {}, company));
       }
     } catch (e) {
       console.warn('[ops-gate] profile read failed (allowing through):', e);

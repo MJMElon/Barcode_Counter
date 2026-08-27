@@ -31,12 +31,15 @@ import WorkerNav from './WorkerNav.jsx';
  */
 export default function WorkerMaintenance() {
   const { t } = useLang();
-  const { token, worker, boundary, actions } = useWorker();
+  const { token, worker, boundary, actions, company } = useWorker();
 
   // Rebuilt only when the sign-in changes, so the module is not handed a new
   // data source on every render — it reloads when the source identity moves.
   const source = useMemo(() => makeWorkerMaintSource(token), [token]);
-  const permissions = useMemo(() => workerPermissions(boundary, actions), [boundary, actions]);
+  const permissions = useMemo(
+    () => workerPermissions(boundary, actions, company),
+    [boundary, actions, company]
+  );
   const plotFilter = useMemo(() => workerPlotFilter(boundary), [boundary]);
 
   return (

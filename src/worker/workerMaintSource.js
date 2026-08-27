@@ -25,6 +25,7 @@ import { PERMANENT, flushOutbox, isOnline, listJobs, looksOffline, queueJob } fr
 import { sortRecords, workTypeByKey } from '../modules/maintenance/helpers.js';
 import { batchKey, plotKey } from '../modules/maintenance/plotBatches.js';
 import { applicableSchedules } from '../modules/maintenance/schedule.js';
+import { applyCompanySwitches } from '../lib/portalSettings.js';
 import * as api from './workerApi.js';
 
 /* Its own queue kind, separate from the FC portal's 'maint_record'. The two
@@ -208,10 +209,10 @@ export function makeWorkerMaintSource(token) {
  * sign-in is `anon`, which has no upload path for a photo and is deliberately
  * never handed the roster. The Settings screen says so beside them.
  */
-export function workerPermissions(boundary, actions) {
+export function workerPermissions(boundary, actions, company) {
   const nurseries = boundary && boundary.nurseries;
   const a = (actions && actions.maintenance) || {};
-  return {
+  const built = {
     manage_users: false,
     modules: {},
     scan_nurseries: Array.isArray(nurseries) ? { maintenance: nurseries } : {},
@@ -227,6 +228,11 @@ export function workerPermissions(boundary, actions) {
       },
     },
   };
+  /* And then the company's own vetoes over the top of all of it — the switches
+     on System Setting → Portal View & Function, which reach this phone with
+     the sign-in because `anon` cannot read that table for itself. Off beats
+     on, so this can only ever take something away. */
+  return applyCompanySwitches(built, company);
 }
 
 /* The plot half of a boundary, as a predicate. null means every plot in the

@@ -19,6 +19,7 @@
  */
 
 import { canScan } from '../../lib/access.js';
+import { isVetoed } from '../../lib/portalSettings.js';
 
 /**
  * What each switch means when nobody has said.
@@ -80,6 +81,10 @@ export const MAINT_FUNCTIONS = [
  */
 export function canMaintFn(permissions, key) {
   if (!canScan(permissions, 'maintenance', 'view')) return false;
+  // The company's master switch, which can only ever say no. canScan checks it
+  // too, but only for the page and the action it was asked about — these keys
+  // never go through it, so the check has to be here as well.
+  if (isVetoed(permissions, 'maintenance', key)) return false;
   const acts = (permissions && permissions.scan_actions && permissions.scan_actions.maintenance) || {};
   const v = acts[key];
   if (v === undefined) return MAINT_FUNCTION_DEFAULT[key] === true;

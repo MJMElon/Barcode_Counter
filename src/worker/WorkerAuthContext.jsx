@@ -92,6 +92,12 @@ export function WorkerAuthProvider({ children }) {
        Absent on a database that has not re-run create_worker_portal.sql, and
        absent means the defaults, so the portal works either way. */
     actions: (identity && identity.actions) || {},
+    /* The company's master switches for the worker portal — System Setting →
+       Portal View & Function. They arrive with the sign-in because a PIN
+       sign-in is `anon` and cannot read that table for itself. Absent on a
+       database that has not re-run create_worker_portal.sql, and absent means
+       nothing is vetoed, so the portal works either way. */
+    company: (identity && identity.company) || null,
     boundary: (identity && identity.boundary) || {},
     loading,
     offline,
