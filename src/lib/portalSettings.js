@@ -173,6 +173,35 @@ export function isVetoed(permissions, page, action) {
 }
 
 /**
+ * Which modules a worker's phone may show at all.
+ *
+ * Two answers meet here, and they are different questions:
+ *
+ *   the worker's own row   was this worker given the module   (identity.modules)
+ *   the company column     does the company do it at all      (company.modules)
+ *
+ * Off beats on, so a module needs BOTH to say yes. Absent on the company side
+ * is not a no — it is nobody having been asked — so only an explicit `false`
+ * closes anything, which is the same rule the whole panel runs on.
+ *
+ * This is what the Worker Portal column of System Setting → Portal View &
+ * Function actually does. It is applied once, where `modules` is handed to the
+ * app, so the home screen's doors and the route guard behind them cannot
+ * disagree: a module switched off here has no card and no reachable URL.
+ *
+ * A module the company has switched ON that no worker screen exists for
+ * (Scan, Delivery Order, PALMS, Culling) still shows nothing — there is no
+ * door to draw. The office panel says so on the row rather than leaving it to
+ * be discovered on a phone.
+ */
+export function visibleModules(workerModules, company) {
+  const mine = workerModules || {};
+  const out = {};
+  Object.keys(mine).forEach((k) => { out[k] = !!mine[k] && !moduleVetoed(company, k); });
+  return out;
+}
+
+/**
  * Which of the portal's own modules are switched off, for hiding a card on a
  * menu rather than for refusing a page. `dashboard` lives here and nowhere
  * else, being the one module with no permissions page behind it.

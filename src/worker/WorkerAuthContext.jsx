@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import * as api from './workerApi.js';
+import { visibleModules } from '../lib/portalSettings.js';
 
 /*
  * Who is holding the phone, in the worker portal.
@@ -86,7 +87,11 @@ export function WorkerAuthProvider({ children }) {
     identity,
     token: identity ? identity.token : null,
     worker: identity ? identity.worker : null,
-    modules: (identity && identity.modules) || {},
+    /* What this worker was given, with the company's Worker Portal column over
+       the top of it — System Setting → Portal View & Function. Off there beats
+       on here, and it is applied once, at the door, so the home screen and the
+       route guard behind it cannot end up disagreeing. */
+    modules: visibleModules(identity && identity.modules, identity && identity.company),
     /* Which functions inside a module this worker gets — the same switches
        the office sets per Field Conductor, set here per worker in Settings.
        Absent on a database that has not re-run create_worker_portal.sql, and
