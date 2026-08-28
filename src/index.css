@@ -153,10 +153,26 @@ body {
    The keyframe lives here rather than in the component so every coin in the
    portal keeps the same time and there is one place to change it. What makes
    it read as a coin rather than a card flipping is in Coin.jsx: a stack of
-   discs whose rims are its thickness. */
+   discs whose rims are its thickness.
+
+   It is a coin being TOSSED, so the hop and the turn are one movement on one
+   transform: up fast and spinning fast, slowest at the top of the arc, then
+   down — the turn winding down as it falls and settling a moment after it
+   lands. Two full turns, so it comes to rest on the same face it left.
+
+   --hop is the height, set from the diameter in Coin.jsx, so a small coin
+   makes a small jump and the whole thing stays one shape at any size. */
 @keyframes mjm-coin-spin {
-  0%       { transform: rotateY(0deg); }
-  9%, 100% { transform: rotateY(360deg); }
+  0%        { transform: translateY(0)                                rotateY(0deg); }
+  1.2%      { transform: translateY(calc(var(--hop, 18px) * -0.55))   rotateY(110deg); }
+  2.4%      { transform: translateY(calc(var(--hop, 18px) * -0.95))   rotateY(230deg); }
+  3.6%      { transform: translateY(calc(var(--hop, 18px) * -1.15))   rotateY(350deg); }
+  4.8%      { transform: translateY(calc(var(--hop, 18px) * -1.05))   rotateY(460deg); }
+  6%        { transform: translateY(calc(var(--hop, 18px) * -0.75))   rotateY(560deg); }
+  7.2%      { transform: translateY(calc(var(--hop, 18px) * -0.35))   rotateY(640deg); }
+  8.4%      { transform: translateY(0)                                rotateY(695deg); }
+  9.6%      { transform: translateY(0)                                rotateY(715deg); }
+  11%, 100% { transform: translateY(0)                                rotateY(720deg); }
 }
 
 /* ── Motion ──

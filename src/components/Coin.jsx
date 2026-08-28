@@ -46,9 +46,12 @@ export default function Coin({ size = 80, count = null, spin = true, every = EVE
             width: size,
             height: size,
             transformStyle: 'preserve-3d',
-            animation: spin
-              ? `mjm-coin-spin ${every}s cubic-bezier(.3,.7,.25,1) infinite`
-              : 'none',
+            /* Linear, because the arc and the winding-down are in the
+               keyframes themselves — an easing curve on top of them would
+               fight the shape rather than help it. */
+            animation: spin ? `mjm-coin-spin ${every}s linear infinite` : 'none',
+            // How high it goes, from the one number everything else comes from.
+            '--hop': `${(size * 0.3).toFixed(1)}px`,
             transform: spin ? undefined : 'rotateY(-18deg)',
           }}
         >
