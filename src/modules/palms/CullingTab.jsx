@@ -150,21 +150,31 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
   const plotRow = plotList.find((p) => p.key === plotId) || plotList[0] || null;
   useEffect(() => { if (!plotId && plotRow) setPlotId(plotRow.key); }, [plotRow, plotId]);
 
-  /* Which batch of it, or ALL. Reset whenever the plot changes: a batch
-     number means nothing on a different plot. */
-  const [batchId, setBatchId] = useState('ALL');
-  useEffect(() => { setBatchId('ALL'); }, [plotId]);
+  /* WHICH batch — always exactly one, never all of them together.
+
+     The plot's batches were summed into one "All batches" figure, and that
+     figure could not be acted on: a plot is culled batch by batch, the ten
+     percent line is drawn per batch, and two batches averaged together hide
+     the one that is in trouble behind the one that is fine. So the choice is
+     always a single block, and the first is chosen for you.
+
+     Reset whenever the plot changes — a batch number means nothing on a
+     different plot. */
   const batches = plotRow ? plotRow.blocks : [];
-  const picked = batchId === 'ALL' ? null : batches.find((b) => b.batch === batchId) || null;
+  const [batchId, setBatchId] = useState(null);
+  const picked = batches.find((b) => b.batch === batchId) || batches[0] || null;
+  useEffect(() => { setBatchId(null); }, [plotId]);
+  useEffect(() => {
+    if (!batchId && picked) setBatchId(picked.batch);
+  }, [batchId, picked]);
   /* A count belongs to the block it was walked in, so moving to another one
      clears it rather than quietly re-attributing it. */
   useEffect(() => { setTerms([]); setTyping(''); setShowOrders(false); }, [plotId, batchId]);
 
   /* The row the whole screen works from — one object, so the rate, the action
-     and the case cannot read different figures. Either the plot as a whole or
-     the one batch chosen beside its name; nothing downstream needs to know
-     which, because both carry the same fields. */
-  const row = picked || plotRow;
+     and the case cannot read different figures. It is one plot and one batch:
+     the block of ground somebody is standing in. */
+  const row = picked;
 
   const known = hasFigures(row);
   const broken = figuresBroken(row);
@@ -205,15 +215,9 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
         t, plot: row.plot, nursery: row.nursery, balance: row.balance,
         inang, rate: rateAfter, terms, by: staffName, date: todayStr(),
         /* Which block of the plot was walked. Without it the auditor is sent
-           to a plot and left to work out which part of it was counted — and
-           an ALL count has to SAY it covered the whole plot, naming the
-           batches, or a blank line reads as "we forgot to write it down". */
-        batch: picked
-          ? picked.batch
-          : (batches.length > 1
-              ? t('cull.allBatchesOf', { n: batches.length }) + ' — ' +
-                batches.map((b) => b.batch).join(', ')
-              : (batches[0] && batches[0].batch) || ''),
+           to a plot and left to work out which part of it was counted. It is
+           always one batch now, so there is one name to give. */
+        batch: row.batch,
       }),
       category: action.category,
       priority: action.priority,
@@ -257,18 +261,17 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
               <span className="text-[10px] text-slate-500">▼</span>
             </button>
             {/* Which batch, beside the plot rather than folded into choosing
-                it. Only when there is more than one: with a single batch ALL
-                and that batch are the same figures, and a dropdown offering
-                one real answer is furniture. */}
+                it. Only when there is more than one: a dropdown offering one
+                answer is furniture, so a single-batch plot just prints its
+                number. */}
             {batches.length > 1 && (
               <select
-                value={batchId}
+                value={batchId || ''}
                 onChange={(e) => setBatchId(e.target.value)}
                 className="bg-[#1a1a1f] border border-[#2a2a33] text-slate-200 font-bold text-[11px]
                            rounded-lg px-2 py-1 tabular-nums cursor-pointer outline-none max-w-[130px]"
                 aria-label={t('cull.batch')}
               >
-                <option value="ALL">{t('cull.allBatches')}</option>
                 {batches.map((b) => (
                   <option key={b.batch} value={b.batch}>{b.batch}</option>
                 ))}
