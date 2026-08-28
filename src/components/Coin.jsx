@@ -86,7 +86,7 @@ export default function Coin({ size = 80, count = null, spin = true, every = EVE
           </Face>
 
           <Face size={size} z={`rotateY(180deg) translateZ(${half}px)`}>
-            <Seedling size={size} />
+            <PalmDrop size={size} />
           </Face>
         </span>
       </span>
@@ -145,32 +145,67 @@ function Face({ size, z, children }) {
   );
 }
 
-/* A polybag and seven fronds off one crown, each rising then drooping at the
-   tip the way a palm's do. Symmetrical about the centre, because a coin is
-   struck and struck things are. */
-function Seedling({ size }) {
+/* The MJM mark: four serrated fronds off one crown with a drop of oil hanging
+   under them.
+
+   One frond is drawn once and placed four times — rotated for the lower pair,
+   mirrored for the right — so the two halves cannot drift apart the way they
+   would if each were drawn by hand. A coin is struck from a die, and a die is
+   symmetrical.
+
+   The drop carries its highlight as a hole rather than a paler mark: one path,
+   fill-rule evenodd, so the crescent is the coin's own gold showing through.
+   That is how a real strike would do it, and it survives being made small —
+   a lighter fill would just muddy at 28px. */
+/* One frond, drawn lying flat and pointing LEFT from its own origin: a spine
+   with five pairs of leaflets off it, shortening toward the tip. A feather,
+   in other words, which is what a palm frond is.
+
+   Two earlier attempts drew it as a filled outline with a serrated edge, and
+   both came out as a jagged bar — a frond's character is in the GAPS between
+   its leaflets, and an outline has no gaps in it. Strokes have nothing else.
+
+   Drawn flat and rotated into place, so every number here is a distance along
+   the leaf and an angle off it, rather than coordinates nobody can check. */
+const FROND =
+  'M0 0 L-44 0' +
+  ' M-8 0 L-14.9 -5.8 M-8 0 L-14.9 5.8' +
+  ' M-15 0 L-21.5 -5.5 M-15 0 L-21.5 5.5' +
+  ' M-22 0 L-28.1 -5.1 M-22 0 L-28.1 5.1' +
+  ' M-29 0 L-34.4 -4.5 M-29 0 L-34.4 4.5' +
+  ' M-36 0 L-40.2 -3.5 M-36 0 L-40.2 3.5';
+/* The drop, and its highlight as a hole in it. */
+const DROP =
+  'M50 60 C54 70 62 77 62 83 A12 12 0 1 1 38 83 C38 77 46 70 50 60 Z' +
+  'M44 84 C46 89 54 89 56 84 C55 91 45 91 44 84 Z';
+
+function PalmDrop({ size }) {
   return (
     <svg
       viewBox="0 0 100 100"
       aria-hidden="true"
       style={{
-        width: '76%',
-        height: '76%',
+        width: '84%',
+        height: '84%',
         overflow: 'visible',
         filter: `drop-shadow(0 ${size * 0.008}px 0 rgba(78,25,12,.45))
                  drop-shadow(0 ${-size * 0.005}px 0 rgba(255,238,180,.7))`,
       }}
     >
-      <g fill="none" stroke="#7d2f1c" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M41 72 L59 72 L56 92 L44 92 Z" fill="#7d2f1c" stroke="none" />
-        <path d="M50 74 L50 58" strokeWidth="5.5" />
-        <path d="M50 58 C50 44 50 30 50 18" strokeWidth="5.5" />
-        <path d="M50 58 C43 45 36 33 29 24" strokeWidth="5" />
-        <path d="M50 58 C57 45 64 33 71 24" strokeWidth="5" />
-        <path d="M50 58 C38 51 26 43 16 38" strokeWidth="4.6" />
-        <path d="M50 58 C62 51 74 43 84 38" strokeWidth="4.6" />
-        <path d="M50 58 C37 57 24 56 12 59" strokeWidth="4.2" />
-        <path d="M50 58 C63 57 76 56 88 59" strokeWidth="4.2" />
+      <g fill="#7d2f1c">
+        {/* Four placements of the one frond: up and out on each side, and
+            level and out beneath it. The right pair is the left pair
+            mirrored, so the two halves cannot drift apart. */}
+        <g transform="translate(50 56)" fill="none" stroke="#7d2f1c"
+           strokeWidth="3.2" strokeLinecap="round">
+          <path d={FROND} transform="rotate(52)" />
+          <path d={FROND} transform="rotate(2)" />
+          <g transform="scale(-1 1)">
+            <path d={FROND} transform="rotate(52)" />
+            <path d={FROND} transform="rotate(2)" />
+          </g>
+        </g>
+        <path d={DROP} fillRule="evenodd" />
       </g>
     </svg>
   );

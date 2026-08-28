@@ -5,7 +5,7 @@ import { CULL_LIMIT, actionFor, caseBody } from './cullingActions.js';
 import {
   diagnose, figuresBroken, figuresFor, hasFigures, loadPlots, plantedNear, rateFor,
 } from './cullingSource.js';
-import { prettyD, todayStr } from './data.js';
+import { todayStr } from './data.js';
 import { openCasePlots, raiseCase } from '../../lib/nelos.js';
 
 /**
@@ -64,7 +64,6 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
   const [picking, setPicking] = useState(false);
   const [terms, setTerms] = useState([]);      // the counts already entered
   const [typing, setTyping] = useState('');    // the one being keyed now
-  const [showOrders, setShowOrders] = useState(false);
   const [busy, setBusy] = useState(false);
 
   // Best effort: a read that fails leaves the screen empty rather than broken.
@@ -169,7 +168,7 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
   }, [batchId, picked]);
   /* A count belongs to the block it was walked in, so moving to another one
      clears it rather than quietly re-attributing it. */
-  useEffect(() => { setTerms([]); setTyping(''); setShowOrders(false); }, [plotId, batchId]);
+  useEffect(() => { setTerms([]); setTyping(''); }, [plotId, batchId]);
 
   /* The row the whole screen works from — one object, so the rate, the action
      and the case cannot read different figures. It is one plot and one batch:
@@ -178,7 +177,6 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
 
   const known = hasFigures(row);
   const broken = figuresBroken(row);
-  const orders = row?.orders || [];
   const inang = terms.reduce((a, b) => a + b, 0) + (typing === '' ? 0 : Number(typing));
   const rateNow = rateFor({ balance: row?.balance, transplant: row?.transplant, inang: 0 });
   const rateAfter = rateFor({ balance: row?.balance, transplant: row?.transplant, inang });
@@ -202,6 +200,47 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
     // A count cannot start with a zero, and nothing sane needs seven digits.
     setTyping((s) => (s === '' && k === '0' ? '' : (s + k).slice(0, 6)));
   };
+
+  /* On a laptop, use the laptop.
+
+     The keypad is drawn for a thumb in a nursery, and it stays the whole
+     interface on a phone. But a Field Conductor writing up at a desk has a
+     number pad and a backspace key already under their hands, and making them
+     mouse over to a picture of a keypad to key 300 is asking them to use the
+     worse of the two.
+
+     The number pad is read by its PHYSICAL key (e.code) rather than by the
+     character it sends. With Num Lock off, Chrome reports Numpad5 as "Clear"
+     and Numpad4 as "ArrowLeft" — so a laptop with the lock off would have
+     typed nothing at all, and the man at the desk would have decided the
+     feature did not work. The keys under his fingers are numbered, so on
+     this screen they enter numbers either way.
+
+     Backspace is deletion everywhere, and it is stopped from bubbling
+     because a browser with nothing focused reads it as "go back" — losing
+     the count and the page with it. */
+  useEffect(() => {
+    function onKey(e) {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      // Somebody typing into a field means that field, not the keypad.
+      const el = e.target;
+      if (el && el.closest && el.closest('input, textarea, select, [contenteditable]')) return;
+      // The plot picker is a choice, not a count.
+      if (picking) return;
+
+      const pad = /^Numpad([0-9])$/.exec(e.code || '');
+      if (pad)                          { press(pad[1]); e.preventDefault(); return; }
+      if (e.key >= '0' && e.key <= '9') { press(e.key); e.preventDefault(); return; }
+      if (e.key === 'Backspace')        { press('DEL'); e.preventDefault(); return; }
+      if (e.key === 'Delete' || e.code === 'NumpadDecimal') {
+        press('AC'); e.preventDefault(); return;
+      }
+      if (e.key === '+' || e.code === 'NumpadAdd') { press('+'); e.preventDefault(); return; }
+      if (e.key === '=' || e.key === 'Enter')      { press('='); e.preventDefault(); }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
 
   async function raise() {
     if (!action || !row || busy) return;
@@ -317,54 +356,6 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
               {t('cull.negativeNote')}
             </div>
           )}
-          {/* The balance in full, so nobody has to work out where the rest
-              went: what the Batch Report says went in, less what the delivery
-              orders have taken out. */}
-          {row && (
-            <div className="text-[10px] font-bold text-slate-500 tabular-nums leading-snug pt-1 space-y-0.5">
-              <div className="flex justify-between gap-3">
-                <span>
-                  {t('cull.transplantedIn')}
-                  {row.transplantedOn && (
-                    <span className="text-slate-600 ml-1">{prettyD(row.transplantedOn)}</span>
-                  )}
-                </span>
-                <span className="text-slate-400">{fmtNum(row.transplant)}</span>
-              </div>
-              {/* Collected is a SUM. A block emptied over four delivery
-                  orders shows one figure, and looking for an order carrying
-                  it finds nothing, because no single one does — so the number
-                  opens onto the orders it is made of. */}
-              <button
-                onClick={() => setShowOrders((v) => !v)}
-                className="w-full flex justify-between gap-3 cursor-pointer hover:text-slate-400"
-              >
-                <span>
-                  {t('cull.collected')}
-                  {orders.length > 1 && (
-                    <span className="text-slate-600 ml-1">
-                      ×{orders.length} {showOrders ? '▴' : '▾'}
-                    </span>
-                  )}
-                </span>
-                <span className="text-slate-400">{fmtNum(row.collected || 0)}</span>
-              </button>
-              {showOrders && (
-                <div className="pt-1 space-y-0.5 border-t border-[#1c1c1f] mt-1">
-                  {orders.map((o, i) => (
-                    <div key={`${o.do}-${o.on}-${i}`} className="flex justify-between gap-3">
-                      <span className="text-slate-600 truncate">
-                        {o.do || '—'}
-                        {o.on && <span className="ml-1.5">{prettyD(o.on)}</span>}
-                      </span>
-                      <span className="text-slate-500">{fmtNum(o.qty)}</span>
-                    </div>
-                  ))}
-                  {!orders.length && <div className="text-slate-600">—</div>}
-                </div>
-              )}
-            </div>
-          )}
         </div>
 
         <div className="bg-[#101013] rounded-2xl pt-3 pb-2">
@@ -385,20 +376,34 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
           <Keypad onPress={press} />
         </div>
 
-        {/* What the count leaves, and what that means. A strip rather than a
-            third panel: it is the consequence of the two above, not a number
-            of its own. */}
-        <div className="flex items-center justify-between px-4 py-1 text-[12px] font-black tabular-nums">
-          <span>
-            <span className="text-slate-500 uppercase tracking-widest text-[10px] mr-1.5">{t('cull.left')}</span>
-            <span className="text-slate-300">{known ? fmtNum(left) : '—'}</span>
-          </span>
-          <span>
-            <span className="text-slate-500 uppercase tracking-widest text-[10px] mr-1.5">{t('cull.estRate')}</span>
-            <span className={!known || !inang ? 'text-slate-600' : rateAfter > CULL_LIMIT ? 'text-rose-400' : 'text-emerald-400'}>
+        {/* What the count leaves, and what that means.
+
+            This was a thin strip of small print under the keypad, sized as an
+            afterthought to the two figures above it. Those have gone under
+            the ! now, and this is what the counting is FOR: what is left
+            standing, and whether that clears ten percent. It is the answer
+            the Field Conductor walked the plot to get, so it is a panel like
+            the balance and reads at the same size. */}
+        <div className="bg-[#101013] rounded-2xl px-4 py-3 grid grid-cols-2 gap-3">
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+              {t('cull.left')}
+            </div>
+            <div className="text-[26px] font-light tabular-nums leading-tight text-slate-300">
+              {known ? fmtNum(left) : '—'}
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+              {t('cull.estRate')}
+            </div>
+            <div className={`text-[26px] font-light tabular-nums leading-tight ${
+              !known || !inang ? 'text-slate-600'
+                : rateAfter > CULL_LIMIT ? 'text-rose-400' : 'text-emerald-400'
+            }`}>
               {known && inang ? fmtPct(rateAfter) : '—'}
-            </span>
-          </span>
+            </div>
+          </div>
         </div>
 
         {/* The one button that acts on it. The wording comes from the rule
@@ -439,6 +444,22 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
    9 down to the 6 and = from the 3 down to the 00 — so the column is two
    even halves rather than one small key and one long one. There is no ×, ÷
    or −: you are only ever adding up counts. */
+/* The delete key's mark, drawn rather than typed.
+
+   It was the character ⌫, which is not in every phone's font — and a glyph a
+   font does not have comes out as an empty box, which is what a Field
+   Conductor was looking at. A path cannot go missing. */
+function Backspace() {
+  return (
+    <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"
+         fill="none" stroke="currentColor" strokeWidth="1.9"
+         strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-6-7z" />
+      <path d="M17 9.5l-5 5M12 9.5l5 5" />
+    </svg>
+  );
+}
+
 function Keypad({ onPress }) {
   const grey = 'bg-[#333336] hover:bg-[#4a4a4d] text-white';
   const dark = 'bg-[#1c1c1e] hover:bg-[#2c2c2e] text-white';
@@ -447,7 +468,8 @@ function Keypad({ onPress }) {
     <button
       key={k}
       onClick={() => onPress(k)}
-      className={`${cls} ${span || ''} rounded-2xl text-[22px] font-medium tabular-nums transition-colors cursor-pointer active:scale-95`}
+      aria-label={typeof label === 'string' ? undefined : 'delete'}
+      className={`${cls} ${span || ''} grid place-items-center rounded-2xl text-[22px] font-medium tabular-nums transition-colors cursor-pointer active:scale-95`}
     >
       {label}
     </button>
@@ -455,7 +477,7 @@ function Keypad({ onPress }) {
   return (
     <div className="grid grid-cols-4 grid-rows-5 gap-2 px-3 pb-1 pt-2 auto-rows-[54px] [&>button]:h-[54px]">
       {key('AC', 'AC', grey, 'col-span-2')}
-      {key('⌫', 'DEL', grey, 'col-span-2')}
+      {key(<Backspace />, 'DEL', grey, 'col-span-2')}
       {['7', '8', '9'].map((d) => key(d, d, dark))}
       {key('+', '+', amber, 'row-span-2 !h-[116px]')}
       {['4', '5', '6'].map((d) => key(d, d, dark))}
