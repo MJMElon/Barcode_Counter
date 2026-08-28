@@ -14,9 +14,10 @@
  * mark, the thickness, the badge and its type. A 28px coin is the same coin,
  * not a squashed one.
  *
- *   <Coin />                       80px, spinning
+ *   <Coin />                       80px, turning once every 40 seconds
  *   <Coin size={160} count={53} />  with the count on it
  *   <Coin size={28} spin={false} /> still, for a list
+ *   <Coin every={6} />              turning more often, for a demo
  */
 
 /* The thickness, and how many discs are stacked to make it. Face on they hide
@@ -26,7 +27,12 @@
 const THICKNESS = 0.1;   // of the diameter
 const SLICES = 21;
 
-export default function Coin({ size = 80, count = null, spin = true, seconds = 3.4, className = '' }) {
+/* Seconds from one turn to the next. The turn itself is the first tenth of
+   it (see mjm-coin-spin in index.css); the rest of the cycle it sits still,
+   which is what keeps it worth looking at when it does move. */
+const EVERY = 40;
+
+export default function Coin({ size = 80, count = null, spin = true, every = EVERY, className = '' }) {
   const t = Math.max(6, size * THICKNESS);
   const half = (t / 2 + 0.2).toFixed(2);
   const step = t / (SLICES - 1);
@@ -40,7 +46,9 @@ export default function Coin({ size = 80, count = null, spin = true, seconds = 3
             width: size,
             height: size,
             transformStyle: 'preserve-3d',
-            animation: spin ? `mjm-coin-spin ${seconds}s linear infinite` : 'none',
+            animation: spin
+              ? `mjm-coin-spin ${every}s cubic-bezier(.3,.7,.25,1) infinite`
+              : 'none',
             transform: spin ? undefined : 'rotateY(-18deg)',
           }}
         >

@@ -143,13 +143,20 @@ body {
 .btn-open:hover { background: #10b981; color: white; border-color: #10b981; }
 
 /* ── The MJM coin ──
-   One turn on its own axis. The keyframe lives here rather than in the
-   component so every coin in the portal turns at the same rate and there is
-   one place to change it. What makes it read as a coin rather than a card
-   flipping is in Coin.jsx: a stack of discs whose rims are its thickness. */
+   ONE turn, then a long rest. The whole cycle is forty seconds and the turn
+   itself is the first tenth of it — under four seconds — so the coin is
+   still for nine tenths of its life. That is the point, and it is why the
+   cycle is written as a rest rather than as a spin: a button that never
+   stops moving stops being noticed, and this one has to be noticed on the
+   morning it matters.
+
+   The keyframe lives here rather than in the component so every coin in the
+   portal keeps the same time and there is one place to change it. What makes
+   it read as a coin rather than a card flipping is in Coin.jsx: a stack of
+   discs whose rims are its thickness. */
 @keyframes mjm-coin-spin {
-  from { transform: rotateY(0deg); }
-  to   { transform: rotateY(360deg); }
+  0%       { transform: rotateY(0deg); }
+  9%, 100% { transform: rotateY(360deg); }
 }
 
 /* ── Motion ──
