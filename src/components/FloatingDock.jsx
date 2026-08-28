@@ -30,6 +30,7 @@ import { NURSERIES } from '../modules/palms/data.js';
 import { applyCachedOfficeConfig, refreshOfficeConfig } from '../modules/palms/officeConfig.js';
 import { visibleNurseries } from '../lib/access.js';
 import { pendingCases } from '../lib/nelos.js';
+import Coin from './Coin.jsx';
 import PalmsWindow from './PalmsWindow.jsx';
 import NelosWindow from './NelosWindow.jsx';
 import { Train, todayProgress } from './PalmsDock.jsx';
@@ -79,28 +80,16 @@ function NelosMark() {
 
 /* The trigger's own face — neither module's. It used to wear the train,
    which is PALMS's engine and stays there, in the fan, as PALMS's own
-   button below. What opens the fan belongs to both, so it wears a coin
-   instead, with an M stamped in it.
+   button below. What opens the fan belongs to both, so it wears the MJM
+   coin instead: the M on one face and a palm seedling on the other, the
+   two things PALMS and Nelos are between them about.
 
-   A span of its own, filling the button (absolute inset-0) rather than
-   painted straight onto the button: the hop-and-spin (.dock-coin-motion,
-   index.css) animates THIS, not the button, so the count badge sitting in
-   the button's corner stays flat and readable instead of spinning with
-   the coin. `spinning` is false while the button is being dragged, so a
-   coin in your thumb still looks like a coin with the animation off,
-   rather than fighting the drag's own transform on the same property. */
-function CoinFace({ spinning }) {
-  return (
-    <span
-      aria-hidden="true"
-      className={`absolute inset-0 rounded-full grid place-items-center pointer-events-none dock-coin-disc ${
-        spinning ? 'dock-coin-motion' : ''
-      }`}
-    >
-      <span className="dock-coin-m">M</span>
-    </span>
-  );
-}
+   The coin is Coin.jsx, and it is a real one: a stack of discs whose rims
+   are its thickness, so halfway through a turn you see its SIDE. What was
+   here before was a flat disc that hopped and spun once every forty seconds
+   — the same idea, but as a picture turning rather than an object, with
+   nothing on the far face because it had no far face. Its styles have gone
+   from index.css with it rather than being left behind unused. */
 
 export default function FloatingDock() {
   const { session, allowed, permissions } = useAuth();
@@ -330,17 +319,26 @@ export default function FloatingDock() {
           transition: dragging ? 'none' : 'box-shadow .15s, transform .15s',
           transform: dragging ? 'scale(1.06)' : 'none',
         }}
-        className={`relative grid place-items-center rounded-full shadow-[0_8px_24px_rgba(0,0,0,.22)] select-none ${
-          fan ? 'border-2 bg-white border-slate-300' : ''
+        className={`relative grid place-items-center rounded-full select-none ${
+          fan
+            ? 'bg-white border-2 border-slate-300 shadow-[0_8px_24px_rgba(0,0,0,.22)]'
+            : 'drop-shadow-[0_8px_18px_rgba(0,0,0,.35)]'
         }`}
       >
         {/* Closed, it is a coin — neither module's, which the train was.
             Fanned open it becomes a cross: the train is already in the fan
             as PALMS's own button, and the same engine twice, one above the
-            other, would read as two PALMS rather than "close this". */}
+            other, would read as two PALMS rather than "close this".
+
+            The coin draws its own gold, its own rim and its own thickness, so
+            the button behind it carries no background or border of its own —
+            two rims, one flat and one struck, read as a coin sitting in a
+            ring. It stops turning while it is being dragged: a thumb moving
+            it across the screen is doing something, and the coin should not
+            look like it is doing something else at the same time. */}
         {fan
           ? <span className="text-[26px] leading-none font-black text-slate-500">×</span>
-          : <CoinFace spinning={!dragging} />}
+          : <Coin size={SIZE} spin={!dragging} />}
 
         {!fan && total > 0 && (
           <span className="absolute -top-1 -right-1 min-w-[22px] h-[22px] px-1 grid place-items-center rounded-full bg-rose-600 text-white text-[11px] font-black tabular-nums border-2 border-white">

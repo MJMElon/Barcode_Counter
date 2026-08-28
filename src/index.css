@@ -142,69 +142,27 @@ body {
 }
 .btn-open:hover { background: #10b981; color: white; border-color: #10b981; }
 
-/* ── The float dock's trigger, as a coin ──
-   The train belongs to PALMS — it is the engine that keeps the round's
-   progress, and stays in the fan as PALMS's own button. The trigger that
-   opens the fan itself is neither module's, so it wears no module's icon:
-   a round gold coin with an M stamped in it, the way a coin in a Mario
-   level sits waiting for you to reach it — then, every so often, it hops
-   and spins once on the spot before settling flat again.
-
-   Two elements share the job. .dock-coin-disc is the WHOLE coin — the
-   gold, the rim AND the M all painted on one inner span that fills the
-   button, rather than the rim living on the button and the gold+M on a
-   span inside it. Split that way, hopping the span left the rim behind
-   as a static ring with the gold face leaping up out of it — the M
-   "jumping outside the round" it was supposed to stay inside of. One
-   piece, one edge, moving together, fixes that: the button underneath
-   it carries no border or fill of its own while the coin is showing.
-
-   The span sits apart from the button's corner badges (the red count,
-   the green tick) so those stay flat and legible while the coin spins;
-   putting the animation on the whole button would have flipped the
-   badges along with it. .dock-coin-motion is only the motion, kept
-   apart so a coin being dragged can still look like a coin with the
-   animation switched off, rather than fighting the drag's own inline
-   transform on the same property. */
-.dock-coin-disc {
-  background: radial-gradient(circle at 32% 28%, #fef3c7, #fbbf24 46%, #b45309 100%);
-  box-shadow:
-    inset 0 0 0 2px rgba(146,64,14,.65),
-    inset 0 2px 4px rgba(255,255,255,.65),
-    inset 0 -3px 6px rgba(120,53,15,.4);
-}
-.dock-coin-m {
-  font-family: 'Outfit', system-ui, sans-serif;
-  font-size: 19px;
-  font-weight: 900;
-  line-height: 1;
-  color: #78350f;
-  text-shadow: 0 1px 0 rgba(255,255,255,.55);
-  user-select: none;
-}
-
-/* One hop-and-spin, then a long rest — most of the cycle is stillness, on
-   purpose: a button that never stops moving stops being noticed. 40s end
-   to end; the motion itself is the first ~8% of that, under 3.5s. */
-.dock-coin-motion {
-  animation: dock-coin-cycle 40s cubic-bezier(.32,1.6,.5,1) infinite;
-}
-@keyframes dock-coin-cycle {
-  0%       { transform: translateY(0) rotateY(0deg); }
-  2%       { transform: perspective(480px) translateY(-15px) rotateY(120deg); }
-  4%       { transform: perspective(480px) translateY(-20px) rotateY(200deg); }
-  6%       { transform: perspective(480px) translateY(-8px)  rotateY(300deg); }
-  8%, 100% { transform: translateY(0) rotateY(360deg); }
+/* ── The MJM coin ──
+   One turn on its own axis. The keyframe lives here rather than in the
+   component so every coin in the portal turns at the same rate and there is
+   one place to change it. What makes it read as a coin rather than a card
+   flipping is in Coin.jsx: a stack of discs whose rims are its thickness. */
+@keyframes mjm-coin-spin {
+  from { transform: rotateY(0deg); }
+  to   { transform: rotateY(360deg); }
 }
 
 /* ── Motion ──
-   Anyone who has asked their device to reduce motion gets a still train,
-   and a coin that sits flat instead of hopping and spinning. */
+   Anyone who has asked their device to reduce motion gets a still train and
+   a coin that does not turn. */
 @media (prefers-reduced-motion: reduce) {
   .animate-puff {
     animation: none !important;
   }
-  .dock-coin-motion {
+  /* A coin that holds still, turned a little off square so it still reads as
+     a struck coin with a side to it rather than a flat disc. */
+  .mjm-coin {
     animation: none !important;
+    transform: rotateY(-18deg) !important;
   }
 }
