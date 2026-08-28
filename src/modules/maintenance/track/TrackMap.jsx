@@ -21,9 +21,47 @@ import {
   mayStart,
   trackPayload,
 } from './track.js';
+import { cachedBoundary, loadSiteBoundary } from '../../../lib/siteBoundary.js';
 
 /** Close enough to see a seedling bed, far enough to see the plot round it. */
 const WORK_ZOOM = 18;
+
+/* The site outline, drawn as a line and not as a filled shape.
+ *
+ * A fill over satellite imagery hides the thing somebody is standing in — the
+ * beds, the rows, the path they are about to walk — to say something they only
+ * need at the edges. So: a bright edge, a faint one under it so the line reads
+ * against both pale sand and dark canopy, and nothing in the middle.
+ *
+ * Not interactive either. Every tap on this screen while walking is meant for
+ * a button, and a boundary that swallows one is a boundary in the way. */
+const BOUNDARY_STYLE   = { color: '#facc15', weight: 3, opacity: 0.95, fill: false, interactive: false };
+const BOUNDARY_SHADOW  = { color: '#000000', weight: 6, opacity: 0.35, fill: false, interactive: false };
+
+/* Which outline is on the map, so a refresh that found the same one does not
+   take it off and put it back — a redraw the size of an estate outline is a
+   visible flicker on a phone. updated_at when the office has one, the shape
+   itself when it does not. */
+export const boundaryStamp = (b) => (b ? JSON.stringify(b.updated_at || b.geojson) : null);
+
+export function drawBoundary(map, boundary) {
+  if (!map || !boundary || !boundary.geojson) return null;
+  try {
+    const g = L.layerGroup();
+    g._mjmStamp = boundaryStamp(boundary);
+    /* GeoJSON is longitude-first and so is L.geoJSON, so nothing is reordered
+       anywhere on this path. A boundary that turns up in the Gulf of Guinea is
+       an upload that was wrong before it got here. */
+    L.geoJSON(boundary.geojson, { style: () => BOUNDARY_SHADOW }).addTo(g);
+    L.geoJSON(boundary.geojson, { style: () => BOUNDARY_STYLE }).addTo(g);
+    g.addTo(map);
+    return g;
+  } catch (e) {
+    // A malformed outline is not worth taking the map down for.
+    console.warn('[track] the site boundary could not be drawn:', e);
+    return null;
+  }
+}
 
 /* The rotating box is bigger than the hole it is seen through, or turning it
    would show the page's background in the corners. √2 is the worst case — a
@@ -67,6 +105,7 @@ export default function TrackMap({ onClose, onDone, initial = null }) {
   const mapRef = useRef(null);
   const posLayerRef = useRef(null);     // dot + accuracy circle
   const lineRef = useRef(null);         // the track drawn so far
+  const boundaryRef = useRef(null);     // the company's site outline, behind both
 
   const [fix, setFix] = useState(null);            // the newest position
   const [state, setState] = useState(() => (initial && initial.track
@@ -107,6 +146,11 @@ export default function TrackMap({ onClose, onDone, initial = null }) {
     map.setView([4.2, 108.0], 5);
     satelliteLayer({ onFallback: () => { setAttr(FALLBACK_ATTR); flash(t('mt.trkFellBack')); } })
       .addTo(map);
+    /* The site outline goes on BEFORE the track, so the track is drawn over it
+       rather than under it. What somebody is walking now matters more than
+       where the estate ends, and a line hidden behind a boundary is a line
+       nobody can follow. */
+    boundaryRef.current = drawBoundary(map, cachedBoundary());
     lineRef.current = L.polyline([], {
       color: '#f43f5e', weight: 5, opacity: 0.95, lineJoin: 'round', lineCap: 'round',
     }).addTo(map);
@@ -115,6 +159,25 @@ export default function TrackMap({ onClose, onDone, initial = null }) {
     setTimeout(() => map.invalidateSize(), 60);
     return () => { map.remove(); mapRef.current = null; };
   }, []);   // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ── the site outline, refreshed behind whatever was already drawn ──
+     The cached copy is on the map before this runs, so a phone with no signal
+     shows the boundary immediately and one with signal quietly replaces it
+     with today's. Nothing is said either way: an estate with no outline
+     uploaded is not a fault, and a map that cannot reach the office still
+     draws the last one it saw. */
+  useEffect(() => {
+    let dead = false;
+    loadSiteBoundary().then((b) => {
+      const map = mapRef.current;
+      if (dead || !map) return;
+      const was = boundaryRef.current ? boundaryRef.current._mjmStamp : null;
+      if (boundaryStamp(b) === was) return;    // same outline, leave it alone
+      if (boundaryRef.current) map.removeLayer(boundaryRef.current);
+      boundaryRef.current = drawBoundary(map, b);
+    });
+    return () => { dead = true; };
+  }, []);
 
   // ── the position, watched for as long as this is open ──
   useEffect(() => {
