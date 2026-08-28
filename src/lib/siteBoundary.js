@@ -1,9 +1,17 @@
 /*
- * The company's site outline, for the maps that draw it.
+ * The site outlines, for the maps that draw them.
  *
- * Uploaded once as KML or GPX — 555 FC Portal → Manage → System Setting →
- * Boundary — and kept as GeoJSON in shared_site_boundary, because GeoJSON is
- * the one shape a map library reads without a parser of its own.
+ * ONE PER NURSERY. They are separate sites with a file each — 555 FC Portal →
+ * Manage → System Setting → Boundary, a nursery at a time — kept as GeoJSON in
+ * shared_site_boundary, because GeoJSON is the one shape a map library reads
+ * without a parser of its own.
+ *
+ * Everything below deals in a LIST, never a single outline, and an empty list
+ * is an ordinary answer. A phone shows the ones for the ground its holder
+ * works: a worker gets the nurseries inside their own boundary, decided in the
+ * database where an app that has been tampered with cannot argue with it; a
+ * Field Conductor is an office account and gets all of them, because they move
+ * between nurseries and the table is theirs to read anyway.
  *
  * ── Two doors, one outline ──
  *
@@ -34,73 +42,70 @@ import { supabase } from './supabase.js';
 import { cacheGet, cacheSet } from './cache.js';
 import { savedToken } from '../worker/workerApi.js';
 
-const KEY = 'site_boundary';
+const KEY = 'site_boundaries';
 
 /* Held for the life of the page as well as in storage: the map is opened and
-   closed repeatedly during a morning and each open should not re-read it. */
+   closed repeatedly during a morning and each open should not re-read them. */
 let memo = null;
 
-/** What was read last time, if anything. Instant, and works with no signal. */
-export function cachedBoundary() {
+const usable = (list) => (Array.isArray(list) ? list.filter((b) => b && b.geojson) : []);
+
+/** What was read last time. Instant, works with no signal, [] if never. */
+export function cachedBoundaries() {
   if (memo) return memo;
   const hit = cacheGet(KEY);
-  if (hit && hit.value && hit.value.geojson) {
-    memo = hit.value;
-    return memo;
-  }
-  return null;
+  memo = usable(hit && hit.value);
+  return memo;
 }
 
 async function readAsFc() {
   const { data, error } = await supabase
     .from('shared_site_boundary')
-    .select('geojson, bbox, source_name, updated_at')
-    .eq('id', 1)
-    .maybeSingle();
+    .select('nursery, geojson, bbox, source_name, updated_at');
   if (error) throw error;
-  return data;
+  return data || [];
 }
 
 async function readAsWorker(token) {
   const { data, error } = await supabase.rpc('worker_site_boundary', { p_token: token });
   if (error) throw error;
-  return data;
+  /* An older install of the function answered with one outline rather than a
+     list. Reading both shapes costs a line and means a phone that has not
+     caught up with the database does not go blank. */
+  if (!data) return [];
+  return Array.isArray(data) ? data : [data];
 }
 
 /**
- * The outline, from whichever door this is.
+ * The outlines, from whichever door this is.
  *
- * Never throws and never rejects: a missing boundary, a closed table, an
- * outline nobody has uploaded and a phone in a plot with no bars all come back
- * the same way — whatever is cached, or null. The map draws a line or it does
- * not, and either is a reasonable morning.
+ * Never throws and never rejects: a nursery with no file, a closed table, a
+ * database that has not had the migration run, and a phone in a plot with no
+ * bars all come back the same way — whatever is cached, or an empty list. The
+ * map draws some lines or it does not, and either is a reasonable morning.
  */
-export async function loadSiteBoundary() {
-  const cached = cachedBoundary();
+export async function loadSiteBoundaries() {
+  const cached = cachedBoundaries();
   try {
     const { data: sess } = await supabase.auth.getSession();
     const token = savedToken();
 
-    let row = null;
-    if (sess && sess.session) row = await readAsFc();
-    else if (token) row = await readAsWorker(token);
+    let rows = null;
+    if (sess && sess.session) rows = await readAsFc();
+    else if (token) rows = await readAsWorker(token);
     else return cached;
 
-    if (!row || !row.geojson) {
-      /* Read the table and it is empty — somebody has REMOVED the boundary.
-         Drop the copy too, or a phone that synced in March goes on drawing an
-         outline the office has since taken down. */
-      cacheSet(KEY, null);
-      memo = null;
-      return null;
-    }
+    const value = usable(rows).map((r) => ({
+      nursery: r.nursery || null,
+      geojson: r.geojson,
+      bbox: r.bbox || null,
+      source_name: r.source_name || null,
+      updated_at: r.updated_at || null,
+    }));
 
-    const value = {
-      geojson: row.geojson,
-      bbox: row.bbox || null,
-      source_name: row.source_name || null,
-      updated_at: row.updated_at || null,
-    };
+    /* Written even when it is empty, and that is the point: somebody has
+       REMOVED an outline, or all of them, and a phone that synced in March
+       must stop drawing what the office has taken down. */
     memo = value;
     cacheSet(KEY, value);
     return value;
