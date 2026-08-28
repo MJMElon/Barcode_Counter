@@ -168,20 +168,20 @@ body {
    the top of the arc is what makes the eye stop there, which is the only
    moment in forty seconds anyone is being asked to look.
 
-   Two full turns, so it comes to rest on the face it left. --hop is the
+   Three full turns, so it comes to rest on the face it left. --hop is the
    height, set from the diameter in Coin.jsx, so a small coin makes a small
    jump and the movement is one shape at any size. */
 @keyframes mjm-coin-spin {
   0%        { transform: translateY(0)                                rotateY(0deg); }
-  1.2%      { transform: translateY(calc(var(--hop, 18px) * -0.55))   rotateY(45deg); }
-  2.4%      { transform: translateY(calc(var(--hop, 18px) * -0.95))   rotateY(140deg); }
-  3.6%      { transform: translateY(calc(var(--hop, 18px) * -1.15))   rotateY(320deg); }
-  4.8%      { transform: translateY(calc(var(--hop, 18px) * -1.05))   rotateY(490deg); }
-  6%        { transform: translateY(calc(var(--hop, 18px) * -0.75))   rotateY(610deg); }
-  7.2%      { transform: translateY(calc(var(--hop, 18px) * -0.35))   rotateY(685deg); }
-  8.4%      { transform: translateY(0)                                rotateY(712deg); }
-  9.6%      { transform: translateY(0)                                rotateY(719deg); }
-  11%, 100% { transform: translateY(0)                                rotateY(720deg); }
+  1.2%      { transform: translateY(calc(var(--hop, 18px) * -0.55))   rotateY(40deg); }
+  2.4%      { transform: translateY(calc(var(--hop, 18px) * -0.95))   rotateY(130deg); }
+  3.6%      { transform: translateY(calc(var(--hop, 18px) * -1.15))   rotateY(430deg); }
+  4.8%      { transform: translateY(calc(var(--hop, 18px) * -1.05))   rotateY(780deg); }
+  6%        { transform: translateY(calc(var(--hop, 18px) * -0.75))   rotateY(940deg); }
+  7.2%      { transform: translateY(calc(var(--hop, 18px) * -0.35))   rotateY(1030deg); }
+  8.4%      { transform: translateY(0)                                rotateY(1070deg); }
+  9.6%      { transform: translateY(0)                                rotateY(1078deg); }
+  11%, 100% { transform: translateY(0)                                rotateY(1080deg); }
 }
 
 /* ── Motion ──

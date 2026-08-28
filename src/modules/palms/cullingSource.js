@@ -1,4 +1,6 @@
 import { fetchAllRows, supabase } from '../../lib/supabase.js';
+import { cacheBlocks, cachedBlocks } from './cullingOffline.js';
+import { isOnline } from '../../lib/outbox.js';
 import { batchKey, plotKey } from '../maintenance/plotBatches.js';
 import { nurseryOfPlot } from './data.js';
 
@@ -151,8 +153,15 @@ export async function pengambilanPlots() {
 }
 
 export async function loadPlots() {
+  /* Standing in a plot is where there is no signal, so the last good read is
+     kept on the device and served when a read cannot be made. Every read here
+     answers null on failure rather than "nothing", so a partial failure falls
+     back whole instead of quietly listing an empty nursery — and, worse,
+     saving that emptiness over the cache. */
+  if (!isOnline()) return (cachedBlocks() || { rows: [] }).rows;
+
   const dos = await loadDeliveryOrders();
-  if (!dos) return [];
+  if (!dos) return (cachedBlocks() || { rows: [] }).rows;
 
   const today = new Date().toISOString().slice(0, 10);
   const by = new Map();
@@ -209,6 +218,7 @@ export async function loadPlots() {
      plot-and-batch key the collections were gathered under, so a figure can
      only ever meet the block it actually belongs to. */
   const [planted, finished] = await Promise.all([loadTransplanting(), loadFinished()]);
+  if (!planted || !finished) return (cachedBlocks() || { rows: [] }).rows;
   by.forEach((e) => {
     const t = planted.get(e.key);
     e.transplant = t ? t.qty : 0;
@@ -232,7 +242,9 @@ export async function loadPlots() {
     // Its orders in the order they happened, which is how they are looked up.
     e.orders.sort((a, b) => a.on.localeCompare(b.on) || String(a.do).localeCompare(String(b.do)));
   });
-  return byPlotThenBatch(rows);
+  const out = byPlotThenBatch(rows);
+  cacheBlocks(out);
+  return out;
 }
 
 /**
@@ -260,9 +272,15 @@ export async function diagnose(plot = '', batch = '') {
   const wantBatch = batchKey(batch);
   const dos = await loadDeliveryOrders();
   if (!dos) return [{ why: 'the delivery orders could not be read at all' }];
-  const [planted, finished, atPengambilan] = await Promise.all([
+  const [planted0, finished0, atPengambilan] = await Promise.all([
     loadTransplanting(), loadFinished(), pengambilanPlots(),
   ]);
+  /* Either read answers null when it could not be made, so that loadPlots can
+     fall back to the device's copy rather than list an empty nursery. The
+     diagnosis has no cache to fall back to and says what it can with what it
+     got. */
+  const planted = planted0 || new Map();
+  const finished = finished0 || new Set();
 
   const out = [];
 
@@ -331,7 +349,7 @@ export async function diagnose(plot = '', batch = '') {
 export async function plantedNear(plot = '', batch = '') {
   const wantPlot = plotKey(plot);
   const wantBatch = batchKey(batch);
-  const planted = await loadTransplanting();
+  const planted = (await loadTransplanting()) || new Map();
   const out = [];
   planted.forEach((v, key) => {
     const [p, b] = key.split('#');
@@ -468,8 +486,11 @@ export async function loadTransplanting() {
       .order('id', { ascending: true })
   );
   if (res.error) {
+    /* null, not an empty map. An empty map means "nothing was transplanted
+       anywhere", which would drop every block on the screen and then be
+       cached as the truth. A read that failed has to say it failed. */
     console.warn('[culling] could not read the transplanting:', res.error.message);
-    return new Map();
+    return null;
   }
   return transplantedByBlock(res.data || []);
 }
@@ -484,8 +505,9 @@ export async function loadFinished() {
       .order('id', { ascending: true })
   );
   if (res.error) {
+    // Likewise: an empty set would mean "nothing is finished".
     console.warn('[culling] could not read the 3rd culling:', res.error.message);
-    return new Set();
+    return null;
   }
   return finishedBlocks(res.data || []);
 }

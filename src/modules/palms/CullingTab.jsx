@@ -6,7 +6,8 @@ import {
   diagnose, figuresBroken, figuresFor, hasFigures, loadPlots, plantedNear, rateFor,
 } from './cullingSource.js';
 import { todayStr } from './data.js';
-import { openCasePlots, raiseCase } from '../../lib/nelos.js';
+import { openCasePlots } from '../../lib/nelos.js';
+import { flushCulling, submitCase } from './cullingOffline.js';
 
 /**
  * The Culling Calculator.
@@ -102,6 +103,23 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
       return lines;
     };
     return () => { live = false; };
+  }, []);
+
+  /* Anything counted without a signal goes up the moment there is one — on
+     opening the screen and again whenever the phone reconnects, because a
+     Field Conductor who walked back into coverage should not have to know
+     there is a queue, let alone press something to empty it. */
+  useEffect(() => {
+    let live = true;
+    const send = () => {
+      flushCulling().then((r) => {
+        if (live && r && r.sent) { reloadRaised(); flash(t('cull.raised', { n: '' }).trim()); }
+      }, () => {});
+    };
+    send();
+    window.addEventListener('online', send);
+    return () => { live = false; window.removeEventListener('online', send); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /* One row per PLOT, with its batches underneath.
@@ -248,7 +266,7 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
     // The case's own sentence, not the button's label: see caseTitle in
     // cullingActions.js for why it does not follow the language picker.
     const title = action.caseTitle(row.plot);
-    const { data: c, error, deduped } = await raiseCase({
+    const { data: c, error, deduped, queued } = await submitCase({
       title,
       description: caseBody({
         t, plot: row.plot, nursery: row.nursery, balance: row.balance,
@@ -271,6 +289,14 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
     });
     setBusy(false);
     if (error) { flash(t('cull.raiseFailed')); return; }
+    /* No signal: it is in the outbox and will go up on its own. The count is
+       cleared either way, because it HAS been recorded — leaving it on screen
+       would invite it being sent a second time when the signal returns. */
+    if (queued) {
+      flash(t('cull.queued'));
+      setTerms([]); setTyping('');
+      return;
+    }
     reloadRaised();
     flash(deduped ? t('cull.alreadyOpen', { n: c.case_no || '' }) : t('cull.raised', { n: c.case_no || '' }));
     setTerms([]); setTyping('');
@@ -284,9 +310,18 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
     );
   }
 
+  /* The whole calculator on ONE screen, phone included.
+
+     It was a stack of fixed heights that came to more than a phone has, so a
+     Field Conductor scrolled down to reach the keypad and back up to read the
+     rate — on a tool held in one hand, in the sun. Now the card fills the
+     height it is given and the KEYPAD takes up the slack: the panels are the
+     size they need to be, the keys share whatever is left, and nothing
+     overflows on a short screen or floats in the middle of a tall one. */
   return (
-    <div className="max-w-[420px] mx-auto">
-      <div className="bg-black rounded-[2rem] overflow-hidden shadow-2xl border border-[#1f2a38] p-3 space-y-2.5">
+    <div className="max-w-[420px] mx-auto h-full">
+      <div className="bg-black rounded-[2rem] overflow-hidden shadow-2xl border border-[#1f2a38]
+                      p-2.5 flex flex-col gap-1.5 h-full">
         {/* Which plot, and where its rate stands before any of today's
             counting. Apple puts the clock here; the plot is what this
             calculator is always about, so it takes that place. */}
@@ -336,11 +371,11 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
             counted off it. Told apart by a panel each rather than a rule
             between them — a hard border here made the screen busier without
             making it clearer. */}
-        <div className="bg-[#101013] rounded-2xl px-4 py-3 text-right">
+        <div className="bg-[#101013] rounded-2xl px-4 py-2 text-right">
           <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">
             {t('cull.balance')}
           </div>
-          <div className={`text-[28px] font-light tabular-nums leading-tight ${
+          <div className={`text-[clamp(22px,7vw,28px)] font-light tabular-nums leading-tight ${
             broken ? 'text-amber-400' : 'text-slate-300'
           }`}>
             {fmtNum(row.balance)}
@@ -358,7 +393,7 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
           )}
         </div>
 
-        <div className="bg-[#101013] rounded-2xl pt-3 pb-2">
+        <div className="bg-[#101013] rounded-2xl pt-2 pb-1.5 flex-1 min-h-0 flex flex-col">
           <div className="px-4 text-right">
             <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">
               {t('cull.selected')}
@@ -366,7 +401,12 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
             <div className="text-slate-500 text-[13px] font-mono min-h-[18px] truncate">
               {[...terms, ...(typing === '' ? [] : [typing])].join(' + ') || ' '}
             </div>
-            <div className="text-white text-[42px] font-light tabular-nums leading-none truncate">
+            {/* Named, so a check on the running count does not have to find it
+                by whatever size it happens to be set at today. */}
+            <div
+              data-inang
+              className="text-white text-[clamp(26px,9vw,42px)] font-light tabular-nums leading-none truncate"
+            >
               {inang ? fmtNum(inang) : '0'}
             </div>
           </div>
@@ -384,12 +424,12 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
             standing, and whether that clears ten percent. It is the answer
             the Field Conductor walked the plot to get, so it is a panel like
             the balance and reads at the same size. */}
-        <div className="bg-[#101013] rounded-2xl px-4 py-3 grid grid-cols-2 gap-3">
+        <div className="bg-[#101013] rounded-2xl px-4 py-2 grid grid-cols-2 gap-3">
           <div>
             <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">
               {t('cull.left')}
             </div>
-            <div className="text-[26px] font-light tabular-nums leading-tight text-slate-300">
+            <div className="text-[clamp(20px,6.5vw,26px)] font-light tabular-nums leading-tight text-slate-300">
               {known ? fmtNum(left) : '—'}
             </div>
           </div>
@@ -397,7 +437,7 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
             <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">
               {t('cull.estRate')}
             </div>
-            <div className={`text-[26px] font-light tabular-nums leading-tight ${
+            <div className={`text-[clamp(20px,6.5vw,26px)] font-light tabular-nums leading-tight ${
               !known || !inang ? 'text-slate-600'
                 : rateAfter > CULL_LIMIT ? 'text-rose-400' : 'text-emerald-400'
             }`}>
@@ -412,7 +452,7 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
         <button
           onClick={raise}
           disabled={!action || busy}
-          className={`w-full rounded-2xl py-4 font-black text-[13px] uppercase tracking-widest transition-colors ${
+          className={`w-full rounded-2xl py-3 font-black text-[13px] uppercase tracking-widest transition-colors ${
             !action
               ? 'bg-[#1c1c1e] text-slate-600 cursor-default'
               : action.tone === 'ok'
@@ -475,14 +515,14 @@ function Keypad({ onPress }) {
     </button>
   );
   return (
-    <div className="grid grid-cols-4 grid-rows-5 gap-2 px-3 pb-1 pt-2 auto-rows-[54px] [&>button]:h-[54px]">
+    <div className="grid grid-cols-4 grid-rows-5 gap-1.5 px-2 pb-1 pt-1.5 flex-1 min-h-0">
       {key('AC', 'AC', grey, 'col-span-2')}
       {key(<Backspace />, 'DEL', grey, 'col-span-2')}
       {['7', '8', '9'].map((d) => key(d, d, dark))}
-      {key('+', '+', amber, 'row-span-2 !h-[116px]')}
+      {key('+', '+', amber, 'row-span-2')}
       {['4', '5', '6'].map((d) => key(d, d, dark))}
       {['1', '2', '3'].map((d) => key(d, d, dark))}
-      {key('=', '=', amber, 'row-span-2 !h-[116px]')}
+      {key('=', '=', amber, 'row-span-2')}
       {key('0', '0', dark, 'col-span-2')}
       {key('00', '00', dark)}
     </div>

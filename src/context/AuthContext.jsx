@@ -29,6 +29,41 @@ async function loadCompanySwitches() {
 
 const AuthContext = createContext(null);
 
+/* The last permissions this device was told about, kept per user.
+
+   Every page in the portal waits behind them — PageGate renders a loading
+   screen while they are null — and they arrive over the network. With no
+   signal that read never lands, so the whole portal sat on LOADING for ever
+   and the Culling Calculator could not be opened standing in the plot it is
+   for. A Field Conductor's access does not change between the office and the
+   nursery; making him wait on a round trip to learn it does not protect
+   anything.
+
+   It is a screen gate, not the security. What a person may actually read and
+   write is enforced by row-level security on every table, so a stale copy
+   here can hide a page or offer one, and the database still decides. The read
+   already fails OPEN on an error for the same reason — a cached answer is
+   strictly better than that. */
+const PERMS_KEY = 'mjm_fc_permissions_v1';
+
+function cachedPermissions(userId) {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PERMS_KEY));
+    if (!raw || !raw.permissions) return null;
+    // Another person on the same device must not inherit them.
+    if (userId && raw.userId && raw.userId !== userId) return null;
+    return raw.permissions;
+  } catch (e) {
+    return null;
+  }
+}
+
+function keepPermissions(userId, permissions) {
+  try {
+    localStorage.setItem(PERMS_KEY, JSON.stringify({ userId, permissions }));
+  } catch (e) { /* a full or refused storage is not worth failing over */ }
+}
+
 // Staff-grade module access levels — same predicate as the hub / audit / mobile.
 const STAFF_LEVELS = ['admin', 'normal', 'view', 'edit', 'manage', 'read', 'write', 'full', 'staff'];
 
@@ -78,7 +113,10 @@ export function AuthProvider({ children }) {
   const [allowed, setAllowed] = useState(null);
   // The user's permissions JSONB from shared_profiles (set by the ops gate).
   // Modules read finer-grained flags from here, e.g. plot_status_nurseries.
-  const [permissions, setPermissions] = useState(null);
+  const [permissions, setPermissions] = useState(() => {
+    const s0 = cachedSession();
+    return s0 ? cachedPermissions(s0.user && s0.user.id) : null;
+  });
   const [recovering, setRecovering] = useState(
     typeof window !== 'undefined' && window.location.hash.includes('type=recovery')
   );
@@ -106,8 +144,13 @@ export function AuthProvider({ children }) {
            Applied HERE, at the one place permissions enter the app, rather
            than in each module: every screen then reads one answer and none of
            them has to remember there are two layers. Off beats on. */
-        setPermissions(applyCompanySwitches(
-          (resp.data && resp.data.permissions) || {}, company));
+        const own = (resp.data && resp.data.permissions) || {};
+        setPermissions(applyCompanySwitches(own, company));
+        /* Kept BEFORE the company's switches are applied: the switches are
+           read fresh each time and are the company's to change, while this is
+           the person's own access, which is what the next offline start needs
+           to get past the gate. */
+        keepPermissions(sess.user.id, own);
       }
     } catch (e) {
       console.warn('[ops-gate] profile read failed (allowing through):', e);
@@ -171,6 +214,9 @@ export function AuthProvider({ children }) {
       if (event === 'SIGNED_OUT' || !sess) {
         setAllowed(null);
         setPermissions(null);
+        // Signing out takes the cached access with it, or the next person to
+        // use this phone starts inside somebody else's.
+        try { localStorage.removeItem(PERMS_KEY); } catch (e) { /* nothing to do */ }
         return;
       }
       // Defer to release the auth lock before querying shared_profiles.
