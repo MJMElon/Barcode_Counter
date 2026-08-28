@@ -156,22 +156,31 @@ body {
    discs whose rims are its thickness.
 
    It is a coin being TOSSED, so the hop and the turn are one movement on one
-   transform: up fast and spinning fast, slowest at the top of the arc, then
-   down — the turn winding down as it falls and settling a moment after it
-   lands. Two full turns, so it comes to rest on the same face it left.
+   transform — but the two do not keep the same time, and that is deliberate.
 
-   --hop is the height, set from the diameter in Coin.jsx, so a small coin
-   makes a small jump and the whole thing stays one shape at any size. */
+   The RISE slows as it climbs and the coin hangs at the top, the way a thrown
+   thing does. The TURN does the opposite: it leaves the ground unhurried,
+   winds up as it goes, and is whirling hardest exactly where the coin is
+   barely moving upward at all. Then it unwinds on the way down and settles a
+   moment after landing.
+
+   That crossing is the whole effect. Slowest travel against fastest spin at
+   the top of the arc is what makes the eye stop there, which is the only
+   moment in forty seconds anyone is being asked to look.
+
+   Two full turns, so it comes to rest on the face it left. --hop is the
+   height, set from the diameter in Coin.jsx, so a small coin makes a small
+   jump and the movement is one shape at any size. */
 @keyframes mjm-coin-spin {
   0%        { transform: translateY(0)                                rotateY(0deg); }
-  1.2%      { transform: translateY(calc(var(--hop, 18px) * -0.55))   rotateY(110deg); }
-  2.4%      { transform: translateY(calc(var(--hop, 18px) * -0.95))   rotateY(230deg); }
-  3.6%      { transform: translateY(calc(var(--hop, 18px) * -1.15))   rotateY(350deg); }
-  4.8%      { transform: translateY(calc(var(--hop, 18px) * -1.05))   rotateY(460deg); }
-  6%        { transform: translateY(calc(var(--hop, 18px) * -0.75))   rotateY(560deg); }
-  7.2%      { transform: translateY(calc(var(--hop, 18px) * -0.35))   rotateY(640deg); }
-  8.4%      { transform: translateY(0)                                rotateY(695deg); }
-  9.6%      { transform: translateY(0)                                rotateY(715deg); }
+  1.2%      { transform: translateY(calc(var(--hop, 18px) * -0.55))   rotateY(45deg); }
+  2.4%      { transform: translateY(calc(var(--hop, 18px) * -0.95))   rotateY(140deg); }
+  3.6%      { transform: translateY(calc(var(--hop, 18px) * -1.15))   rotateY(320deg); }
+  4.8%      { transform: translateY(calc(var(--hop, 18px) * -1.05))   rotateY(490deg); }
+  6%        { transform: translateY(calc(var(--hop, 18px) * -0.75))   rotateY(610deg); }
+  7.2%      { transform: translateY(calc(var(--hop, 18px) * -0.35))   rotateY(685deg); }
+  8.4%      { transform: translateY(0)                                rotateY(712deg); }
+  9.6%      { transform: translateY(0)                                rotateY(719deg); }
   11%, 100% { transform: translateY(0)                                rotateY(720deg); }
 }
 
