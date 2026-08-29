@@ -264,7 +264,11 @@ export default function TrackMap({ onClose, onDone, initial = null, viewOnly = f
      render, so depending on the object would set state on every render and
      spin. */
   useEffect(() => {
-    if (!viewOnly) return;
+    /* Only when a live walk is handed in. Without this guard, opening the map
+       on a walk that is FINISHED — where `initial` is the whole thing and
+       there is no live session — set the points to an empty list and wiped
+       the line the sheet had just fetched. */
+    if (!viewOnly || !live) return;
     setState({
       points: (live && live.points) || [],
       distance: (live && live.distance) || 0,
@@ -460,7 +464,10 @@ export default function TrackMap({ onClose, onDone, initial = null, viewOnly = f
                 {t('wk.mapRecording')}
               </span>
             ) : live && live.points && live.points.length ? t('wk.mapPaused')
-              : t('wk.mapLooking')}
+              : live ? t('wk.mapLooking')
+              /* No live session at all: a walk that already happened, opened
+                 from a finished job. */
+              : t('wk.mapDone')}
           </div>
         ) : !recording ? (
           <>

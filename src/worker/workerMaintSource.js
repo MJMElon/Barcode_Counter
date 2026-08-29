@@ -171,6 +171,19 @@ export function makeWorkerMaintSource(token) {
      * switch is on, and a database without the function simply has no tick
      * list rather than a broken form.
      */
+    /* One record's walked line, fetched only when somebody opens that job.
+       A database that has not run RUN_ME_worker_track_view.sql simply has no
+       function to call, and the summary then shows the distance without the
+       map rather than failing to open. */
+    async loadTrack(id) {
+      try {
+        return await api.maintTrack(token, id);
+      } catch (e) {
+        console.warn('[worker-maint] track unavailable:', e && e.message);
+        return null;
+      }
+    },
+
     async loadWorkers() {
       try {
         return await api.maintRoster(token);

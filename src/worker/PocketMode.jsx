@@ -31,9 +31,10 @@ const HOLD_MS = 1200;
  * is swallowed, and the only way out is holding a finger still for a second —
  * which is a thing a pocket does not do.
  */
-export default function PocketMode({ task, session, elapsed, onExit }) {
+export default function PocketMode({ task, session, elapsed, onExit, onMap }) {
   const { t } = useLang();
-  const [held, setHeld] = useState(0);          // 0 → 1, how far through the hold
+  // Which target is being held, and how far through: 'back' | 'map' | null.
+  const [hold, setHold] = useState(null);
   const timerRef = useRef(null);
   const startRef = useRef(0);
 
@@ -46,20 +47,45 @@ export default function PocketMode({ task, session, elapsed, onExit }) {
 
   const stopHold = () => {
     if (timerRef.current) { cancelAnimationFrame(timerRef.current); timerRef.current = null; }
-    setHeld(0);
+    setHold(null);
   };
 
-  const beginHold = (e) => {
+  /* Both ways out are holds, not taps. The map is worth reaching from here —
+     a worker checking they have covered the whole plot should not have to
+     come all the way back to the list for it — but a pocket must not be able
+     to reach it either. */
+  const beginHold = (which, done) => (e) => {
     if (e) e.preventDefault();
     startRef.current = Date.now();
     const tick = () => {
       const p = Math.min(1, (Date.now() - startRef.current) / HOLD_MS);
-      setHeld(p);
-      if (p >= 1) { stopHold(); onExit(); return; }
+      setHold({ which, p });
+      if (p >= 1) { stopHold(); done(); return; }
       timerRef.current = requestAnimationFrame(tick);
     };
     timerRef.current = requestAnimationFrame(tick);
   };
+
+  const target = (which, done, text) => (
+    <button
+      type="button"
+      onPointerDown={beginHold(which, done)}
+      onPointerUp={stopHold}
+      onPointerLeave={stopHold}
+      onPointerCancel={stopHold}
+      onContextMenu={(e) => e.preventDefault()}
+      aria-label={text}
+      className="relative flex-1 h-14 rounded-2xl border border-slate-800 overflow-hidden"
+    >
+      <span
+        className="absolute inset-y-0 left-0 bg-slate-800"
+        style={{ width: `${(hold && hold.which === which ? hold.p : 0) * 100}%` }}
+      />
+      <span className="relative text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+        {text}
+      </span>
+    </button>
+  );
 
   useEffect(() => stopHold, []);
 
@@ -102,26 +128,12 @@ export default function PocketMode({ task, session, elapsed, onExit }) {
         </span>
       </div>
 
-      {/* Hold to get out. Big, because it is pressed with a thumb in daylight;
-          dim, because it is on screen for an hour. */}
-      <button
-        type="button"
-        onPointerDown={beginHold}
-        onPointerUp={stopHold}
-        onPointerLeave={stopHold}
-        onPointerCancel={stopHold}
-        onContextMenu={(e) => e.preventDefault()}
-        aria-label={t('wk.pocketExit')}
-        className="relative mt-2 w-56 h-14 rounded-2xl border border-slate-800 overflow-hidden"
-      >
-        <span
-          className="absolute inset-y-0 left-0 bg-slate-800 transition-none"
-          style={{ width: `${held * 100}%` }}
-        />
-        <span className="relative text-[11px] font-black uppercase tracking-[0.25em] text-slate-500">
-          {t('wk.pocketExit')}
-        </span>
-      </button>
+      {/* The two ways out. Big, because they are pressed with a thumb in
+          daylight; dim, because they are on screen for an hour. */}
+      <div className="mt-2 flex items-stretch gap-3 w-full max-w-[330px] px-6">
+        {onMap && target('map', onMap, t('wk.pocketMap'))}
+        {target('back', onExit, t('wk.pocketExit'))}
+      </div>
 
       <div className="absolute bottom-6 left-6 right-6 text-center text-[10px] font-bold text-slate-800 leading-relaxed">
         {t('wk.pocketNote')}

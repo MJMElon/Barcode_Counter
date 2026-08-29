@@ -113,6 +113,23 @@ export async function submitMaintenance(token, payload) {
   return unwrap(await supabase.rpc('worker_submit_maint', { p_token: token, p_payload: payload }));
 }
 
+/**
+ * One finished job's walked track.
+ *
+ * Asked for a record at a time, when somebody opens that job and wants to see
+ * the line. The list call deliberately leaves the track out — see
+ * shared/RUN_ME_worker_track_view.sql, which says why at more length: two
+ * thousand records with a thousand points each is tens of megabytes down a
+ * nursery's signal to draw a list that only ever shows "820 m".
+ *
+ * Answers null for a job recorded without a walk, and for a plot outside the
+ * boundary. Both mean "there is no line to draw" as far as the screen is
+ * concerned, and neither is a fault.
+ */
+export async function maintTrack(token, id) {
+  return unwrap(await supabase.rpc('worker_maint_track', { p_token: token, p_id: id }));
+}
+
 export async function myRecords(token, limit = 60) {
   return unwrap(await supabase.rpc('worker_my_records', { p_token: token, p_limit: limit })) || [];
 }

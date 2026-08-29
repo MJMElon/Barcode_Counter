@@ -17,6 +17,7 @@ import {
 } from './workerMaintSource.js';
 import { canMaintFn } from '../modules/maintenance/functions.js';
 import { periodLabel, periodTasks, splitDone } from './workerTasks.js';
+import DoneSheet from './DoneSheet.jsx';
 import PocketMode from './PocketMode.jsx';
 import TaskRow from './TaskRow.jsx';
 import { useWorkerTrack } from './useWorkerTrack.js';
@@ -75,6 +76,7 @@ export default function WorkerTasks() {
   const [syncing, setSyncing] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
   const [pocket, setPocket] = useState(false);
+  const [openDone, setOpenDone] = useState(null);   // a finished job, opened
 
   const track = useWorkerTrack();
 
@@ -118,6 +120,20 @@ export default function WorkerTasks() {
     () => splitDone(tasks, allRecords, { week, month }), [tasks, allRecords, week, month]);
 
   const label = periodLabel(week, month, daysInMonthLabel(month));
+
+  /* The record behind a finished task — the row the summary is drawn from.
+     Matched the same way isDone matches, so a task shown as done always has
+     one to open. Newest first, because a plot sprayed twice in a block should
+     open on the spray that was just walked. */
+  const recordFor = useCallback((task) => {
+    const want = (r) =>
+      r.work_type === task.workTypeKey
+      && r.plot_name === task.plot
+      && (!task.chemical || !r.chemical || r.chemical === task.chemical
+          || String(r.chemical).indexOf(task.chemical) !== -1);
+    const hits = allRecords.filter(want);
+    return hits.length ? hits[0] : null;
+  }, [allRecords]);
 
   const sync = useCallback(async () => {
     if (syncing) return;
@@ -176,10 +192,15 @@ export default function WorkerTasks() {
     }
   }, [plots, source, today, week, month, worker, t, refreshPending, reload]);
 
+  /* Start does both: it begins the walk AND puts the phone away. Pressing two
+     buttons to do one thing is two chances to press only the first, and the
+     one that would be missed is the one that saves the battery. Coming back
+     out is a hold, and Pocket is on the row for going in again. */
   const startTrack = (task) => {
     if (!mayGps) return;
     track.start({ workTypeKey: task.workTypeKey, plot: task.plot,
                   chemical: task.chemical, nursery: task.nursery });
+    setPocket(true);
   };
   /* Stop saves. It is what the button is for: a walk nobody records is a
      battery spent on nothing. */
@@ -191,7 +212,11 @@ export default function WorkerTasks() {
   const live = track.session
     ? { points: track.session.points, distance: track.session.distance,
         startedAt: track.session.startedAt, running: track.running }
-    : null;
+    /* An empty walk, not null. Null is what a FINISHED job's map is opened
+       with — there the line comes from the record and the map must not be
+       told to draw nothing over it. Opening the map from a row with nothing
+       running is a different sentence, and it should read as one. */
+    : { points: [], distance: 0, startedAt: null, running: false };
 
   const head = 'text-[10px] font-black text-slate-400 uppercase tracking-widest';
 
@@ -300,12 +325,15 @@ export default function WorkerTasks() {
                 {done.length}/{tasks.length}
               </span>
             </div>
+            <div className="text-[10.5px] font-bold text-slate-400 -mt-1">{t('wk.tapDone')}</div>
             <div className="space-y-1.5">
               {done.map((task) => {
                 const tone = tintOf(task.workTypeKey);
+                const rec = recordFor(task);
                 return (
-                  <div key={task.id}
-                    className="bg-white/70 border border-slate-200 rounded-2xl px-3.5 py-2.5 flex items-center gap-3">
+                  <button key={task.id} type="button"
+                    onClick={() => rec && setOpenDone({ record: rec, task })}
+                    className="w-full text-left bg-white/70 border border-slate-200 rounded-2xl px-3.5 py-2.5 flex items-center gap-3 active:bg-white">
                     <span className={`w-8 h-8 rounded-xl grid place-items-center shrink-0 ${tone.bg} opacity-60`}>
                       <WorkIcon workKey={task.workTypeKey} className={`w-5 h-5 ${tone.fg}`} />
                     </span>
@@ -323,7 +351,7 @@ export default function WorkerTasks() {
                       )}
                     </div>
                     <span className="text-emerald-600 text-[16px] font-black shrink-0" aria-hidden="true">✓</span>
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -345,6 +373,10 @@ export default function WorkerTasks() {
           task={track.session.task}
           session={track.session}
           elapsed={track.elapsed}
+          /* The map, without coming back to the list first — and it stays
+             recording while it is looked at. Closing the map drops back into
+             the pocket screen, which is where the phone was. */
+          onMap={() => setMapOpen(true)}
           onExit={() => setPocket(false)}
         />
       )}
@@ -359,6 +391,15 @@ export default function WorkerTasks() {
         }>
           <TrackMap viewOnly live={live} onClose={() => setMapOpen(false)} onDone={() => setMapOpen(false)} />
         </Suspense>
+      )}
+
+      {openDone && (
+        <DoneSheet
+          record={openDone.record}
+          task={openDone.task}
+          source={source}
+          onClose={() => setOpenDone(null)}
+        />
       )}
 
       {toast && (
