@@ -251,6 +251,18 @@ export default function WorkerTasks() {
         {!loading && todo.length > 0 && (
           <>
             <div className="text-[10.5px] font-bold text-slate-400 -mt-1">{t('wk.swipeHint')}</div>
+            {/* Said only while a walk is running, and said because it is the
+                one thing about the track a worker cannot work out for
+                themselves: a phone that locks stops giving positions, and the
+                line simply stops growing. The app holds the screen awake
+                while it can, but a worker who pockets the phone should know
+                what they are risking. */}
+            {track.running && (
+              <div className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2
+                              text-[11px] font-bold text-amber-800 leading-snug">
+                {t('wk.keepScreenOn')}
+              </div>
+            )}
             <div className="space-y-2.5">
               {todo.map((task) => (
                 <TaskRow
