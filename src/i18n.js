@@ -524,7 +524,7 @@ const en = {
   // read the Malay, so that is the version to get right.
   'wk.tasksTitle': 'Work To Do',
   'wk.thisPeriod': 'This period',
-  'wk.swipeHint': 'Swipe a row left to mark it done. Tap it to open the full form.',
+  'wk.swipeHint': 'Swipe a row left to mark it done.',
   'wk.markDone': 'Done',
   'wk.completed': 'Completed',
   'wk.periodClear': 'Everything on the plan is done. Well done.',
@@ -1073,7 +1073,7 @@ const ms = {
   // ── Senarai kerja pekerja ──
   'wk.tasksTitle': 'Kerja Nak Buat',
   'wk.thisPeriod': 'Tempoh ini',
-  'wk.swipeHint': 'Leret baris ke kiri untuk tanda siap. Ketik untuk borang penuh.',
+  'wk.swipeHint': 'Leret baris ke kiri untuk tanda siap.',
   'wk.markDone': 'Siap',
   'wk.completed': 'Sudah Siap',
   'wk.periodClear': 'Semua kerja dalam jadual sudah siap. Syabas.',

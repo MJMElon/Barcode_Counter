@@ -39,8 +39,12 @@ import { useWorkerTrack } from './useWorkerTrack.js';
  * a second full layout into an eleven-hundred-line component would have made
  * both harder to change than keeping the layouts apart and the rules shared.
  *
- * The full form is still one tap away, on the row, for the things a swipe
- * cannot say: which batches were in the plot, and a remark.
+ * The full form is still there for the things a swipe cannot say — batches, a
+ * remark, a job nobody planned — but behind the labelled button under the
+ * list, not behind a tap on a row. Tapping a row used to open it, and a swipe
+ * the browser judged too small to be a drag is a tap: finishing a job would
+ * every so often land the worker on the FC Portal's month planner instead,
+ * which is the one screen this portal exists to keep them off.
  */
 export default function WorkerTasks() {
   const { t, lang } = useLang();
@@ -252,7 +256,6 @@ export default function WorkerTasks() {
                   onResume={track.resume}
                   onStop={() => stopTrack(task)}
                   onComplete={() => complete(task, track.trackingId === task.id ? track.stop() : null)}
-                  onOpen={openForm}
                 />
               ))}
             </div>

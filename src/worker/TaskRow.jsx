@@ -43,7 +43,7 @@ const MAX_PX = 112;
  */
 export default function TaskRow({
   task, tint, tracking, session, elapsed, denied, busy,
-  onStart, onPause, onResume, onStop, onComplete, onOpen,
+  onStart, onPause, onResume, onStop, onComplete,
 }) {
   const { t, lang } = useLang();
   const [dx, setDx] = useState(0);
@@ -77,13 +77,22 @@ export default function TaskRow({
     setOpen(d < -12);
   };
 
-  /* A tap that was not a drag opens the full form — batches, remark, the
-     things a swipe cannot say. Only when the row was not dragged, or every
-     swipe would also open a form on the way past. */
+  /* A tap does nothing but shut the DONE panel if it is standing open.
+   *
+   * It used to open the full record form, and that was wrong. A swipe the
+   * browser judged too small to be a drag is a tap, and so is a thumb landing
+   * a little heavily — so finishing a job would every so often throw the
+   * worker onto the FC Portal's month planner, which is the one screen this
+   * portal exists to keep them off. A gesture nobody asked for must not be
+   * able to change which app you appear to be in.
+   *
+   * Off-plan work is still reachable, from the labelled button under the
+   * list, where choosing it is a decision rather than a slip. */
   const click = () => {
+    /* A drag is followed by a click on the way up, so a swipe that left the
+       panel standing open would otherwise shut it again in the same gesture. */
     if (moved.current) { moved.current = false; return; }
-    if (open) { setOpen(false); return; }
-    if (onOpen) onOpen(task);
+    if (open) setOpen(false);
   };
 
   const why = session && session.why;
