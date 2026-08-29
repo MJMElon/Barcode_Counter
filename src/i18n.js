@@ -543,6 +543,16 @@ const en = {
   'wk.trk_jump': 'skipped a jump',
   'wk.trk_nofix': 'no fix yet',
   'wk.trkPointsN': '{n} points',
+  'wk.newHere': 'New here? Register',
+  'wk.havePin': 'I already have a PIN',
+  'wk.yourName': 'Your full name',
+  'wk.choosePin': 'Choose a PIN',
+  'wk.signUpGo': 'Register',
+  'wk.signingUp': 'Registering…',
+  'wk.enterName': 'Enter your full name.',
+  'wk.pinRule': 'The PIN must be 4 to 12 letters or numbers.',
+  'wk.pendingTitle': 'Your details are with the office.',
+  'wk.pendingBody': 'You are on the list. Once a supervisor puts you in a nursery, your work will show here. Sign in with the same PIN.',
 };
 
 const ms = {
@@ -1082,6 +1092,16 @@ const ms = {
   'wk.trk_jump': 'lompatan diabaikan',
   'wk.trk_nofix': 'belum dapat isyarat',
   'wk.trkPointsN': '{n} titik',
+  'wk.newHere': 'Baru di sini? Daftar',
+  'wk.havePin': 'Saya sudah ada PIN',
+  'wk.yourName': 'Nama penuh anda',
+  'wk.choosePin': 'Pilih PIN',
+  'wk.signUpGo': 'Daftar',
+  'wk.signingUp': 'Mendaftar…',
+  'wk.enterName': 'Masukkan nama penuh anda.',
+  'wk.pinRule': 'PIN mesti 4 hingga 12 huruf atau nombor.',
+  'wk.pendingTitle': 'Maklumat anda sudah sampai ke pejabat.',
+  'wk.pendingBody': 'Anda dalam senarai. Selepas penyelia meletakkan anda di sebuah nurseri, kerja anda akan muncul di sini. Masuk dengan PIN yang sama.',
 };
 
 export const translations = { en, ms };

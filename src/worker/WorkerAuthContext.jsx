@@ -62,6 +62,18 @@ export function WorkerAuthProvider({ children }) {
     return who;
   }, []);
 
+  /* Signing up signs you in, on the same session a PIN would have made. Not
+     for convenience: the answer to "did that work" is then the portal itself
+     saying their details are with the office, rather than a message on a
+     login screen they have to believe. */
+  const signUp = useCallback(async (name, pin) => {
+    const who = await api.signUp(name, pin);
+    api.keepToken(who.token);
+    setIdentity(who);
+    setOffline(false);
+    return who;
+  }, []);
+
   const signOut = useCallback(async () => {
     const token = identity && identity.token;
     setIdentity(null);
@@ -104,9 +116,14 @@ export function WorkerAuthProvider({ children }) {
        nothing is vetoed, so the portal works either way. */
     company: (identity && identity.company) || null,
     boundary: (identity && identity.boundary) || {},
+    /* Signed up, but nobody has filed them under a nursery yet. The database
+       is the one that says so — see worker_pending — because it is the one
+       refusing to answer anything else about them. */
+    pending: !!(identity && identity.pending),
     loading,
     offline,
     signIn,
+    signUp,
     signOut,
     refresh,
   };

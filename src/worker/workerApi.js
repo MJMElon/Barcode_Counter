@@ -94,6 +94,21 @@ export async function plotBatches(token) {
   return unwrap(await supabase.rpc('worker_plot_batches', { p_token: token })) || [];
 }
 
+/**
+ * A worker who is not on the register yet, putting themselves on it.
+ *
+ * Name and PIN, and nothing else — everything that decides what they can see
+ * is the office's to fill in afterwards. The row this makes has no nursery
+ * and no section, so it lands in the Worker System board's "Waiting to be
+ * allocated" strip, and until somebody files it there the database answers
+ * every question about it with nothing: no modules, no plots. See
+ * shared/RUN_ME_worker_signup.sql in the office repository, which says at
+ * more length why a door open to the world has to work that way.
+ */
+export async function signUp(name, pin) {
+  return unwrap(await supabase.rpc('worker_signup', { p_name: name, p_pin: pin }));
+}
+
 export async function submitMaintenance(token, payload) {
   return unwrap(await supabase.rpc('worker_submit_maint', { p_token: token, p_payload: payload }));
 }
