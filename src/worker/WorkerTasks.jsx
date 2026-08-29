@@ -17,6 +17,7 @@ import {
 } from './workerMaintSource.js';
 import { canMaintFn } from '../modules/maintenance/functions.js';
 import { periodLabel, periodTasks, splitDone } from './workerTasks.js';
+import PocketMode from './PocketMode.jsx';
 import TaskRow from './TaskRow.jsx';
 import { useWorkerTrack } from './useWorkerTrack.js';
 
@@ -73,6 +74,7 @@ export default function WorkerTasks() {
   const [toast, setToast] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
+  const [pocket, setPocket] = useState(false);
 
   const track = useWorkerTrack();
 
@@ -280,6 +282,7 @@ export default function WorkerTasks() {
                   onStop={() => stopTrack(task)}
                   onComplete={() => complete(task, track.trackingId === task.id ? track.stop() : null)}
                   onMap={mayGps ? () => setMapOpen(true) : null}
+                  onPocket={() => setPocket(true)}
                 />
               ))}
             </div>
@@ -334,6 +337,17 @@ export default function WorkerTasks() {
         )}
 
       </div>
+
+      {/* The phone in a pocket, still walking. Closes itself if the walk ends
+          from anywhere else, so it can never be a black screen over nothing. */}
+      {pocket && track.session && (
+        <PocketMode
+          task={track.session.task}
+          session={track.session}
+          elapsed={track.elapsed}
+          onExit={() => setPocket(false)}
+        />
+      )}
 
       {mapOpen && (
         <Suspense fallback={

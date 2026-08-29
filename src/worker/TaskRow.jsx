@@ -48,7 +48,7 @@ const MAX_PX = 112;
  */
 export default function TaskRow({
   task, tint, tracking, session, elapsed, denied, busy,
-  onStart, onPause, onResume, onStop, onComplete, onMap,
+  onStart, onPause, onResume, onStop, onComplete, onMap, onPocket,
 }) {
   const { t, lang } = useLang();
   const [dx, setDx] = useState(0);
@@ -220,6 +220,17 @@ export default function TaskRow({
             {/* Worded like the buttons above it, not an icon on its own. The
                 people using this are not reading a symbol set — every other
                 control on the row says what it does, and this one should. */}
+            {/* Only while a walk is running: it is the button for putting the
+                phone away, and there is nothing to put away otherwise. */}
+            {tracking && onPocket && (
+              <button
+                type="button" onClick={onPocket} disabled={busy}
+                className="bg-slate-100 border border-slate-300 active:bg-slate-200 text-slate-700
+                           font-black text-[11px] uppercase tracking-widest rounded-xl px-3.5 py-2.5"
+              >
+                🌙 {t('wk.pocket')}
+              </button>
+            )}
             {onMap && (
               <button
                 type="button" onClick={onMap}
