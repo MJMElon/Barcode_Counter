@@ -12,8 +12,12 @@ import WorkerGround from './WorkerGround.jsx';
 import WorkerNav from './WorkerNav.jsx';
 
 /*
- * Maintenance, in the Worker Portal — and, since there is no menu in front of
- * it any more, the Worker Portal itself. Signing in lands here.
+ * The full record form, in the Worker Portal.
+ *
+ * NOT what a worker lands on — that is the to-do list, WorkerTasks. This is
+ * what the "Record something not on the plan" button under it opens, for the
+ * two things a swipe cannot say: a job nobody scheduled, and the batches or
+ * remark that go with one.
  *
  * The same module the FC Portal runs — the week card, the month timeline, the
  * ticks against each job, the work sheet. Not a copy of it: literally the same
@@ -35,9 +39,10 @@ import WorkerNav from './WorkerNav.jsx';
  *   (the camera is NOT passed here any more — it is a switch like every other
  *   part of the form, and workerMaintSource forces it off because a PIN
  *   sign-in has no upload path, which is a fact about the door not the view)
- *   nav          the worker's own bar; the FC one signs out of Supabase, and
- *                there is no Supabase session here to sign out of. The cog is
- *                on it because Settings lost its card when the menu went.
+ *   nav          the worker's own bar, with a back arrow to the to-do list.
+ *                The FC one signs out of Supabase, and there is no Supabase
+ *                session here to sign out of. The cog is on it because
+ *                Settings lost its card when the menu went.
  */
 export default function WorkerMaintenance() {
   const { t } = useLang();
@@ -61,9 +66,15 @@ export default function WorkerMaintenance() {
       showNursery={false}
       nav={
         <>
+          {/* A back arrow, and NOT the book layout. This is a room you went
+              into on purpose from the to-do list, so it has to look like one
+              and it has to have a door: without the arrow, a worker who
+              reached it had no way back except editing the address, and a
+              reload kept them here because the hash is remembered. That is
+              how it came to be reported as "the old design has come back". */}
           <WorkerNav
-            book
-            title={t('wk.maintTitle')}
+            back="/worker"
+            title={t('wk.offPlanTitle')}
             onSettings={modules.settings ? () => navigate('/worker/settings') : null}
           />
           <WorkerGround />
