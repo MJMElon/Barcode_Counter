@@ -110,6 +110,26 @@ export async function uploadMaintPhotos(dataUrls, { plot, workTypeKey, date }) {
  */
 export function queuedAsRecord(job) {
   const a = (job && job.payload) || {};
+
+  /* Two portals queue two shapes, and this has to read both.
+   *
+   * The FC portal parks the arguments it was called with — { plot: {…},
+   * workTypeKey, date, weekNo }. The Worker Portal parks the finished database
+   * row instead, because its RPC takes exactly that (workerMaintSource's
+   * payloadOf). Read only the first shape, a worker's queued job came back
+   * with plot_name undefined and work_type undefined, so isDone matched
+   * nothing: a worker who finished a plot with no signal was shown it as still
+   * due and did it again. The row shape is already the answer, so it is
+   * carried through rather than translated. */
+  if (a.plot_name !== undefined || a.work_type !== undefined) {
+    return {
+      id: a.id != null ? a.id : 'pending:' + (job && job.uid),
+      _pendingEdit: a.id != null,
+      _pending: true,
+      ...a,
+    };
+  }
+
   return {
     // A queued EDIT keeps the id of the row it is changing, so it stands in
     // place of that row rather than appearing beside it as a second copy.

@@ -519,6 +519,30 @@ const en = {
   'wk.noPin': 'No PIN',
   'wk.savedTick': 'Saved',
   'wk.pinNote': 'PINs are set in the Payroll register on ai.mjmnursery.com, not here — this screen never sees them.',
+  // ── The worker's to-do list ──
+  // The period's jobs, finished by swiping. Most of the people reading this
+  // read the Malay, so that is the version to get right.
+  'wk.tasksTitle': 'Work To Do',
+  'wk.thisPeriod': 'This period',
+  'wk.swipeHint': 'Swipe a row left to mark it done. Tap it to open the full form.',
+  'wk.markDone': 'Done',
+  'wk.completed': 'Completed',
+  'wk.periodClear': 'Everything on the plan is done. Well done.',
+  'wk.periodEmpty': 'Nothing is planned for this period.',
+  'wk.doneSaved': '{plot} recorded.',
+  'wk.doneOffline': '{plot} saved — it goes up when the signal returns.',
+  'wk.fullForm': 'Record something not on the plan',
+  'wk.start': 'Start',
+  'wk.pause': 'Pause',
+  'wk.resume': 'Resume',
+  'wk.stop': 'Stop',
+  'wk.paused': 'Paused',
+  'wk.gpsDenied': 'Location is switched off for this app.',
+  'wk.trk_still': 'standing still',
+  'wk.trk_weak': 'weak signal',
+  'wk.trk_jump': 'skipped a jump',
+  'wk.trk_nofix': 'no fix yet',
+  'wk.trkPointsN': '{n} points',
 };
 
 const ms = {
@@ -1036,6 +1060,28 @@ const ms = {
   'wk.noPin': 'Tiada PIN',
   'wk.savedTick': 'Disimpan',
   'wk.pinNote': 'PIN ditetapkan dalam daftar Payroll di ai.mjmnursery.com, bukan di sini — skrin ini tidak pernah melihatnya.',
+  // ── Senarai kerja pekerja ──
+  'wk.tasksTitle': 'Kerja Nak Buat',
+  'wk.thisPeriod': 'Tempoh ini',
+  'wk.swipeHint': 'Leret baris ke kiri untuk tanda siap. Ketik untuk borang penuh.',
+  'wk.markDone': 'Siap',
+  'wk.completed': 'Sudah Siap',
+  'wk.periodClear': 'Semua kerja dalam jadual sudah siap. Syabas.',
+  'wk.periodEmpty': 'Tiada kerja dijadualkan untuk tempoh ini.',
+  'wk.doneSaved': '{plot} direkodkan.',
+  'wk.doneOffline': '{plot} disimpan — dihantar bila talian kembali.',
+  'wk.fullForm': 'Rekod kerja yang tiada dalam jadual',
+  'wk.start': 'Mula',
+  'wk.pause': 'Jeda',
+  'wk.resume': 'Sambung',
+  'wk.stop': 'Henti',
+  'wk.paused': 'Dijeda',
+  'wk.gpsDenied': 'Lokasi dimatikan untuk aplikasi ini.',
+  'wk.trk_still': 'tidak bergerak',
+  'wk.trk_weak': 'isyarat lemah',
+  'wk.trk_jump': 'lompatan diabaikan',
+  'wk.trk_nofix': 'belum dapat isyarat',
+  'wk.trkPointsN': '{n} titik',
 };
 
 export const translations = { en, ms };
