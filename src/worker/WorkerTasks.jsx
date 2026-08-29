@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLang } from '../context/LanguageContext.jsx';
 import { useOnline } from '../hooks/useOnline.js';
@@ -20,6 +20,11 @@ import { periodLabel, periodTasks, splitDone } from './workerTasks.js';
 import TaskRow from './TaskRow.jsx';
 import { useWorkerTrack } from './useWorkerTrack.js';
 
+/* The map brings Leaflet with it, and Leaflet is most of a megabyte. Pulled
+   down only when somebody asks to look — the same arrangement the FC Portal's
+   GpsTrack uses, for the same reason. */
+const TrackMap = lazy(() => import('../modules/maintenance/track/TrackMap.jsx'));
+
 /**
  * The Worker Portal, as a to-do list.
  *
@@ -39,12 +44,11 @@ import { useWorkerTrack } from './useWorkerTrack.js';
  * a second full layout into an eleven-hundred-line component would have made
  * both harder to change than keeping the layouts apart and the rules shared.
  *
- * The full form is still there for the things a swipe cannot say — batches, a
- * remark, a job nobody planned — but behind the labelled button under the
- * list, not behind a tap on a row. Tapping a row used to open it, and a swipe
- * the browser judged too small to be a drag is a tap: finishing a job would
- * every so often land the worker on the FC Portal's month planner instead,
- * which is the one screen this portal exists to keep them off.
+ * There is no full form behind this any more, and no way to reach one. It was
+ * there for a job nobody scheduled, and it was the FC Portal's month planner
+ * wearing this portal's ribbon — a second screen, with a second set of rules,
+ * that a worker only ever arrived at by accident. Work that is not on the plan
+ * is the office's to add to the plan.
  */
 export default function WorkerTasks() {
   const { t, lang } = useLang();
@@ -68,6 +72,7 @@ export default function WorkerTasks() {
   const [busy, setBusy] = useState(null);      // the task id being saved
   const [toast, setToast] = useState(null);
   const [syncing, setSyncing] = useState(false);
+  const [mapOpen, setMapOpen] = useState(false);
 
   const track = useWorkerTrack();
 
@@ -178,7 +183,13 @@ export default function WorkerTasks() {
      battery spent on nothing. */
   const stopTrack = (task) => complete(task, track.stop());
 
-  const openForm = () => navigate('/worker/maintenance');
+  /* The map only ever looks. The walk is run from the row's own buttons, and
+     the map is handed it so the line grows while it is watched — a second
+     Start there would be a rival recording of the same job. */
+  const live = track.session
+    ? { points: track.session.points, distance: track.session.distance,
+        startedAt: track.session.startedAt, running: track.running }
+    : null;
 
   const head = 'text-[10px] font-black text-slate-400 uppercase tracking-widest';
 
@@ -256,6 +267,7 @@ export default function WorkerTasks() {
                   onResume={track.resume}
                   onStop={() => stopTrack(task)}
                   onComplete={() => complete(task, track.trackingId === task.id ? track.stop() : null)}
+                  onMap={mayGps ? () => setMapOpen(true) : null}
                 />
               ))}
             </div>
@@ -309,16 +321,19 @@ export default function WorkerTasks() {
           </div>
         )}
 
-        {/* Anything not on the plan — an unscheduled job, or one needing a
-            batch list or a remark — is the full form, which has not gone
-            anywhere. */}
-        <button
-          onClick={openForm}
-          className="w-full bg-white border border-slate-200 text-slate-500 font-black text-[11px] uppercase tracking-widest rounded-2xl px-4 py-3.5 mt-2"
-        >
-          {t('wk.fullForm')}
-        </button>
       </div>
+
+      {mapOpen && (
+        <Suspense fallback={
+          <div className="fixed inset-0 z-[60] bg-slate-900 grid place-items-center">
+            <div className="text-emerald-400 font-mono text-xs uppercase tracking-[0.3em] animate-pulse">
+              {t('common.loading')}
+            </div>
+          </div>
+        }>
+          <TrackMap viewOnly live={live} onClose={() => setMapOpen(false)} onDone={() => setMapOpen(false)} />
+        </Suspense>
+      )}
 
       {toast && (
         <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40 bg-slate-900 text-white

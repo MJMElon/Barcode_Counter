@@ -3,7 +3,6 @@ import { useLang } from '../context/LanguageContext.jsx';
 import { WorkerAuthProvider, useWorker } from './WorkerAuthContext.jsx';
 import WorkerCover from './WorkerCover.jsx';
 import WorkerHome from './WorkerHome.jsx';
-import WorkerMaintenance from './WorkerMaintenance.jsx';
 import WorkerSettings from './WorkerSettings.jsx';
 
 /*
@@ -45,7 +44,12 @@ function Gate({ children }) {
 }
 
 /* A module the worker's access does not include is not reachable by typing
-   its address either. The home screen hides the card; this refuses the room. */
+   its address either. The home screen hides the card; this refuses the room.
+
+   Only Settings is behind it now. Maintenance has no room of its own any
+   more — it IS the portal, drawn by WorkerHome, so a worker without it is
+   shown the "nothing open" line rather than sent to a URL that no longer
+   exists. */
 function ModuleGate({ name, children }) {
   const { modules } = useWorker();
   if (!modules[name]) return <Navigate to="/worker" replace />;
@@ -58,14 +62,6 @@ export default function WorkerPortal() {
       <Gate>
         <Routes>
           <Route index element={<WorkerHome />} />
-          <Route
-            path="maintenance"
-            element={
-              <ModuleGate name="maintenance">
-                <WorkerMaintenance />
-              </ModuleGate>
-            }
-          />
           <Route
             path="settings"
             element={

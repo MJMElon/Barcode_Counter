@@ -40,10 +40,15 @@ const MAX_PX = 112;
  * running, because that is the button the thumb is already over; STOP appears
  * beside it and does what the name says AND finishes the job, saving the walk
  * with the record. That is the whole point of having walked it.
+ *
+ * The map button opens the satellite view — the nursery outline, where the
+ * phone is, and the line walked so far, growing as it is walked. It only ever
+ * looks: the walk is run from these buttons, and a second Start on the map
+ * would be a rival recording of the same job.
  */
 export default function TaskRow({
   task, tint, tracking, session, elapsed, denied, busy,
-  onStart, onPause, onResume, onStop, onComplete,
+  onStart, onPause, onResume, onStop, onComplete, onMap,
 }) {
   const { t, lang } = useLang();
   const [dx, setDx] = useState(0);
@@ -84,10 +89,8 @@ export default function TaskRow({
    * a little heavily — so finishing a job would every so often throw the
    * worker onto the FC Portal's month planner, which is the one screen this
    * portal exists to keep them off. A gesture nobody asked for must not be
-   * able to change which app you appear to be in.
-   *
-   * Off-plan work is still reachable, from the labelled button under the
-   * list, where choosing it is a decision rather than a slip. */
+   * able to change which app you appear to be in. There is no other screen to
+   * be thrown onto now — the full form has gone — but the rule stands. */
   const click = () => {
     /* A drag is followed by a click on the way up, so a swipe that left the
        panel standing open would otherwise shut it again in the same gesture. */
@@ -212,6 +215,19 @@ export default function TaskRow({
                            font-black text-[11px] uppercase tracking-widest rounded-xl px-3.5 py-2.5"
               >
                 ⏹ {t('wk.stop')}
+              </button>
+            )}
+            {/* Worded like the buttons above it, not an icon on its own. The
+                people using this are not reading a symbol set — every other
+                control on the row says what it does, and this one should. */}
+            {onMap && (
+              <button
+                type="button" onClick={onMap}
+                aria-label={t('wk.openMap')}
+                className="bg-white border border-slate-200 active:bg-slate-50 text-slate-600
+                           font-black text-[11px] uppercase tracking-widest rounded-xl px-3.5 py-2.5"
+              >
+                🗺️ {t('wk.openMap')}
               </button>
             )}
           </div>

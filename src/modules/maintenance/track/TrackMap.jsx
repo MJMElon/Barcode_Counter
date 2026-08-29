@@ -105,7 +105,15 @@ const SIZE = `${OVERSIZE * 100}%`;
  * being driven by a compass is not one somebody should be pushing about with a
  * thumb at the same time.
  */
-export default function TrackMap({ onClose, onDone, initial = null }) {
+/**
+ * `viewOnly` — the map with nothing to press but Close and the compass.
+ *
+ * The Worker Portal records a track from the task row, not from here, so
+ * opening the map to LOOK at a walk must not offer a second Start that would
+ * begin a rival recording of the same job. `live` is that walk, handed in and
+ * followed as it grows: { points, distance, startedAt, running }.
+ */
+export default function TrackMap({ onClose, onDone, initial = null, viewOnly = false, live = null }) {
   const { t } = useLang();
 
   const boxRef = useRef(null);          // the hole it is seen through
@@ -238,17 +246,32 @@ export default function TrackMap({ onClose, onDone, initial = null }) {
     }
     L.circleMarker([fix.lat, fix.lng], {
       radius: 7, color: '#ffffff', weight: 3,
-      fillColor: recording ? '#f43f5e' : '#0ea5e9', fillOpacity: 1,
+      fillColor: (recording || (viewOnly && live && live.running)) ? '#f43f5e' : '#0ea5e9',
+      fillOpacity: 1,
     }).addTo(g);
     g.addTo(map);
     posLayerRef.current = g;
     if (compass !== 'off') map.setView([fix.lat, fix.lng], Math.max(map.getZoom(), WORK_ZOOM), { animate: false });
-  }, [fix, compass, recording]);
+  }, [fix, compass, recording, viewOnly, live && live.running]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!lineRef.current) return;
     lineRef.current.setLatLngs((state.points || []).map((p) => [p[1], p[0]]));
   }, [state.points]);
+
+  /* Following somebody else's walk. Depends on the LENGTH and the distance
+     rather than on `live` itself: the caller builds a fresh object every
+     render, so depending on the object would set state on every render and
+     spin. */
+  useEffect(() => {
+    if (!viewOnly) return;
+    setState({
+      points: (live && live.points) || [],
+      distance: (live && live.distance) || 0,
+      startedAt: (live && live.startedAt) || null,
+    });
+  }, [viewOnly, live && live.points && live.points.length, live && live.distance,
+      live && live.startedAt]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── dragging follows the compass state ──
   useEffect(() => {
@@ -424,7 +447,22 @@ export default function TrackMap({ onClose, onDone, initial = null }) {
           </div>
         </div>
 
-        {!recording ? (
+        {viewOnly ? (
+          /* Nothing to press. The walk is being run from the task row, and a
+             Start here would be a second recording of the same job. */
+          <div className={`${btn} w-full py-3.5 text-center ${
+            live && live.running ? 'bg-rose-600/20 text-rose-300'
+            : live && live.points && live.points.length ? 'bg-amber-500/20 text-amber-300'
+            : 'bg-slate-800 text-slate-400'}`}>
+            {live && live.running ? (
+              <span className="inline-flex items-center gap-2.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse" />
+                {t('wk.mapRecording')}
+              </span>
+            ) : live && live.points && live.points.length ? t('wk.mapPaused')
+              : t('wk.mapLooking')}
+          </div>
+        ) : !recording ? (
           <>
             <button
               onClick={startRecording}
