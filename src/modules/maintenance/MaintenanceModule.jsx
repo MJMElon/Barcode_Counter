@@ -110,6 +110,15 @@ export default function MaintenanceModule({
   plotFilter = null,
   subtitle = 'FC Portal',
   back = '/dashboard',
+  /* The nursery picker. A Field Conductor covers more than one and has to say
+     which; a worker is allocated to one, and a dropdown holding one answer is
+     a question not worth asking on a phone.
+
+     Hidden, the filter stays EMPTY rather than pinning itself to the first
+     nursery — which is what makes this safe. A worker whose boundary happens
+     to span two nurseries still sees both, instead of silently losing one to
+     a control that is no longer on screen to put right. */
+  showNursery = true,
 }) {
   const auth = useAuth();
   const staffName   = identity ? identity.name        : auth.staffName;
@@ -275,8 +284,8 @@ export default function MaintenanceModule({
   // Open on the first nursery rather than on nothing: with no "All" to fall
   // back to, an empty pick would leave the whole screen blank.
   useEffect(() => {
-    if (!nursery && nurseryOptions.length) setNursery(nurseryOptions[0]);
-  }, [nurseryOptions, nursery]);
+    if (showNursery && !nursery && nurseryOptions.length) setNursery(nurseryOptions[0]);
+  }, [nurseryOptions, nursery, showNursery]);
 
 
   /* A queued record has not reached the database, but the work HAS been done
@@ -492,7 +501,7 @@ export default function MaintenanceModule({
         <div className="flex flex-wrap gap-2">
           {/* One nursery at a time. "All" only ever produced a schedule the
               Field Conductor could not work through as one list. */}
-          {nurseryOptions.length > 0 && (
+          {showNursery && nurseryOptions.length > 0 && (
             <select
               value={nursery}
               onChange={(e) => setNursery(e.target.value)}
