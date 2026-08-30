@@ -39,7 +39,7 @@ const THRESHOLD = 110;
  * cost of being careful, or the deck gets read slowly and nobody uses it.
  */
 export default function VerifyHub({
-  records, columnsReady = true,
+  records, columnsReady = true, canReject = true,
   /* The writes go back through the module's source rather than straight to
      Supabase: the same board serves the Worker Portal through the worker_*
      functions, and a component that reaches for the table directly would work
@@ -68,8 +68,17 @@ export default function VerifyHub({
   const [typed, setTyped] = useState('');      // a reason in the conductor's own words
   const [undo, setUndo] = useState(null);      // { record, verb }
   const [error, setError] = useState(null);
-  const [setupNeeded, setSetupNeeded] = useState(!columnsReady);
   const [done, setDone] = useState({ ok: 0, back: 0 });
+
+  /* Whether the columns are there is the page's answer, not this component's
+     — and it arrives AFTER the first paint, because the records have to be
+     read before anything can be read off them. Held as state it was captured
+     once, while the page was still empty and therefore still hopeful, and
+     never corrected: the hub then sat on "nothing left to check" over a list
+     of records it could not accept. A write that comes back complaining is
+     the only thing this component learns on its own. */
+  const [writeRefused, setWriteRefused] = useState(false);
+  const setupNeeded = !columnsReady || writeRefused;
   const start = useRef(null);
   const undoTimer = useRef(null);
 
@@ -84,7 +93,7 @@ export default function VerifyHub({
   }
 
   function fail(e) {
-    if (e && e.message === VERIFY_SETUP_NEEDED) { setSetupNeeded(true); return; }
+    if (e && e.message === VERIFY_SETUP_NEEDED) { setWriteRefused(true); return; }
     setError((e && e.message) || String(e));
   }
 
@@ -110,11 +119,18 @@ export default function VerifyHub({
         setQueue((q) => [record, ...q.filter((r) => r.id !== record.id)]);
         setDone((d) => (verb === 'verified' ? { ...d, ok: d.ok - 1 } : { ...d, back: d.back - 1 }));
         setUndo(null);
-        fail(e);
+        fail(e && e.message === VERIFY_SETUP_NEEDED
+          ? e
+          : new Error(t('mt.saveErr', { msg: (e && e.message) || String(e) })));
       });
   }
 
   const approve = (record) => settle(record, 'verified', () => onApprove(record));
+
+  /* Signing works on any database that has run the verify file; sending back
+     needs the later one. So the ✕ says which file is missing rather than
+     opening a menu whose every answer would fail. */
+  const askWhy = (record) => (canReject ? setAsking(record) : setError(t('mt.rejectSetupNeeded')));
 
   const sendBack = (record, reason) => {
     setAsking(null);
@@ -157,7 +173,7 @@ export default function VerifyHub({
     // Left asks why before it commits, so the card springs back and waits
     // rather than leaving on an answer nobody has given yet.
     setDrag(null);
-    if (moved < -THRESHOLD) setAsking(top);
+    if (moved < -THRESHOLD) askWhy(top);
   }
 
   const dx = flying === 'right' ? 700 : flying === 'left' ? -700 : (drag ? drag.dx : 0);
@@ -230,7 +246,7 @@ export default function VerifyHub({
 
           {/* The same two answers, for a mouse. */}
           <div className="flex items-center justify-center gap-5 py-4">
-            <button onClick={() => top && setAsking(top)} aria-label={t('mt.reject')}
+            <button onClick={() => top && askWhy(top)} aria-label={t('mt.reject')}
               className="w-[56px] h-[56px] rounded-full bg-white border border-slate-200 shadow-lg
                          text-rose-600 text-[24px] font-black grid place-items-center
                          hover:bg-rose-50 active:scale-95 transition cursor-pointer">
@@ -320,9 +336,11 @@ export default function VerifyHub({
       )}
 
       {error && (
-        <div className="mx-3 mb-3 bg-rose-50 border border-rose-200 text-rose-700
-                        text-[12.5px] font-bold rounded-xl px-4 py-3">
-          {t('mt.saveErr', { msg: error })}
+        <div className="mx-3 mb-3 bg-amber-50 border border-amber-200 text-amber-800
+                        text-[12.5px] font-bold rounded-xl px-4 py-3 flex items-start gap-3">
+          <span className="flex-1">{error}</span>
+          <button onClick={() => setError(null)} aria-label={t('common.close')}
+            className="shrink-0 text-amber-700 text-lg leading-none cursor-pointer">×</button>
         </div>
       )}
     </div>

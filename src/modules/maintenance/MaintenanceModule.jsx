@@ -13,6 +13,7 @@ import {
   canMaintain,
   deleteRecord,
   flushMaintenance,
+  hasRejectColumns,
   hasVerifyColumns,
   isModuleAdmin,
   loadMaintenanceData,
@@ -36,7 +37,6 @@ import { formatDistance, mapsUrl } from './track/track.js';
 import GpsTrack from './GpsTrack.jsx';
 import HistoryDialog from './HistoryDialog.jsx';
 import PhotoSlots from './PhotoSlots.jsx';
-import Timeline from './Timeline.jsx';
 import VerifyHub from './VerifyHub.jsx';
 import WeekBoard from './WeekBoard.jsx';
 import WorkIcon from './WorkIcons.jsx';
@@ -293,14 +293,18 @@ export default function MaintenanceModule({
      record itself must stay visible or nobody can see what was refused. */
   const accepted = useMemo(() => allRecords.filter((r) => !r.rejected_at), [allRecords]);
 
-  /* Until shared/add_maint_field_reject.sql has been run there is nowhere to
-     put the answer, and the hub says so rather than swallowing the swipe. The
-     deck stays empty until then too: without the columns every record reads
-     as unchecked, and a deck of five hundred is a deck saying nothing.
+  /* What the database can hold an answer in, read off the records already
+     loaded rather than asked for separately — a column that exists comes back
+     as a key whether or not it is set.
 
-     Taken from the records already loaded rather than asked for separately —
-     the answer is in rows the page is holding. */
+     TWO questions, not one, and conflating them emptied the deck. Signing
+     needs verified_at, which shared/add_maint_field_verify.sql has been
+     adding for months. Sending back needs rejected_at, which arrived with
+     shared/add_maint_field_reject.sql and may not have been run yet — and a
+     database with only the older file must still show a conductor the
+     morning's work with a tick on it, not an empty hub. */
   const verifyReady = !records.length || hasVerifyColumns(records);
+  const rejectReady = !records.length || hasRejectColumns(records);
   const deck = useMemo(
     () => (verifyReady ? awaitingVerify(visible) : []),
     [visible, verifyReady]
@@ -577,23 +581,44 @@ export default function MaintenanceModule({
             next as working the one we are standing in. The same card the
             portal's front page draws, except that here the dials are buttons:
             tapping one opens the record form for that job's plots. */}
-        {!setup && maySchedule && mayRecord && (
+        {!setup && maySchedule && (
           <div className="space-y-3 pt-1">
-            <WeekBoard
-              month={month}
-              week={currentWeek}
-              isNow={viewingNow}
-              counts={counts[currentWeek]}
-              doneCounts={doneCounts[currentWeek]}
-              onPrev={() => stepWeek(-1)}
-              onNext={() => stepWeek(1)}
-              onNow={() => setView({ month: nowMonth, week: nowWeek })}
-              onOpen={(week, workType) => setSheet({ week, workType })}
-            />
-            {!schedule.length && (
-              <div className="bg-white border border-slate-200 rounded-2xl px-4 py-5 text-center text-[13px] font-bold text-slate-400">
-                {t('mt.noSchedule', { nursery: timelineNurseries.join(', ') || '—', month })}
+            {!mayRecord ? (
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-4 text-[13px] font-bold text-amber-800">
+                {t('mt.noPermRecord')}
               </div>
+            ) : (
+              <>
+                <WeekBoard
+                  month={month}
+                  week={currentWeek}
+                  isNow={viewingNow}
+                  counts={counts[currentWeek]}
+                  doneCounts={doneCounts[currentWeek]}
+                  onPrev={() => stepWeek(-1)}
+                  onNext={() => stepWeek(1)}
+                  onNow={() => setView({ month: nowMonth, week: nowWeek })}
+                  onOpen={(week, workType) => setSheet({ week, workType })}
+                />
+                {/* The three answers the month's list used to carry. They are
+                    about the plan, not about the four weeks it was drawn as,
+                    so they outlive it. */}
+                {!timelineNurseries.length ? (
+                  <div className="bg-white border border-slate-200 rounded-2xl px-4 py-5 text-center text-[13px] font-bold text-slate-400">
+                    {t('mt.noPlots')}
+                  </div>
+                ) : !schedule.length ? (
+                  <div className="bg-white border border-slate-200 rounded-2xl px-4 py-5 text-center text-[13px] font-bold text-slate-400">
+                    {t('mt.noSchedule', { nursery: timelineNurseries.join(', '), month })}
+                  </div>
+                ) : schedule.some((r) => r.carried) ? (
+                  <div className="bg-sky-50 border border-sky-200 rounded-xl px-3.5 py-2.5 text-[11px] font-bold text-sky-800">
+                    {t('mt.carriedFrom', {
+                      month: [...new Set(schedule.filter((r) => r.carried).map((r) => r.month))].join(', '),
+                    })}
+                  </div>
+                ) : null}
+              </>
             )}
           </div>
         )}
@@ -609,6 +634,7 @@ export default function MaintenanceModule({
           <VerifyHub
             records={deck}
             columnsReady={verifyReady}
+            canReject={rejectReady}
             staffName={staffName}
             onApprove={(rec) => source.setVerified(rec.id, staffName)}
             onReject={handleReject}
@@ -633,62 +659,6 @@ export default function MaintenanceModule({
           </div>
         )}
 
-        {/* The month's schedule, as four blocks of seven days. Tap a job to
-            record it against the plots the office asked for. */}
-        {/* Always drawn once the table exists. It used to disappear entirely
-            when a Field Conductor was not allowed to record, which looks
-            exactly like the feature not being there.
-
-            Unless the office has switched Schedule Maintenance Work off for
-            this person, which is a deliberate answer rather than an accident:
-            some nurseries want the work recorded without the month's plan on
-            the phone at all. Recording still works — the RECORD WORK button
-            above does not need the plan. */}
-        {!setup && maySchedule && (
-          <>
-            <div className="flex items-baseline justify-between pt-1">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                {t('mt.monthPlan')}
-              </span>
-              <span className="text-[11px] font-black text-slate-500">{month}</span>
-            </div>
-            {!mayRecord ? (
-              <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-4 text-[13px] font-bold text-amber-800">
-                {t('mt.noPermRecord')}
-              </div>
-            ) : !timelineNurseries.length ? (
-              <div className="bg-white border border-slate-200 rounded-2xl px-4 py-5 text-center text-[13px] font-bold text-slate-400">
-                {t('mt.noPlots')}
-              </div>
-            ) : !schedule.length ? (
-              <div className="bg-white border border-slate-200 rounded-2xl px-4 py-5 text-center text-[13px] font-bold text-slate-400">
-                {t('mt.noSchedule', { nursery: timelineNurseries.join(', '), month })}
-              </div>
-            ) : (
-              <>
-                {schedule.some((r) => r.carried) && (
-                  <div className="bg-sky-50 border border-sky-200 rounded-xl px-3.5 py-2.5 text-[11px] font-bold text-sky-800">
-                    {t('mt.carriedFrom', {
-                      month: [...new Set(schedule.filter((r) => r.carried).map((r) => r.month))].join(', '),
-                    })}
-                  </div>
-                )}
-              <Timeline
-                month={month}
-                /* The week we are standing in, marked only in the month it
-                   falls in — and the week being read, so the month and the
-                   board above it never disagree about which is which. */
-                currentWeek={month === nowMonth ? nowWeek : 0}
-                viewWeek={currentWeek}
-                counts={counts}
-                doneCounts={doneCounts}
-                onWeek={(week) => setView({ month, week })}
-                onOpen={(week, workType) => setSheet({ week, workType })}
-              />
-              </>
-            )}
-          </>
-        )}
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm font-bold">
             {t('mt.loadErr', { msg: error })}

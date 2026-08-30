@@ -321,16 +321,27 @@ export const awaitingVerify = (rows) =>
   (rows || []).filter((r) => !r._pending && verifyState(r) === 'awaiting');
 
 /**
- * True once the database can hold an answer.
+ * What the database can hold an answer in.
  *
- * Read off a row rather than asked of the server: the module already has the
+ * Read off a row rather than asked of the server: the caller already has the
  * records, and a column that exists comes back as a key whether or not it is
- * set. With no records at all there is nothing to verify either way, so the
- * hub is simply empty rather than wrong.
+ * set. With no records at all there is nothing to verify either way.
+ *
+ * TWO questions, deliberately. Signing needs verified_at, which
+ * shared/add_maint_field_verify.sql has been adding for months. Sending back
+ * needs rejected_at, which arrived later with
+ * shared/add_maint_field_reject.sql. Asking them as one question emptied the
+ * whole hub on every database that had run only the first file — the
+ * morning's work was there, and the conductor was shown nothing.
  */
 export function hasVerifyColumns(rows) {
   const r = (rows || []).find((x) => x && !x._pending);
-  return !!r && 'verified_at' in r && 'rejected_at' in r;
+  return !!r && 'verified_at' in r;
+}
+
+export function hasRejectColumns(rows) {
+  const r = (rows || []).find((x) => x && !x._pending);
+  return !!r && 'rejected_at' in r;
 }
 
 /**
