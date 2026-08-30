@@ -6,6 +6,7 @@ import { useLang } from '../../context/LanguageContext.jsx';
 import {
   BATCH_SETUP_NEEDED,
   SETUP_NEEDED,
+  VERIFY_SETUP_NEEDED,
   WORK_TYPES,
   allowedNurseries,
   awaitingVerify,
@@ -16,9 +17,12 @@ import {
   isModuleAdmin,
   loadMaintenanceData,
   loadPlotBatches,
+  loadWorkers,
   loadSchedules,
   nurseryKey,
   pendingRecords,
+  setRejected,
+  setVerified,
   submitRecord,
   toCsv,
   todayStr,
@@ -26,14 +30,21 @@ import {
   workTypeByKey,
   workTypeLabel,
 } from './data.js';
+import { canMaintFn, canMaintCorrect } from './functions.js';
+import { generalWorkers } from './helpers.js';
+import { formatDistance, mapsUrl } from './track/track.js';
+import GpsTrack from './GpsTrack.jsx';
 import HistoryDialog from './HistoryDialog.jsx';
 import PhotoSlots from './PhotoSlots.jsx';
 import Timeline from './Timeline.jsx';
 import VerifyHub from './VerifyHub.jsx';
 import WeekBoard from './WeekBoard.jsx';
 import WorkIcon from './WorkIcons.jsx';
+import WhoDidIt from './WhoDidIt.jsx';
 import WorkSheet from './WorkSheet.jsx';
 import { batchesIn } from './plotBatches.js';
+import RecordCard from './RecordCard.jsx';
+import { tintOf } from './tints.js';
 import {
   WEEKS,
   isDone as isJobDone,
@@ -47,12 +58,52 @@ import {
 /** Matches the work sheet: three photos is enough to show a job was done. */
 const MAX_PHOTOS = 3;
 
-// Maintenance work recorded in the field by a Field Conductor: which job, on
-// which plot, on which day. Plots come from shared_plots (Seedling Stock
-// Management settings); which nurseries a user sees is set on the main
-// portal's User Access, the same setting Plot Status uses.
-export default function MaintenanceModule() {
-  const { staffName, permissions } = useAuth();
+/* Where the module gets its data and who it thinks is asking.
+ *
+ * The FC Portal's answer — a Supabase session, and data.js reading the tables
+ * directly — is the default, so the module behaves exactly as it always has
+ * when nobody passes anything.
+ *
+ * The Worker Portal passes its own: a worker signed in with a PIN is `anon`
+ * and cannot read those tables at all, so its data comes back through the
+ * worker_* database functions instead. Same board, same counting, same table
+ * written at the end of it — only the door differs. See
+ * worker/workerMaintSource.js.
+ */
+const FC_SOURCE = {
+  loadData:       loadMaintenanceData,
+  loadPlotBatches,
+  loadWorkers,
+  loadSchedules,
+  submitRecord,
+  deleteRecord,
+  setVerified,
+  setRejected,
+  flushQueue:     flushMaintenance,
+  pending:        pendingRecords,
+};
+
+// Maintenance work recorded in the field: which job, on which plot, on which
+// day. Plots come from shared_plots (Seedling Stock Management settings);
+// which nurseries a Field Conductor sees is set on the main portal's User
+// Access, and which a worker sees is their boundary in the Worker Portal's
+// Settings. Both arrive here as the same `allowed` list.
+export default function MaintenanceModule({
+  source = FC_SOURCE,
+  /* { name, permissions } — who is recording. Absent means the FC session. */
+  identity = null,
+  /* The bar across the top. The FC Portal's TopNav signs out of Supabase,
+     which is not what a worker's Sign Out has to do. */
+  nav = null,
+  /* A worker's boundary can name individual plots, which a nursery list
+     cannot express. Absent means every plot in the allowed nurseries. */
+  plotFilter = null,
+  subtitle = 'FC Portal',
+  back = '/dashboard',
+}) {
+  const auth = useAuth();
+  const staffName   = identity ? identity.name        : auth.staffName;
+  const permissions = identity ? identity.permissions : auth.permissions;
   const { t, lang } = useLang();
 
   const [plots, setPlots] = useState([]);
@@ -68,6 +119,7 @@ export default function MaintenanceModule() {
   const [sheet, setSheet] = useState(null);         // { week, workType }
   const [history, setHistory] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [workers, setWorkers] = useState([]);   // the roster a conductor may credit work to
   const [pending, setPending] = useState([]);   // records the queue is holding
   const [syncing, setSyncing] = useState(false);
   const online = useOnline();
@@ -75,16 +127,56 @@ export default function MaintenanceModule() {
   // This page's own nursery list — Maintenance and PALMS are set separately.
   const allowed = allowedNurseries(permissions, 'maintenance');
   const mayRecord = canMaintain(permissions, 'record');
-  // Changing or removing a record already made is an admin's job. A Field
-  // Conductor records the work; correcting the books is not the same act, and
-  // the office is who answers for it. The maintenance 'edit' tick still has to
-  // be on, so an admin can also be kept out of a module they do not run.
-  const isAdmin   = isModuleAdmin(permissions, 'operation');
-  const mayEdit   = isAdmin && canMaintain(permissions, 'edit');
+  /* Changing a record already made, and removing one, are two ticks now —
+     Setting → a person → Maintenance → Edit work done / Delete work done —
+     because they are two different acts. Correcting a quantity somebody
+     mis-keyed is bookkeeping; making the morning disappear is not.
+
+     Neither falls open. An unticked box that still erases records would be
+     the screen lying in the expensive direction. See canMaintCorrect. */
+  const mayEdit   = canMaintCorrect(permissions, 'edit');
+  const mayDelete = canMaintCorrect(permissions, 'delete');
   const mayExport = canMaintain(permissions, 'export');
-  // Signing for somebody else's morning is its own tick on User Access —
-  // Schedule Maintenance Work → Verify work done.
-  const mayVerify = canMaintain(permissions, 'verify');
+  /* Not a permission — what the work sheet uses to decide whether a job
+     already ticked off can be opened again. Nothing is changed or removed by
+     it; it re-opens a form. That is why it is still the plain admin question
+     and not one of the two ticks above. */
+  const isAdmin   = isModuleAdmin(permissions, 'operation');
+  /* Signing off a worker's morning.
+   *
+   * TWO conditions, and they are different in kind. The tick — Setting → a
+   * person → Maintenance → Verify work done — is who the office has decided
+   * may sign. `source.setVerified` is whether signing is possible at all from
+   * this door, and the Worker Portal's source deliberately has none: there is
+   * no worker_* function to verify with, so a worker holds no button whatever
+   * anybody ticks. Nobody signs off their own morning.
+   *
+   * Which is why a record a worker saves appears in the completed list with
+   * nothing to press, and the same record in the FC Portal carries the button
+   * — one board, one list, and the difference is who is holding the phone. */
+  const mayVerify = !!source.setVerified && canMaintain(permissions, 'verify');
+
+  /* The functions inside Maintenance, switched on one at a time — the office
+     sets them per Field Conductor on the FC Portal's Setting screen, and per
+     worker in the Worker Portal's Settings. Same keys, same defaults, one
+     list: see functions.js.
+
+     Every one of them defaults ON, so a person whose access predates the
+     switches keeps the form they had. GPS is the exception and stays off
+     until it is asked for. */
+  const maySchedule = canMaintFn(permissions, 'schedule');
+  const fnBatches   = canMaintFn(permissions, 'batches');
+  const fnWorkers   = canMaintFn(permissions, 'workers');
+  const fnGps       = canMaintFn(permissions, 'gps');
+  /* The camera, like everything else on this form, is the switch and nothing
+     else. It used to be the switch AND a prop the Worker Portal passed as
+     false, which made the two portals differ for a reason that was not on any
+     screen. A worker still gets no camera — a PIN sign-in is `anon` and the
+     documents bucket takes uploads from `authenticated` only — but that is
+     now said in ONE place, workerMaintSource.js, as a permission the worker
+     cannot have, rather than as a second hidden rule here. */
+  const fnPhotos    = canMaintFn(permissions, 'photos');
+  const fnRemark    = canMaintFn(permissions, 'remark');
 
   const flash = (text) => {
     setToast(text);
@@ -94,7 +186,7 @@ export default function MaintenanceModule() {
 
   async function reload() {
     try {
-      const d = await loadMaintenanceData();
+      const d = await source.loadData();
       setPlots(d.plots);
       setRecords(d.records);
       setError(null);
@@ -109,7 +201,7 @@ export default function MaintenanceModule() {
     reload();
   }, []);
 
-  const refreshPending = () => pendingRecords().then(setPending).catch(() => setPending([]));
+  const refreshPending = () => source.pending().then(setPending).catch(() => setPending([]));
 
   /* Send anything waiting. useAutoSync already fires on mount, every minute
      while online, and the moment the connection comes back — which is exactly
@@ -118,9 +210,9 @@ export default function MaintenanceModule() {
     if (syncing) return;
     setSyncing(true);
     try {
-      const before = (await pendingRecords()).length;
+      const before = (await source.pending()).length;
       if (before) {
-        const r = await flushMaintenance();
+        const r = await source.flushQueue();
         if (r.sent) { flash(t('mt.synced', { n: r.sent })); reload(); }
         if (r.dropped) flash(t('mt.syncDropped', { n: r.dropped }));
       }
@@ -133,9 +225,37 @@ export default function MaintenanceModule() {
   useAutoSync(sync, 60000);
 
   const visiblePlots = useMemo(
-    () => plots.filter((p) => allowed === null || allowed.includes(p.nursery_name)),
-    [plots, allowed]
+    () => plots.filter((p) =>
+      (allowed === null || allowed.includes(p.nursery_name)) &&
+      (!plotFilter || plotFilter(p.plot_name))),
+    [plots, allowed, plotFilter]
   );
+
+  /* This nursery's workers. A conductor covering two nurseries should not be
+     offered the other one's crew on a plot they never set foot in.
+
+     Matched through nurseryKey, not by string equality. The nursery on screen
+     comes from shared_plots and reads "UNN 2"; the Payroll register is filled
+     in by hand and may say "UNN2". Comparing them as they are spelt found the
+     crew for BNN — which has no space in it — and nobody at all for UNN 1 or
+     UNN 2, so the tick list simply did not appear there.
+
+     `section` is read when `nursery` is blank, the same fallback the office's
+     own worker link uses: the register copies one into the other, but a row
+     added since carries only whichever the person keying it used. */
+  const nurseryWorkers = useMemo(() => {
+    const want = nursery ? nurseryKey(nursery) : null;
+    const mine = want
+      ? workers.filter((w) => (nurseryKey(w.nursery) || nurseryKey(w.section)) === want)
+      : workers;
+    /* Only the people who actually do maintenance work. The register holds
+       the whole nursery — the conductor, his assistant, drivers, the pump
+       operator, clerks — and offering all of them is offering the wrong
+       answer nineteen ways. Same rule the office's Worker Record uses, so a
+       name on one sheet is a name on the other. Judged per nursery, because
+       the rule asks whether anybody HERE has been labelled. */
+    return generalWorkers(mine);
+  }, [workers, nursery]);
 
   const nurseryOptions = useMemo(
     () => [...new Set(visiblePlots.map((p) => p.nursery_name).filter(Boolean))].sort(),
@@ -148,6 +268,7 @@ export default function MaintenanceModule() {
     if (!nursery && nurseryOptions.length) setNursery(nurseryOptions[0]);
   }, [nurseryOptions, nursery]);
 
+
   /* A queued record has not reached the database, but the work HAS been done
      — so it counts for the week's ticks and shows in the list. Without this a
      Field Conductor offline would see the plot still outstanding and do it
@@ -159,9 +280,10 @@ export default function MaintenanceModule() {
     () => allRecords.filter(
       (r) =>
         (allowed === null || allowed.includes(r.nursery_name)) &&
+        (!plotFilter || plotFilter(r.plot_name)) &&
         (!nursery || r.nursery_name === nursery)
     ),
-    [allRecords, allowed, nursery]
+    [allRecords, allowed, plotFilter, nursery]
   );
 
   /* A record sent back is a record refused, so the plot it was made against
@@ -171,14 +293,13 @@ export default function MaintenanceModule() {
      record itself must stay visible or nobody can see what was refused. */
   const accepted = useMemo(() => allRecords.filter((r) => !r.rejected_at), [allRecords]);
 
-  /* Submissions nobody has looked at yet, in this nursery. Taken from the
-     records already loaded rather than asked for separately: the answer is in
-     rows the page is holding, and a second read of the same table to find out
-     which of them have a NULL would be a second read for nothing. */
-  // Until shared/add_maint_field_reject.sql has been run there is nowhere to
-  // put the answer, and the hub says so rather than swallowing the swipe. The
-  // deck stays empty until then too: without the columns every record reads as
-  // unchecked, and a badge saying 500 is a badge saying nothing.
+  /* Until shared/add_maint_field_reject.sql has been run there is nowhere to
+     put the answer, and the hub says so rather than swallowing the swipe. The
+     deck stays empty until then too: without the columns every record reads
+     as unchecked, and a deck of five hundred is a deck saying nothing.
+
+     Taken from the records already loaded rather than asked for separately —
+     the answer is in rows the page is holding. */
   const verifyReady = !records.length || hasVerifyColumns(records);
   const deck = useMemo(
     () => (verifyReady ? awaitingVerify(visible) : []),
@@ -221,11 +342,23 @@ export default function MaintenanceModule() {
     // The office files under BNN / UNN1; shared_plots says "UNN 1". Ask for
     // both spellings and keep whichever comes back.
     const keys = [...new Set(names.flatMap((n) => [n, nurseryKey(n)]))];
-    loadSchedules(keys, month)
+    source.loadSchedules(keys, month)
       .then((rows) => { if (live) setSchedule(rows); })
       .catch(() => { if (live) setSchedule([]); });
     return () => { live = false; };
   }, [nurseriesSig, month]);
+
+  /* The roster a conductor may credit a job to. Only the FC portal asks —
+     a worker recording their own morning is already the answer, and its
+     source offers no loadWorkers at all. */
+  useEffect(() => {
+    let live = true;
+    if (!source.loadWorkers) { setWorkers([]); return undefined; }
+    source.loadWorkers()
+      .then((rows) => { if (live) setWorkers(rows || []); })
+      .catch((e) => { console.warn('[maintenance] worker list unavailable:', e); if (live) setWorkers([]); });
+    return () => { live = false; };
+  }, [source]);
 
   // Once, when the module opens. Deliberately NOT re-read after a save:
   // recording that a plot was sprayed moves no seedlings, so the balances
@@ -234,7 +367,7 @@ export default function MaintenanceModule() {
   // twelve plots read the whole ledger twelve times for no new information.
   useEffect(() => {
     let live = true;
-    loadPlotBatches()
+    source.loadPlotBatches()
       .then((m) => { if (live) setBatchMap(m); })
       .catch(() => { if (live) setBatchMap(new Map()); });
     return () => { live = false; };
@@ -259,12 +392,12 @@ export default function MaintenanceModule() {
     return acc;
   }, {}), [tasksByWeek, accepted, month]);
 
-  async function handleSheetSave({ task, batches, remark, photos, qty }) {
+  async function handleSheetSave({ task, batches, remark, photos, qty, workedBy, gps }) {
     const plot = visiblePlots.find((p) => p.plot_name === task.plot)
       || { plot_name: task.plot, nursery_name: task.nursery || nursery || null };
     setSaving(true);
     try {
-      const { queued } = await submitRecord({
+      const { queued } = await source.submitRecord({
         plot,
         workTypeKey: sheet.workType.key,
         // Today, always: the record says the job was done, and it is being
@@ -277,7 +410,9 @@ export default function MaintenanceModule() {
         weekNo: sheet.week,
         scheduleMonth: month,
         reportedBy: staffName,
+        workedBy,
         photos,
+        gps,
       });
       if (queued) {
         flash(t('mt.savedOffline', { plot: task.plot }));
@@ -298,7 +433,7 @@ export default function MaintenanceModule() {
     const plot = visiblePlots.find((p) => p.plot_name === form.plotName);
     if (!plot) return;
     try {
-      const { queued } = await submitRecord({
+      const { queued } = await source.submitRecord({
         id: editing && editing.record ? editing.record.id : null,
         plot,
         workTypeKey: form.workTypeKey,
@@ -307,8 +442,10 @@ export default function MaintenanceModule() {
         chemical: form.chemical,
         remark: form.remark,
         reportedBy: staffName,
+        workedBy: form.workedBy,
         batches: form.batches,
         photos: form.photos,
+        gps: form.gps,
       });
       if (queued) {
         flash(t('mt.savedOffline', { plot: plot.plot_name }));
@@ -327,14 +464,41 @@ export default function MaintenanceModule() {
   }
 
   async function handleDelete(rec) {
-    if (!mayEdit) return flash(t('mt.noPermEdit'));
+    if (!mayDelete) return flash(t('mt.noPermDelete'));
     if (!window.confirm(t('mt.confirmDelete'))) return;
     try {
-      await deleteRecord(rec.id);
+      await source.deleteRecord(rec.id);
       flash(t('mt.deletedToast'));
       reload();
     } catch (e) {
       flash(t('mt.saveErr', { msg: e.message || String(e) }));
+    }
+  }
+
+  /* Sending a record back, from the deck. The row stays and nothing is
+     deleted — what is refused is the record of it, so the plot goes back on
+     the week as still outstanding. */
+  function handleReject(rec, reason) {
+    if (!mayVerify) return Promise.resolve();
+    return source.setRejected(rec.id, staffName, reason);
+  }
+
+  async function handleVerify(rec) {
+    if (!mayVerify) return;
+    const on = !rec.verified_at;
+    /* Answer on screen before the round trip: a conductor works down a list
+       of a morning's records, and a tick that waits for the network turns
+       into two taps and a duplicate. Put back if the save fails. */
+    setRecords((rs) => rs.map((r) => (r.id === rec.id
+      ? { ...r, verified_by: on ? staffName : null, verified_at: on ? new Date().toISOString() : null }
+      : r)));
+    try {
+      await source.setVerified(rec.id, on ? staffName : null);
+    } catch (e) {
+      setRecords((rs) => rs.map((r) => (r.id === rec.id ? rec : r)));
+      flash(e && e.message === VERIFY_SETUP_NEEDED
+        ? t('mt.verifySetupNeeded')
+        : t('mt.saveErr', { msg: (e && e.message) || String(e) }));
     }
   }
 
@@ -350,7 +514,7 @@ export default function MaintenanceModule() {
 
   return (
     <div className="min-h-screen bg-slate-100 fade-enter">
-      <TopNav title={t('mt.title')} subtitle="FC Portal" user={staffName} back="/dashboard" />
+      {nav || <TopNav title={t('mt.title')} subtitle={subtitle} user={staffName} back={back} />}
       <div className="max-w-[900px] mx-auto px-3 sm:px-6 py-4 space-y-3">
         {/* Filters + actions */}
         <div className="flex flex-wrap gap-2">
@@ -384,20 +548,6 @@ export default function MaintenanceModule() {
           )}
         </div>
 
-        {loading && (
-          <div className="text-center text-slate-400 text-xs font-black uppercase tracking-widest py-6 animate-pulse">
-            {t('common.loading')}
-          </div>
-        )}
-
-        {/* Nothing on this page can do anything until somebody opens a
-            nursery. Said once, here, rather than as four empty lists. */}
-        {!loading && allowed !== null && allowed.length === 0 && (
-          <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl px-4 py-3 text-sm font-bold">
-            {t('mt.noNurseryAccess')}
-          </div>
-        )}
-
         {/* What has been recorded but not yet sent. Shown rather than hidden:
             a Field Conductor needs to know their morning is safe, and that it
             has not reached the office yet. */}
@@ -424,10 +574,10 @@ export default function MaintenanceModule() {
 
         {/* One week at a time, at full width, and any week — a Field
             Conductor is as often catching up on last week or reading ahead to
-            next as working the one we are standing in. Only the jobs the
-            schedule actually asks for appear; tapping one opens the record
-            form for that job's plots. */}
-        {!setup && mayRecord && (
+            next as working the one we are standing in. The same card the
+            portal's front page draws, except that here the dials are buttons:
+            tapping one opens the record form for that job's plots. */}
+        {!setup && maySchedule && mayRecord && (
           <div className="space-y-3 pt-1">
             <WeekBoard
               month={month}
@@ -445,18 +595,26 @@ export default function MaintenanceModule() {
                 {t('mt.noSchedule', { nursery: timelineNurseries.join(', ') || '—', month })}
               </div>
             )}
-
-            {/* Checking the morning is part of the morning, so the deck sits
-                under the week rather than behind a button nobody presses. */}
-            {mayVerify && (
-              <VerifyHub
-                records={deck}
-                columnsReady={verifyReady}
-                staffName={staffName}
-                onChanged={reload}
-              />
-            )}
           </div>
+        )}
+
+        {/* The morning's submissions, one card at a time. On the page rather
+            than behind a button: checking the morning is part of the morning,
+            and a deck nobody can see is a deck nobody opens.
+
+            Only where signing is possible at all — the Worker Portal's source
+            has no setVerified, so a worker never sees this. Nobody signs off
+            their own morning. */}
+        {!setup && mayVerify && (
+          <VerifyHub
+            records={deck}
+            columnsReady={verifyReady}
+            staffName={staffName}
+            onApprove={(rec) => source.setVerified(rec.id, staffName)}
+            onReject={handleReject}
+            onUndo={(rec) => source.setVerified(rec.id, null)}
+            onChanged={reload}
+          />
         )}
 
         {mayRecord && (
@@ -479,8 +637,14 @@ export default function MaintenanceModule() {
             record it against the plots the office asked for. */}
         {/* Always drawn once the table exists. It used to disappear entirely
             when a Field Conductor was not allowed to record, which looks
-            exactly like the feature not being there. */}
-        {!setup && (
+            exactly like the feature not being there.
+
+            Unless the office has switched Schedule Maintenance Work off for
+            this person, which is a deliberate answer rather than an accident:
+            some nurseries want the work recorded without the month's plan on
+            the phone at all. Recording still works — the RECORD WORK button
+            above does not need the plan. */}
+        {!setup && maySchedule && (
           <>
             <div className="flex items-baseline justify-between pt-1">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
@@ -513,7 +677,7 @@ export default function MaintenanceModule() {
                 month={month}
                 /* The week we are standing in, marked only in the month it
                    falls in — and the week being read, so the month and the
-                   navigator above it never disagree about which is which. */
+                   board above it never disagree about which is which. */
                 currentWeek={month === nowMonth ? nowWeek : 0}
                 viewWeek={currentWeek}
                 counts={counts}
@@ -542,6 +706,11 @@ export default function MaintenanceModule() {
             today={today}
             saving={saving}
             isAdmin={isAdmin}
+            allowPhotos={fnPhotos}
+            showBatches={fnBatches}
+            showGps={fnGps}
+            showRemark={fnRemark}
+            workers={fnWorkers && nurseryWorkers.length ? nurseryWorkers : null}
             isDone={(task) => isJobDone(accepted, {
               workTypeKey: sheet.workType.key, plot: task.plot,
               chemical: task.chemical, week: sheet.week, month })}
@@ -550,13 +719,29 @@ export default function MaintenanceModule() {
           />
         )}
 
+        {loading && (
+          <div className="text-center text-slate-400 text-xs font-black uppercase tracking-widest py-6 animate-pulse">
+            {t('common.loading')}
+          </div>
+        )}
+
+        {/* Nothing on this page can do anything until somebody opens a
+            nursery. Said once, here, rather than as an empty list. */}
+        {!loading && allowed !== null && allowed.length === 0 && (
+          <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl px-4 py-3 text-sm font-bold">
+            {t('mt.noNurseryAccess')}
+          </div>
+        )}
       </div>
 
       {history && (
         <HistoryDialog
           records={visible}
           today={today}
+          mayVerify={mayVerify}
           mayEdit={mayEdit}
+          mayDelete={mayDelete}
+          onVerify={handleVerify}
           onEdit={(r) => setEditing({ record: r })}
           onDelete={handleDelete}
           onClose={() => setHistory(false)}
@@ -570,6 +755,11 @@ export default function MaintenanceModule() {
           batchMap={batchMap}
           onClose={() => setEditing(null)}
           onSave={handleSave}
+          allowPhotos={fnPhotos}
+          showBatches={fnBatches}
+          showGps={fnGps}
+          showRemark={fnRemark}
+          workers={fnWorkers && nurseryWorkers.length ? nurseryWorkers : null}
           t={t}
           lang={lang}
         />
@@ -585,17 +775,42 @@ export default function MaintenanceModule() {
 }
 
 // Bottom sheet to record a job, or correct one already recorded.
-function EntrySheet({ record, plots, batchMap, onClose, onSave, t, lang }) {
+function EntrySheet({ record, plots, batchMap, onClose, onSave, allowPhotos = true, workers = null,
+                      showBatches = true, showGps = false, showRemark = true, t, lang }) {
   const [workTypeKey, setWorkTypeKey] = useState(record ? record.work_type : WORK_TYPES[0].key);
   const [plotName, setPlotName] = useState(record ? record.plot_name : '');
   const [date, setDate] = useState(record ? record.work_date : todayStr());
   const [chemical, setChemical] = useState((record && record.chemical) || '');
   const [remark, setRemark] = useState((record && record.remark) || '');
   const [saving, setSaving] = useState(false);
+  const [workedBy, setWorkedBy] = useState(
+    record && record.worked_by
+      ? String(record.worked_by).split(',').map((n) => n.trim()).filter(Boolean)
+      : []
+  );
   const [batches, setBatches] = useState(
     record && record.batch_name
       ? String(record.batch_name).split(',').map((b) => b.trim()).filter(Boolean)
       : []
+  );
+  /* The track walked for this job. Only offered when the switch is on, and an
+     edit keeps the track the record already carries rather than replacing it
+     with a walk round the office. The points come back only when the record
+     was read with the full row; without them the summary still shows, so
+     correcting a remark never silently drops somebody's track. */
+  const [gps, setGps] = useState(
+    record && record.gps_lat != null && record.gps_lng != null
+      ? {
+          track: record.gps_track || null,
+          points: record.gps_points ?? null,
+          distance_m: record.gps_distance_m ?? null,
+          started_at: record.gps_started_at || null,
+          ended_at: record.gps_ended_at || null,
+          lat: record.gps_lat,
+          lng: record.gps_lng,
+          accuracy: record.gps_accuracy ?? null,
+        }
+      : null
   );
   const [photos, setPhotos] = useState(() => {
     const a = Array(MAX_PHOTOS).fill(null);
@@ -702,6 +917,7 @@ function EntrySheet({ record, plots, batchMap, onClose, onSave, t, lang }) {
           </>
         )}
 
+        {showBatches && <>
         <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
           {t('mt.batchesInPlot')}
         </label>
@@ -744,14 +960,24 @@ function EntrySheet({ record, plots, batchMap, onClose, onSave, t, lang }) {
         <div className="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-3 text-sm font-black text-slate-700 mb-3">
           {qty ? qty.toLocaleString() : '—'}
         </div>
+        </>}
 
+        {workers && (
+          <WhoDidIt workers={workers} value={workedBy} onChange={setWorkedBy} t={t} />
+        )}
+
+        {showGps && <GpsTrack value={gps} onChange={setGps} />}
+
+        {allowPhotos && <>
         <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
           {t('mt.photos', { n: MAX_PHOTOS })}
         </label>
         <div className="mb-3">
           <PhotoSlots value={photos} onChange={setPhotos} max={MAX_PHOTOS} />
         </div>
+        </>}
 
+        {showRemark && <>
         <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
           {t('mt.remark')}
         </label>
@@ -761,12 +987,14 @@ function EntrySheet({ record, plots, batchMap, onClose, onSave, t, lang }) {
           onChange={(e) => setRemark(e.target.value)}
           className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-sm font-semibold outline-none focus:border-emerald-500 mb-4"
         />
+        </>}
 
         <button
           onClick={async () => {
             setSaving(true);
             await onSave({ workTypeKey, plotName, date, qty, chemical: chemical.trim(),
-                           remark: remark.trim(), batches, photos: photos.filter(Boolean) });
+                           remark: remark.trim(), batches, workedBy, gps,
+                           photos: photos.filter(Boolean) });
             setSaving(false);
           }}
           disabled={saving || !plotName || !date || !workTypeKey}

@@ -191,18 +191,24 @@ export default function TopNav({
     </>
   );
 
-  /* Two layouts. `book` centres the wordmark in the bar with a three-column
-     grid — equal flexible columns either side, so the mark sits on the bar's
-     centre line rather than in whatever space the controls leave over. Every
-     other page keeps the plain row: the page name belongs beside the back
-     arrow you came in through, not floating in the middle. */
+  /* Two layouts. `book` centres the wordmark with a three-column grid; every
+     other page keeps the plain row, because the page name belongs beside the
+     back arrow you came in through, not floating in the middle.
+
+     The side columns are `auto`, not `1fr`. Equal flexible columns put the
+     mark on the bar's exact centre line, which is prettier — and on a 390px
+     phone it forced the empty left column to match the width of the controls
+     on the right, pushing Sign Out six pixels off the screen. `auto` gives
+     each side what it needs and centres the mark in what is left, so the mark
+     still reads as centred whenever the two sides are anywhere near equal,
+     and the bar cannot overflow when they are not. */
   if (book) {
     return (
       <div
-        className={`${bar} border-b px-3 sm:px-6 py-2.5 grid grid-cols-[1fr_auto_1fr] items-center gap-2 sticky top-0 z-30 shadow-sm`}
+        className={`${bar} border-b px-3 sm:px-6 py-2.5 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 sticky top-0 z-30 shadow-sm`}
       >
         <div className="flex items-center gap-2 sm:gap-3 justify-self-start">{leftControls}</div>
-        {wordmark}
+        <div className="justify-self-center min-w-0">{wordmark}</div>
         <div className="flex items-center gap-2 sm:gap-3 justify-self-end">{rightControls}</div>
       </div>
     );

@@ -2,9 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { useLang } from '../../context/LanguageContext.jsx';
 import {
   VERIFY_SETUP_NEEDED,
-  clearVerification,
-  rejectRecord,
-  verifyRecord,
   workTypeByKey,
   workTypeLabel,
 } from './data.js';
@@ -41,7 +38,14 @@ const THRESHOLD = 110;
  * three seconds, because the cost of a mis-swipe has to be smaller than the
  * cost of being careful, or the deck gets read slowly and nobody uses it.
  */
-export default function VerifyHub({ records, columnsReady = true, staffName, onChanged }) {
+export default function VerifyHub({
+  records, columnsReady = true,
+  /* The writes go back through the module's source rather than straight to
+     Supabase: the same board serves the Worker Portal through the worker_*
+     functions, and a component that reaches for the table directly would work
+     on one door and fail silently on the other. */
+  onApprove, onReject, onUndo, onChanged,
+}) {
   const { t, lang } = useLang();
   const today = new Date().toISOString().slice(0, 10);
 
@@ -110,13 +114,12 @@ export default function VerifyHub({ records, columnsReady = true, staffName, onC
       });
   }
 
-  const approve = (record) =>
-    settle(record, 'verified', () => verifyRecord(record.id, staffName));
+  const approve = (record) => settle(record, 'verified', () => onApprove(record));
 
   const sendBack = (record, reason) => {
     setAsking(null);
     setTyped('');
-    settle(record, 'rejected', () => rejectRecord(record.id, staffName, reason));
+    settle(record, 'rejected', () => onReject(record, reason));
   };
 
   /* Taking it back puts the record where it was — waiting — and returns it to
@@ -129,7 +132,7 @@ export default function VerifyHub({ records, columnsReady = true, staffName, onC
     setUndo(null);
     setDone((d) => (verb === 'verified' ? { ...d, ok: d.ok - 1 } : { ...d, back: d.back - 1 }));
     setQueue((q) => [record, ...q.filter((r) => r.id !== record.id)]);
-    clearVerification(record.id)
+    onUndo(record)
       .then(() => onChanged && onChanged())
       .catch(fail);
   }

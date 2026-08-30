@@ -142,10 +142,59 @@ body {
 }
 .btn-open:hover { background: #10b981; color: white; border-color: #10b981; }
 
+/* ── The MJM coin ──
+   ONE turn, then a long rest. The whole cycle is forty seconds and the turn
+   itself is the first tenth of it — under four seconds — so the coin is
+   still for nine tenths of its life. That is the point, and it is why the
+   cycle is written as a rest rather than as a spin: a button that never
+   stops moving stops being noticed, and this one has to be noticed on the
+   morning it matters.
+
+   The keyframe lives here rather than in the component so every coin in the
+   portal keeps the same time and there is one place to change it. What makes
+   it read as a coin rather than a card flipping is in Coin.jsx: a stack of
+   discs whose rims are its thickness.
+
+   It is a coin being TOSSED, so the hop and the turn are one movement on one
+   transform — but the two do not keep the same time, and that is deliberate.
+
+   The RISE slows as it climbs and the coin hangs at the top, the way a thrown
+   thing does. The TURN does the opposite: it leaves the ground unhurried,
+   winds up as it goes, and is whirling hardest exactly where the coin is
+   barely moving upward at all. Then it unwinds on the way down and settles a
+   moment after landing.
+
+   That crossing is the whole effect. Slowest travel against fastest spin at
+   the top of the arc is what makes the eye stop there, which is the only
+   moment in forty seconds anyone is being asked to look.
+
+   Three full turns, so it comes to rest on the face it left. --hop is the
+   height, set from the diameter in Coin.jsx, so a small coin makes a small
+   jump and the movement is one shape at any size. */
+@keyframes mjm-coin-spin {
+  0%        { transform: translateY(0)                                rotateY(0deg); }
+  1.2%      { transform: translateY(calc(var(--hop, 18px) * -0.55))   rotateY(40deg); }
+  2.4%      { transform: translateY(calc(var(--hop, 18px) * -0.95))   rotateY(130deg); }
+  3.6%      { transform: translateY(calc(var(--hop, 18px) * -1.15))   rotateY(430deg); }
+  4.8%      { transform: translateY(calc(var(--hop, 18px) * -1.05))   rotateY(780deg); }
+  6%        { transform: translateY(calc(var(--hop, 18px) * -0.75))   rotateY(940deg); }
+  7.2%      { transform: translateY(calc(var(--hop, 18px) * -0.35))   rotateY(1030deg); }
+  8.4%      { transform: translateY(0)                                rotateY(1070deg); }
+  9.6%      { transform: translateY(0)                                rotateY(1078deg); }
+  11%, 100% { transform: translateY(0)                                rotateY(1080deg); }
+}
+
 /* ── Motion ──
-   Anyone who has asked their device to reduce motion gets a still train. */
+   Anyone who has asked their device to reduce motion gets a still train and
+   a coin that does not turn. */
 @media (prefers-reduced-motion: reduce) {
   .animate-puff {
     animation: none !important;
+  }
+  /* A coin that holds still, turned a little off square so it still reads as
+     a struck coin with a side to it rather than a flat disc. */
+  .mjm-coin {
+    animation: none !important;
+    transform: rotateY(-18deg) !important;
   }
 }

@@ -13,7 +13,9 @@ import RecordCard from './RecordCard.jsx';
  * reference, not part of the day's work, so it opens when it is wanted and
  * takes the whole screen when it does.
  */
-export default function HistoryDialog({ records, today, mayEdit, onEdit, onDelete, onClose }) {
+export default function HistoryDialog({
+  records, today, mayVerify, mayEdit, mayDelete, onVerify, onEdit, onDelete, onClose,
+}) {
   const { t, lang } = useLang();
   const [month, setMonth] = useState('');       // '' = every month
   const [work, setWork] = useState('');         // '' = every job
@@ -80,7 +82,8 @@ export default function HistoryDialog({ records, today, mayEdit, onEdit, onDelet
           {shown.length ? (
             shown.map((r) => (
               <RecordCard key={r.id} record={r} today={today}
-                          mayEdit={mayEdit} onEdit={onEdit} onDelete={onDelete} />
+                          mayVerify={mayVerify} mayEdit={mayEdit} mayDelete={mayDelete}
+                          onVerify={onVerify} onEdit={onEdit} onDelete={onDelete} />
             ))
           ) : (
             <div className="text-center text-slate-400 text-sm font-bold py-16">

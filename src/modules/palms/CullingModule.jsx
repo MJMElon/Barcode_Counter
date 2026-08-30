@@ -31,7 +31,12 @@ export default function CullingModule() {
   };
 
   return (
-    <div className="min-h-screen bg-[#050a0e] fade-enter">
+    /* The page is exactly the window tall and does not scroll: the calculator
+       inside it is sized to fit, and a page that can scroll behind a thing
+       that fits is a page that bounces under a thumb for no reason. dvh
+       rather than vh so the phone's own bars are counted — with vh, iOS hides
+       the keypad's bottom row behind its toolbar. */
+    <div className="h-[100dvh] overflow-hidden flex flex-col bg-[#050a0e] fade-enter">
       {/* Dark, because the screen is a calculator and the calculator is the
           screen. The Scan module already runs dark for the same reason — a
           tool you hold up in the sun rather than a page you read. */}
@@ -43,7 +48,7 @@ export default function CullingModule() {
         theme="dark"
       />
 
-      <div className="px-3 py-4 sm:py-7">
+      <div className="px-3 py-3 sm:py-6 flex-1 min-h-0">
         <CullingTab
           t={t}
           staffName={staffName}

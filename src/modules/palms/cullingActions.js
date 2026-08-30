@@ -13,6 +13,14 @@ import { fmtNum, fmtPct } from './cullingData.js';
  * the specific ones go first. Each one carries everything the case needs, so
  * the screen never has to know what "drone flight" means.
  *
+ * category is the name this case is FILED under, and it is the string Nelos
+ * routes on — nelos_routes matches a case by the words in its category, not
+ * by an id. So it is not a label: renaming it here without renaming it in
+ * nelos_categories and nelos_routes leaves a rule for a name nothing raises,
+ * and every culling case falls back to the Field Conductors who raised it.
+ * shared/migration_nelos_culling_rename.sql in mjm-ai-system moves both, and
+ * carries the cases already filed under the old names across with them.
+ *
  * titleKey is the wording on the button, and changes with the language.
  * caseTitle is the wording the CASE carries, and does not: a case is read by
  * whoever picks it up, days later, in whatever language they use, so its
@@ -32,7 +40,7 @@ export const CULLING_ACTIONS = [
     when: (rate) => rate <= CULL_LIMIT,
     titleKey: 'cull.actDrone',
     caseTitle: (plot) => `Request drone flight for culling at plot "${plot}"`,
-    category: 'Culling — Drone Flight',
+    category: 'From Culling Calculator - Request Drone Flight',
     priority: 'normal',
     tone: 'ok',
   },
@@ -43,8 +51,11 @@ export const CULLING_ACTIONS = [
     when: (rate) => rate > CULL_LIMIT,
     titleKey: 'cull.actRecheck',
     caseTitle: (plot) => `Request auditor to plot "${plot}" for high culling rate audit`,
-    category: 'Culling — Final Check',
-    priority: 'high',
+    category: 'From Culling Calculator - Request Final Check For Pokok Inang',
+    // Normal, like everything else. Nelos does not show a priority any
+    // more, so raising at 'high' only wrote a word nobody reads — and when
+    // every case a rule raises is high, high is not a priority.
+    priority: 'normal',
     tone: 'warn',
   },
 ];
@@ -63,9 +74,13 @@ export function actionFor(rate) {
  * see what was counted and what it left the rate at, without opening the
  * calculator or taking the Field Conductor's word for it.
  */
-export function caseBody({ t, plot, nursery, balance, inang, rate, terms, by, date }) {
+export function caseBody({ t, plot, nursery, balance, inang, rate, terms, by, date, batch }) {
   const lines = [
     `${t('cull.plot')}: ${plot}${nursery ? ` (${nursery})` : ''}`,
+    /* Which block of the plot. A plot holds several batches and they are
+       collected on their own timetables, so "U4" on its own sends the auditor
+       to the right field and leaves them to guess which part of it. */
+    ...(batch ? [`${t('cull.batchField')}: ${batch}`] : []),
     `${t('cull.balance')}: ${fmtNum(balance)}`,
     // The separate counts are kept, not just their total: "300 + 250 + 180"
     // is a walk round the plot in three goes, and a single 730 hides that.

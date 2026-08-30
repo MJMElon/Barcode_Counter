@@ -51,6 +51,14 @@ export function allowedNurseries(permissions, page) {
     }
   }
 
+  /* The FC Portal's own nursery list, from the five-door Setting screen.
+     A page with no list of its own follows the portal it is in — that is the
+     hierarchy those doors are for, and it is why one list on the portal
+     replaced five identical copies on the pages. Absent means every nursery,
+     exactly as it did before this existed. */
+  const area = p.scan_area_nurseries;
+  if (area && Array.isArray(area.fc)) return area.fc;
+
   const legacy = p.plot_status_nurseries;
   return Array.isArray(legacy) ? legacy : null;
 }
@@ -98,6 +106,14 @@ export function visibleNurseries(permissions, list, labelOf, page) {
  * yesterday. Turning a page off is therefore a deliberate act, never a default.
  */
 export function canScan(permissions, page, action) {
+  /* The company's master switch first, and it can only ever say no. Kept
+     beside the permissions rather than inside them — see lib/portalSettings.js
+     for why folding a veto into scan_actions closes pages nobody meant to
+     close. Read inline rather than imported, so this file keeps its promise of
+     having no imports and staying testable in plain node. */
+  const veto = permissions && permissions._companyVeto && permissions._companyVeto[page];
+  if (veto && (veto.view || (action && veto[action]))) return false;
+
   const acts = permissions && permissions.scan_actions && permissions.scan_actions[page];
   if (!acts) return true;
   if (!acts.view) return false;          // page closed → every function closed
