@@ -28,10 +28,9 @@ import {
 } from './data.js';
 import HistoryDialog from './HistoryDialog.jsx';
 import PhotoSlots from './PhotoSlots.jsx';
-import ThisWeek from './ThisWeek.jsx';
 import Timeline from './Timeline.jsx';
 import VerifyHub from './VerifyHub.jsx';
-import WeekNav from './WeekNav.jsx';
+import WeekBoard from './WeekBoard.jsx';
 import WorkIcon from './WorkIcons.jsx';
 import WorkSheet from './WorkSheet.jsx';
 import { batchesIn } from './plotBatches.js';
@@ -67,7 +66,6 @@ export default function MaintenanceModule() {
   const [schedule, setSchedule] = useState([]);     // one row per nursery that has a plan
   const [batchMap, setBatchMap] = useState(new Map());
   const [sheet, setSheet] = useState(null);         // { week, workType }
-  const [verifying, setVerifying] = useState(false);
   const [history, setHistory] = useState(false);
   const [saving, setSaving] = useState(false);
   const [pending, setPending] = useState([]);   // records the queue is holding
@@ -369,22 +367,6 @@ export default function MaintenanceModule() {
               ))}
             </select>
           )}
-          {/* The morning's submissions, one card at a time. Carries its own
-              count so a conductor can see there is something to check without
-              opening it. */}
-          {mayVerify && (
-            <button
-              onClick={() => setVerifying(true)}
-              className="relative bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 font-black text-[11px] uppercase tracking-widest rounded-xl px-4 py-2.5"
-            >
-              ✓ {t('mt.verify')}
-              {deck.length > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1.5 rounded-full bg-emerald-600 text-white text-[10px] font-black tabular-nums grid place-items-center">
-                  {deck.length}
-                </span>
-              )}
-            </button>
-          )}
           <button
             onClick={() => setHistory(true)}
             className="bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 font-black text-[11px] uppercase tracking-widest rounded-xl px-4 py-2.5"
@@ -447,25 +429,32 @@ export default function MaintenanceModule() {
             form for that job's plots. */}
         {!setup && mayRecord && (
           <div className="space-y-3 pt-1">
-            <WeekNav
+            <WeekBoard
               month={month}
               week={currentWeek}
               isNow={viewingNow}
+              counts={counts[currentWeek]}
+              doneCounts={doneCounts[currentWeek]}
               onPrev={() => stepWeek(-1)}
               onNext={() => stepWeek(1)}
               onNow={() => setView({ month: nowMonth, week: nowWeek })}
+              onOpen={(week, workType) => setSheet({ week, workType })}
             />
-            {schedule.length > 0 ? (
-              <ThisWeek
-                week={currentWeek}
-                counts={counts[currentWeek]}
-                doneCounts={doneCounts[currentWeek]}
-                onOpen={(week, workType) => setSheet({ week, workType })}
-              />
-            ) : (
+            {!schedule.length && (
               <div className="bg-white border border-slate-200 rounded-2xl px-4 py-5 text-center text-[13px] font-bold text-slate-400">
                 {t('mt.noSchedule', { nursery: timelineNurseries.join(', ') || '—', month })}
               </div>
+            )}
+
+            {/* Checking the morning is part of the morning, so the deck sits
+                under the week rather than behind a button nobody presses. */}
+            {mayVerify && (
+              <VerifyHub
+                records={deck}
+                columnsReady={verifyReady}
+                staffName={staffName}
+                onChanged={reload}
+              />
             )}
           </div>
         )}
@@ -562,15 +551,6 @@ export default function MaintenanceModule() {
         )}
 
       </div>
-
-      {verifying && (
-        <VerifyHub
-          records={deck}
-          columnsReady={verifyReady}
-          staffName={staffName}
-          onClose={() => { setVerifying(false); reload(); }}
-        />
-      )}
 
       {history && (
         <HistoryDialog
