@@ -37,7 +37,7 @@ export default function WorkerHome() {
   if (pending) {
     return (
       <div className="min-h-screen bg-slate-100 fade-enter">
-        <WorkerNav book title={t('wk.portalSub')} />
+        <WorkerNav title={t('wk.portalSub')} />
         <WorkerGround />
         <div className="max-w-[900px] mx-auto px-3 sm:px-6 py-6">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] p-5 text-center">
@@ -55,7 +55,6 @@ export default function WorkerHome() {
   return (
     <div className="min-h-screen bg-slate-100 fade-enter">
       <WorkerNav
-        book
         title={t('wk.portalSub')}
         onSettings={modules.settings ? () => navigate('/worker/settings') : null}
       />

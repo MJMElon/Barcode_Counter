@@ -36,19 +36,27 @@ const MAX_PX = 112;
  *
  * ── Start / Pause / Stop ──
  *
- * Start walks a GPS track for this job. Start becomes PAUSE once it is
- * running, because that is the button the thumb is already over; STOP appears
- * beside it and does what the name says AND finishes the job, saving the walk
- * with the record. That is the whole point of having walked it.
+ * Start walks a GPS track for this job, and puts the phone away with it.
+ * Start becomes PAUSE once it is running, because that is the button the thumb
+ * is already over; STOP does what the name says AND finishes the job, saving
+ * the walk with the record. That is the whole point of having walked it.
+ *
+ * Start is grey until the phone has a fix good enough to walk from — under
+ * ±30 m. A Start that presses and then refuses is worse than one that says
+ * why it cannot.
  *
  * The map button opens the satellite view — the nursery outline, where the
  * phone is, and the line walked so far, growing as it is walked. It only ever
  * looks: the walk is run from these buttons, and a second Start on the map
  * would be a rival recording of the same job.
+ *
+ * The buttons sit in a row across the bottom of the card rather than stacked
+ * down its side: three of them stacked made a row taller than a thumb, and a
+ * list where four jobs fit on a screen is a list that can be worked down.
  */
 export default function TaskRow({
   task, tint, tracking, session, elapsed, denied, busy,
-  onStart, onPause, onResume, onStop, onComplete, onMap, onPocket,
+  onStart, onPause, onResume, onStop, onComplete, onMap, canStart = true,
 }) {
   const { t, lang } = useLang();
   const [dx, setDx] = useState(0);
@@ -167,81 +175,67 @@ export default function TaskRow({
             )}
           </div>
 
-          {/* Big enough to hit with a thumb. The CLICK is stopped, so pressing
-              Start never also opens the form — but the pointer-DOWN is not,
-              deliberately: the buttons sit on the right of the row, which is
-              exactly where a right-handed thumb begins a leftward swipe, and
-              swallowing the press there made the swipe do nothing at all from
-              the most natural place to start it. A drag that leaves the button
-              never becomes a click on it, so both gestures still work. */}
-          <div
-            className={`flex flex-col gap-1.5 shrink-0 transition-opacity ${
-              pulled > 12 ? 'opacity-0 pointer-events-none' : ''}`}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* No Start at all when the office has not given this worker GPS.
-                A button that refuses is worse than no button. */}
-            {!tracking && onStart && (
-              <button
-                type="button" onClick={onStart} disabled={busy}
-                className="bg-emerald-600 active:bg-emerald-700 disabled:opacity-50 text-white
-                           font-black text-[11px] uppercase tracking-widest rounded-xl px-3.5 py-2.5"
-              >
-                ▶ {t('wk.start')}
-              </button>
-            )}
-            {tracking && session.status === 'running' && (
-              <button
-                type="button" onClick={onPause} disabled={busy}
-                className="bg-amber-500 active:bg-amber-600 disabled:opacity-50 text-white
-                           font-black text-[11px] uppercase tracking-widest rounded-xl px-3.5 py-2.5"
-              >
-                ⏸ {t('wk.pause')}
-              </button>
-            )}
-            {tracking && session.status === 'paused' && (
-              <button
-                type="button" onClick={onResume} disabled={busy}
-                className="bg-emerald-600 active:bg-emerald-700 disabled:opacity-50 text-white
-                           font-black text-[11px] uppercase tracking-widest rounded-xl px-3.5 py-2.5"
-              >
-                ▶ {t('wk.resume')}
-              </button>
-            )}
-            {tracking && (
-              <button
-                type="button" onClick={onStop} disabled={busy}
-                className="bg-slate-800 active:bg-slate-900 disabled:opacity-50 text-white
-                           font-black text-[11px] uppercase tracking-widest rounded-xl px-3.5 py-2.5"
-              >
-                ⏹ {t('wk.stop')}
-              </button>
-            )}
-            {/* Worded like the buttons above it, not an icon on its own. The
-                people using this are not reading a symbol set — every other
-                control on the row says what it does, and this one should. */}
-            {/* Only while a walk is running: it is the button for putting the
-                phone away, and there is nothing to put away otherwise. */}
-            {tracking && onPocket && (
-              <button
-                type="button" onClick={onPocket} disabled={busy}
-                className="bg-slate-100 border border-slate-300 active:bg-slate-200 text-slate-700
-                           font-black text-[11px] uppercase tracking-widest rounded-xl px-3.5 py-2.5"
-              >
-                🌙 {t('wk.pocket')}
-              </button>
-            )}
-            {onMap && (
-              <button
-                type="button" onClick={onMap}
-                aria-label={t('wk.openMap')}
-                className="bg-white border border-slate-200 active:bg-slate-50 text-slate-600
-                           font-black text-[11px] uppercase tracking-widest rounded-xl px-3.5 py-2.5"
-              >
-                🗺️ {t('wk.openMap')}
-              </button>
-            )}
-          </div>
+        </div>
+
+        {/* Across the bottom, not down the side. The CLICK is stopped, so
+            pressing one never also counts as a tap on the row — but the
+            pointer-DOWN is not, deliberately: a right-handed thumb begins a
+            leftward swipe over exactly this strip, and swallowing the press
+            here made the swipe do nothing from the most natural place to
+            start it. A drag that leaves a button never becomes a click on it,
+            so both gestures still work. */}
+        <div
+          className={`mt-3 grid gap-2 ${tracking ? 'grid-cols-3' : 'grid-cols-2'} transition-opacity ${
+            pulled > 12 ? 'opacity-0 pointer-events-none' : ''}`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {!tracking && onStart && (
+            <button
+              type="button" onClick={onStart} disabled={busy || !canStart}
+              className="bg-emerald-600 active:bg-emerald-700 disabled:bg-slate-200
+                         disabled:text-slate-400 text-white
+                         font-black text-[11px] uppercase tracking-widest rounded-xl py-3"
+            >
+              ▶ {t('wk.start')}
+            </button>
+          )}
+          {tracking && session.status === 'running' && (
+            <button
+              type="button" onClick={onPause} disabled={busy}
+              className="bg-amber-500 active:bg-amber-600 disabled:opacity-50 text-white
+                         font-black text-[11px] uppercase tracking-widest rounded-xl py-3"
+            >
+              ⏸ {t('wk.pause')}
+            </button>
+          )}
+          {tracking && session.status === 'paused' && (
+            <button
+              type="button" onClick={onResume} disabled={busy}
+              className="bg-emerald-600 active:bg-emerald-700 disabled:opacity-50 text-white
+                         font-black text-[11px] uppercase tracking-widest rounded-xl py-3"
+            >
+              ▶ {t('wk.resume')}
+            </button>
+          )}
+          {tracking && (
+            <button
+              type="button" onClick={onStop} disabled={busy}
+              className="bg-slate-800 active:bg-slate-900 disabled:opacity-50 text-white
+                         font-black text-[11px] uppercase tracking-widest rounded-xl py-3"
+            >
+              ⏹ {t('wk.stop')}
+            </button>
+          )}
+          {onMap && (
+            <button
+              type="button" onClick={onMap}
+              aria-label={t('wk.openMap')}
+              className="bg-white border border-slate-200 active:bg-slate-50 text-slate-600
+                         font-black text-[11px] uppercase tracking-widest rounded-xl py-3"
+            >
+              🗺️ {t('wk.openMap')}
+            </button>
+          )}
         </div>
       </div>
 

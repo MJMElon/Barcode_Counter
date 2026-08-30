@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useLang } from '../context/LanguageContext.jsx';
 import { WorkerAuthProvider, useWorker } from './WorkerAuthContext.jsx';
@@ -57,6 +58,17 @@ function ModuleGate({ name, children }) {
 }
 
 export default function WorkerPortal() {
+  /* The tab, and the name a phone puts under the icon when this is added to a
+     home screen. app.html carries the FC Portal's title because that is what
+     `/` is; a worker who lands here is not in that portal and should not be
+     told they are. Put back on the way out, so a Field Conductor who opens
+     both on one phone does not find the wrong name on their own tab. */
+  useEffect(() => {
+    const was = document.title;
+    document.title = 'MJM Nursery — Worker Portal';
+    return () => { document.title = was; };
+  }, []);
+
   return (
     <WorkerAuthProvider>
       <Gate>

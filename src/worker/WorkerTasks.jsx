@@ -78,7 +78,10 @@ export default function WorkerTasks() {
   const [pocket, setPocket] = useState(false);
   const [openDone, setOpenDone] = useState(null);   // a finished job, opened
 
-  const track = useWorkerTrack();
+  /* Watching even while nothing is running, so the list knows how good the
+     fix is BEFORE Start is pressed. Only asked for when this worker has GPS at
+     all — nobody else's battery pays for a number they will never see. */
+  const track = useWorkerTrack(mayGps);
 
   const today = todayStr();
   const month = monthLabelOf(today);
@@ -222,12 +225,37 @@ export default function WorkerTasks() {
 
   return (
     <div className="min-h-screen bg-slate-100 fade-enter">
+      {/* The FC Portal's page ribbon: the name on the left over the portal it
+          belongs to, and the controls on the right. Not the dashboard's
+          centred 555 book — that is the front of an app, and this is a screen
+          inside one. */}
       <WorkerNav
-        book
         title={t('wk.tasksTitle')}
         onSettings={modules.settings ? () => navigate('/worker/settings') : null}
       />
       <WorkerGround />
+
+      {/* A walk is running and the worker has come back to look at the list.
+          This is the way back into the dark screen — the shape a phone uses
+          for a call in progress, because it is the same situation: something
+          is running that this screen is not showing.
+
+          It replaced a fourth button on every row. Putting the phone away is
+          not a property of one job among four; it is the state the phone is
+          in, and it belongs at the top where that state is announced. */}
+      {track.running && !pocket && (
+        <button
+          type="button"
+          onClick={() => setPocket(true)}
+          className="w-full bg-rose-700 active:bg-rose-800 text-white px-4 py-2.5
+                     flex items-center gap-2.5 sticky top-0 z-20"
+        >
+          <span className="w-2.5 h-2.5 rounded-full bg-white/90 animate-pulse shrink-0" />
+          <span className="text-[11px] font-black uppercase tracking-widest truncate">
+            {t('wk.backToPocket', { plot: track.session ? track.session.task.plot : '' })}
+          </span>
+        </button>
+      )}
 
       <div className="max-w-[900px] mx-auto px-3 sm:px-6 py-3 space-y-3 pb-24">
         {/* The period, spelt out. A list with no dates on it is a list somebody
@@ -290,6 +318,17 @@ export default function WorkerTasks() {
                 {t('wk.keepScreenOn')}
               </div>
             )}
+            {/* Why Start is grey. Said once, above the list, rather than on
+                every row — it is the same answer for all of them, and it is
+                about the phone, not about any one job. */}
+            {mayGps && !track.running && !track.canStart && (
+              <div className="rounded-xl bg-slate-100 border border-slate-200 px-3 py-2
+                              text-[11px] font-bold text-slate-500 leading-snug">
+                {track.denied ? t('wk.gpsDenied')
+                 : track.accuracy == null ? t('mt.trkWaitingFix')
+                 : t('mt.trkTooRough', { acc: track.accuracy, need: track.needAccuracy })}
+              </div>
+            )}
             <div className="space-y-2.5">
               {todo.map((task) => (
                 <TaskRow
@@ -307,7 +346,7 @@ export default function WorkerTasks() {
                   onStop={() => stopTrack(task)}
                   onComplete={() => complete(task, track.trackingId === task.id ? track.stop() : null)}
                   onMap={mayGps ? () => setMapOpen(true) : null}
-                  onPocket={() => setPocket(true)}
+                  canStart={track.canStart}
                 />
               ))}
             </div>
