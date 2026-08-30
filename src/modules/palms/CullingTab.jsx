@@ -76,26 +76,28 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
        of the rules behind it, and the screen cannot say which — it simply
        does not have the row. So the answer is put within reach: with the
        calculator open, cullDebug('B4') or cullDebug('U17', '237') in the
-       browser console prints every collection line and the rule it fell at. */
+       browser console prints every batch the Batch Report holds there and
+       the rule it fell at. */
     window.cullDebug = async (plot, batch) => {
       const lines = await diagnose(plot, batch);
-      console.log('%cdelivery order lines', 'font-weight:bold');
-      console.table(lines);
-      /* Which orders make up the figure on screen. "N15 batch 244 collected
-         186 — from which D/O?" is asked of a number, and the answer is the
-         orders that were counted into it, named and totalled, so the screen
-         and the paperwork can be squared without adding a column up by
-         hand. */
-      const counted = lines.filter((l) => l.why === 'LISTED');
-      if (counted.length) {
-        const total = counted.reduce((n, l) => n + Math.abs(Number(l.qty || 0)), 0);
+      console.log('%cblocks', 'font-weight:bold');
+      console.table(lines.map((l) => ({
+        plot: l.plot, batch: l.batch, transplanted: l.transplanted,
+        collected: l.collected, why: l.why,
+      })));
+      /* Which orders make up the collected figure on screen. "N15 batch 244
+         collected 186 — from which D/O?" is asked of a number, and the
+         answer is the orders that were counted into it, named and totalled,
+         so the screen and the paperwork can be squared without adding a
+         column up by hand. */
+      lines.filter((l) => l.why === 'LISTED' && l.orders.length).forEach((l) => {
         console.log(
-          `%ccollected ${total.toLocaleString()} on ${counted.length} order` +
-            `${counted.length === 1 ? '' : 's'}: ` +
-            counted.map((l) => `${l.do || '(no number)'} ${l.qty}`).join(', '),
+          `%c${l.plot} batch ${l.batch} collected ${l.collected.toLocaleString()} on ` +
+            `${l.orders.length} order${l.orders.length === 1 ? '' : 's'}: ` +
+            l.orders.map((o) => `${o.do || '(no number)'} ${o.qty}`).join(', '),
           'font-weight:bold'
         );
-      }
+      });
       if (plot) {
         console.log('%cwhat the batch report holds', 'font-weight:bold');
         console.table(await plantedNear(plot, batch));
@@ -529,15 +531,17 @@ function Keypad({ onPress }) {
   );
 }
 
-/* Which plot. Every block a customer is COLLECTING from that this person may
-   see, with the rate it stands at, so the choice is made on the figures
+/* Which plot. Every plot PALMS has at Pengambilan that this person may see,
+   with the rate its batches stand at, so the choice is made on the figures
    rather than by remembering plot numbers.
 
-   Not "every plot at Pengambilan" — that is what this said, and it stopped
-   being true when cullingSource.js moved the list onto the delivery orders.
-   A plot is here because a D/O collects from it, whatever PALMS says its
-   stage is; the two disagreeing is a real mismatch to chase in the nursery,
-   not something this screen resolves. */
+   A plot appears here because of its STATUS, not because a delivery order
+   collects from it — see pengambilanPlots in cullingSource.js for why that
+   is a considered choice and not the design this screen used to have. Which
+   means a plot can show up with nothing collected off it yet: the batch
+   step right after this one is where a Field Conductor tells the screen
+   which block of it they actually mean, and a batch with a full balance and
+   a 0% rate is one nobody has started on, not a fault to chase. */
 function PlotPicker({ plots, current, raised, t, onPick, onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
