@@ -16,7 +16,7 @@ import WorkIcon from './WorkIcons.jsx';
  * The chips are still tappable — a job done early, or caught up on late, is
  * ordinary.
  */
-export default function Timeline({ month, currentWeek, counts, doneCounts, onOpen }) {
+export default function Timeline({ month, currentWeek, viewWeek, counts, doneCounts, onWeek, onOpen }) {
   const { t, lang } = useLang();
 
   return (
@@ -24,11 +24,16 @@ export default function Timeline({ month, currentWeek, counts, doneCounts, onOpe
       {WEEKS.map((w) => {
         const dates = weekDates(w, month);
         const now = w === currentWeek;
+        const reading = w === viewWeek;
         return (
           <div key={w}
             className={`bg-white rounded-2xl border shadow-[0_4px_16px_rgba(0,0,0,.06)] px-3.5 py-3 ${
-              now ? 'border-emerald-500' : 'border-slate-200'}`}>
-            <div className="flex items-baseline gap-2 mb-2.5">
+              reading ? 'border-slate-800' : now ? 'border-emerald-500' : 'border-slate-200'}`}>
+            {/* The whole header row takes the week up to the navigator, so a
+                week read in the month can be worked in the week view without
+                pressing back and forth to find it. */}
+            <button type="button" onClick={() => onWeek && onWeek(w)}
+              className="w-full flex items-baseline gap-2 mb-2.5 text-left">
               <span className="text-[13px] font-black text-slate-700">{t('mt.weekN', { n: w })}</span>
               <span className="text-[12px] font-bold text-slate-400">{dates}</span>
               {now && (
@@ -36,7 +41,7 @@ export default function Timeline({ month, currentWeek, counts, doneCounts, onOpe
                   {t('mt.thisWeek')}
                 </span>
               )}
-            </div>
+            </button>
 
             <div className="flex flex-wrap gap-1.5">
               {WORK_TYPES.map((wt) => {

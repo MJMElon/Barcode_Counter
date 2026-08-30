@@ -27,6 +27,9 @@ export const SETUP_NEEDED = 'SETUP_NEEDED';
 /** Raised when the batch/week columns have not been added yet. */
 export const BATCH_SETUP_NEEDED = 'BATCH_SETUP_NEEDED';
 
+/** Raised when the verify/reject columns have not been added yet. */
+export const VERIFY_SETUP_NEEDED = 'VERIFY_SETUP_NEEDED';
+
 function isMissingColumn(error) {
   return /column .* does not exist|Could not find the '.*' column/i.test(
     String((error && error.message) || '')
@@ -240,6 +243,90 @@ export async function saveRecord({ id, plot, workTypeKey, date, qty, chemical, r
     throw new Error(BATCH_SETUP_NEEDED);
   }
   if (error) throw error;
+}
+
+/**
+ * Has this record been checked, sent back, or neither?
+ *
+ * Three columns say it — verified_at, rejected_at, and nothing — and exactly
+ * one of them is set at a time. See shared/add_maint_field_verify.sql and
+ * shared/add_maint_field_reject.sql in the office repository.
+ */
+export function verifyState(r) {
+  if (!r) return 'awaiting';
+  if (r.rejected_at) return 'rejected';
+  if (r.verified_at) return 'verified';
+  return 'awaiting';
+}
+
+/** Still waiting for a conductor to look at it. A record on its way up from a
+    phone is not in the deck: there is nothing to sign for until it lands. */
+export const awaitingVerify = (rows) =>
+  (rows || []).filter((r) => !r._pending && verifyState(r) === 'awaiting');
+
+/**
+ * True once the database can hold an answer.
+ *
+ * Read off a row rather than asked of the server: the module already has the
+ * records, and a column that exists comes back as a key whether or not it is
+ * set. With no records at all there is nothing to verify either way, so the
+ * hub is simply empty rather than wrong.
+ */
+export function hasVerifyColumns(rows) {
+  const r = (rows || []).find((x) => x && !x._pending);
+  return !!r && 'verified_at' in r && 'rejected_at' in r;
+}
+
+/* One write for all three answers, because they are one answer: a record is
+   waiting, verified, or sent back, and setting one state means clearing the
+   others. Leaving the old columns behind would give a row two answers at
+   once, which no screen can read. */
+async function writeVerification(id, patch) {
+  const { error } = await supabase
+    .from('nops_maint_field_records')
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) {
+    if (isMissingColumn(error)) throw new Error(VERIFY_SETUP_NEEDED);
+    throw error;
+  }
+}
+
+/** Checked, and signed for. */
+export function verifyRecord(id, by) {
+  return writeVerification(id, {
+    verified_by: by || null,
+    verified_at: new Date().toISOString(),
+    rejected_at: null,
+    rejected_by: null,
+    reject_reason: null,
+  });
+}
+
+/**
+ * Sent back, with the reason.
+ *
+ * The row stays and the work may well have been done — what is refused is the
+ * RECORD of it. The FC Portal stops counting a rejected record towards the
+ * week, so the plot goes back on the list as still outstanding, which is the
+ * whole point of the button.
+ */
+export function rejectRecord(id, by, reason) {
+  return writeVerification(id, {
+    rejected_by: by || null,
+    rejected_at: new Date().toISOString(),
+    reject_reason: reason || null,
+    verified_by: null,
+    verified_at: null,
+  });
+}
+
+/** Back to waiting — what the undo banner presses. */
+export function clearVerification(id) {
+  return writeVerification(id, {
+    verified_by: null, verified_at: null,
+    rejected_by: null, rejected_at: null, reject_reason: null,
+  });
 }
 
 /**

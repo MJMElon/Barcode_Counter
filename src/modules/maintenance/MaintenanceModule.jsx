@@ -8,9 +8,11 @@ import {
   SETUP_NEEDED,
   WORK_TYPES,
   allowedNurseries,
+  awaitingVerify,
   canMaintain,
   deleteRecord,
   flushMaintenance,
+  hasVerifyColumns,
   isModuleAdmin,
   loadMaintenanceData,
   loadPlotBatches,
@@ -24,42 +26,27 @@ import {
   workTypeByKey,
   workTypeLabel,
 } from './data.js';
+import HistoryDialog from './HistoryDialog.jsx';
 import PhotoSlots from './PhotoSlots.jsx';
 import ThisWeek from './ThisWeek.jsx';
 import Timeline from './Timeline.jsx';
+import VerifyHub from './VerifyHub.jsx';
+import WeekNav from './WeekNav.jsx';
 import WorkIcon from './WorkIcons.jsx';
 import WorkSheet from './WorkSheet.jsx';
 import { batchesIn } from './plotBatches.js';
-import { tintOf } from './tints.js';
 import {
   WEEKS,
   isDone as isJobDone,
   mergeWeekTasks,
   monthLabelOf,
+  shiftMonthLabel,
   weekDates,
   weekOfDate,
 } from './schedule.js';
 
 /** Matches the work sheet: three photos is enough to show a job was done. */
 const MAX_PHOTOS = 3;
-
-/* "Today", "Yesterday", then the date. Most of the list is the last day or
-   two, and a Field Conductor reads those faster as words than as 2026-08-22.
-   Anything older gets the date, because "5 days ago" is a sum nobody wants
-   to do. */
-function relativeDay(iso, today, t) {
-  if (!iso) return '—';
-  if (iso === today) return t('mt.today');
-  const ms = Date.parse(iso), now = Date.parse(today);
-  if (Number.isFinite(ms) && Number.isFinite(now)) {
-    if (Math.round((now - ms) / 86400000) === 1) return t('mt.yesterday');
-    const d = new Date(ms);
-    if (!isNaN(d.getTime())) {
-      return d.toLocaleDateString('en-MY', { day: '2-digit', month: 'short', year: 'numeric' });
-    }
-  }
-  return iso;
-}
 
 // Maintenance work recorded in the field by a Field Conductor: which job, on
 // which plot, on which day. Plots come from shared_plots (Seedling Stock
@@ -75,12 +62,13 @@ export default function MaintenanceModule() {
   const [error, setError] = useState(null);
   const [setup, setSetup] = useState(false);
   const [nursery, setNursery] = useState('');
-  const [query, setQuery] = useState('');
   const [editing, setEditing] = useState(null); // { record? } — open sheet
   const [toast, setToast] = useState(null);
   const [schedule, setSchedule] = useState([]);     // one row per nursery that has a plan
   const [batchMap, setBatchMap] = useState(new Map());
   const [sheet, setSheet] = useState(null);         // { week, workType }
+  const [verifying, setVerifying] = useState(false);
+  const [history, setHistory] = useState(false);
   const [saving, setSaving] = useState(false);
   const [pending, setPending] = useState([]);   // records the queue is holding
   const [syncing, setSyncing] = useState(false);
@@ -96,6 +84,9 @@ export default function MaintenanceModule() {
   const isAdmin   = isModuleAdmin(permissions, 'operation');
   const mayEdit   = isAdmin && canMaintain(permissions, 'edit');
   const mayExport = canMaintain(permissions, 'export');
+  // Signing for somebody else's morning is its own tick on User Access —
+  // Schedule Maintenance Work → Verify work done.
+  const mayVerify = canMaintain(permissions, 'verify');
 
   const flash = (text) => {
     setToast(text);
@@ -165,22 +156,54 @@ export default function MaintenanceModule() {
      twice. The dashboard's month summary counts the same way (withQueued). */
   const allRecords = useMemo(() => withQueued(records, pending), [records, pending]);
 
-  // Records this user may see, then the on-screen filters.
-  const visible = useMemo(() => {
-    const q = query.toLowerCase().trim();
-    return allRecords.filter(
+  // Records this user may see, in the nursery they are looking at.
+  const visible = useMemo(
+    () => allRecords.filter(
       (r) =>
         (allowed === null || allowed.includes(r.nursery_name)) &&
-        (!nursery || r.nursery_name === nursery) &&
-        (!q ||
-          (r.plot_name || '').toLowerCase().includes(q) ||
-          (r.remark || '').toLowerCase().includes(q))
-    );
-  }, [allRecords, allowed, nursery, query]);
+        (!nursery || r.nursery_name === nursery)
+    ),
+    [allRecords, allowed, nursery]
+  );
+
+  /* A record sent back is a record refused, so the plot it was made against
+     goes back on the list as still outstanding — that is the whole point of
+     the Verify Hub's left swipe. Everything that COUNTS work reads this list;
+     everything that LISTS records reads the other, because the rejected
+     record itself must stay visible or nobody can see what was refused. */
+  const accepted = useMemo(() => allRecords.filter((r) => !r.rejected_at), [allRecords]);
+
+  /* Submissions nobody has looked at yet, in this nursery. Taken from the
+     records already loaded rather than asked for separately: the answer is in
+     rows the page is holding, and a second read of the same table to find out
+     which of them have a NULL would be a second read for nothing. */
+  // Until shared/add_maint_field_reject.sql has been run there is nowhere to
+  // put the answer, and the hub says so rather than swallowing the swipe. The
+  // deck stays empty until then too: without the columns every record reads as
+  // unchecked, and a badge saying 500 is a badge saying nothing.
+  const verifyReady = !records.length || hasVerifyColumns(records);
+  const deck = useMemo(
+    () => (verifyReady ? awaitingVerify(visible) : []),
+    [visible, verifyReady]
+  );
 
   const today = todayStr();
-  const month = monthLabelOf(today);
-  const currentWeek = weekOfDate(today);
+  const nowMonth = monthLabelOf(today);
+  const nowWeek = weekOfDate(today);
+
+  /* Which week is on screen. Back and next walk off the end of a month into
+     the one either side, so a conductor catching up on the last days of last
+     month does not have to know that the schedule is filed per month. */
+  const [view, setView] = useState({ month: nowMonth, week: nowWeek });
+  const month = view.month;
+  const currentWeek = view.week;
+  const viewingNow = month === nowMonth && currentWeek === nowWeek;
+  const stepWeek = (d) => setView((v) => {
+    const w = v.week + d;
+    if (w < 1) return { month: shiftMonthLabel(v.month, -1), week: WEEKS.length };
+    if (w > WEEKS.length) return { month: shiftMonthLabel(v.month, 1), week: 1 };
+    return { month: v.month, week: w };
+  });
 
   // Which nurseries the timeline covers: the one the filter names, or every
   // one this person can see. "All nurseries" used to be a dead end asking
@@ -231,12 +254,12 @@ export default function MaintenanceModule() {
   const doneCounts = useMemo(() => WEEKS.reduce((acc, w) => {
     acc[w] = WORK_TYPES.reduce((c, wt) => {
       c[wt.key] = tasksByWeek[w][wt.key].filter((x) =>
-        isJobDone(allRecords, { workTypeKey: wt.key, plot: x.plot,
-                                chemical: x.chemical, week: w, month })).length;
+        isJobDone(accepted, { workTypeKey: wt.key, plot: x.plot,
+                              chemical: x.chemical, week: w, month })).length;
       return c;
     }, {});
     return acc;
-  }, {}), [tasksByWeek, allRecords, month]);
+  }, {}), [tasksByWeek, accepted, month]);
 
   async function handleSheetSave({ task, batches, remark, photos, qty }) {
     const plot = visiblePlots.find((p) => p.plot_name === task.plot)
@@ -346,12 +369,29 @@ export default function MaintenanceModule() {
               ))}
             </select>
           )}
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={t('mt.searchPlot')}
-            className="flex-1 min-w-[140px] bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-semibold outline-none focus:border-emerald-500"
-          />
+          {/* The morning's submissions, one card at a time. Carries its own
+              count so a conductor can see there is something to check without
+              opening it. */}
+          {mayVerify && (
+            <button
+              onClick={() => setVerifying(true)}
+              className="relative bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 font-black text-[11px] uppercase tracking-widest rounded-xl px-4 py-2.5"
+            >
+              ✓ {t('mt.verify')}
+              {deck.length > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1.5 rounded-full bg-emerald-600 text-white text-[10px] font-black tabular-nums grid place-items-center">
+                  {deck.length}
+                </span>
+              )}
+            </button>
+          )}
+          <button
+            onClick={() => setHistory(true)}
+            className="bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 font-black text-[11px] uppercase tracking-widest rounded-xl px-4 py-2.5"
+          >
+            🗂️ {t('mt.history')}
+          </button>
+          <div className="flex-1" />
           {mayExport && !!visible.length && (
             <button
               onClick={handleExport}
@@ -361,6 +401,20 @@ export default function MaintenanceModule() {
             </button>
           )}
         </div>
+
+        {loading && (
+          <div className="text-center text-slate-400 text-xs font-black uppercase tracking-widest py-6 animate-pulse">
+            {t('common.loading')}
+          </div>
+        )}
+
+        {/* Nothing on this page can do anything until somebody opens a
+            nursery. Said once, here, rather than as four empty lists. */}
+        {!loading && allowed !== null && allowed.length === 0 && (
+          <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl px-4 py-3 text-sm font-bold">
+            {t('mt.noNurseryAccess')}
+          </div>
+        )}
 
         {/* What has been recorded but not yet sent. Shown rather than hidden:
             a Field Conductor needs to know their morning is safe, and that it
@@ -386,26 +440,34 @@ export default function MaintenanceModule() {
           </div>
         )}
 
-        {/* The week in hand, first and at full width — a Field Conductor
-            opens this standing in a nursery with a job to start, not to read
-            a month's plan. Only the jobs actually due appear. */}
-        {!setup && schedule.length > 0 && mayRecord && (
-          <>
-            <div className="flex items-baseline justify-between pt-1">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                {t('mt.thisWeekTitle')}
-              </span>
-              <span className="text-[11px] font-black text-slate-500">
-                {t('mt.weekN', { n: currentWeek })} · {weekDates(currentWeek, month)}
-              </span>
-            </div>
-            <ThisWeek
+        {/* One week at a time, at full width, and any week — a Field
+            Conductor is as often catching up on last week or reading ahead to
+            next as working the one we are standing in. Only the jobs the
+            schedule actually asks for appear; tapping one opens the record
+            form for that job's plots. */}
+        {!setup && mayRecord && (
+          <div className="space-y-3 pt-1">
+            <WeekNav
+              month={month}
               week={currentWeek}
-              counts={counts[currentWeek]}
-              doneCounts={doneCounts[currentWeek]}
-              onOpen={(week, workType) => setSheet({ week, workType })}
+              isNow={viewingNow}
+              onPrev={() => stepWeek(-1)}
+              onNext={() => stepWeek(1)}
+              onNow={() => setView({ month: nowMonth, week: nowWeek })}
             />
-          </>
+            {schedule.length > 0 ? (
+              <ThisWeek
+                week={currentWeek}
+                counts={counts[currentWeek]}
+                doneCounts={doneCounts[currentWeek]}
+                onOpen={(week, workType) => setSheet({ week, workType })}
+              />
+            ) : (
+              <div className="bg-white border border-slate-200 rounded-2xl px-4 py-5 text-center text-[13px] font-bold text-slate-400">
+                {t('mt.noSchedule', { nursery: timelineNurseries.join(', ') || '—', month })}
+              </div>
+            )}
+          </div>
         )}
 
         {mayRecord && (
@@ -433,7 +495,7 @@ export default function MaintenanceModule() {
           <>
             <div className="flex items-baseline justify-between pt-1">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                {t('mt.thisMonth')}
+                {t('mt.monthPlan')}
               </span>
               <span className="text-[11px] font-black text-slate-500">{month}</span>
             </div>
@@ -460,9 +522,14 @@ export default function MaintenanceModule() {
                 )}
               <Timeline
                 month={month}
-                currentWeek={currentWeek}
+                /* The week we are standing in, marked only in the month it
+                   falls in — and the week being read, so the month and the
+                   navigator above it never disagree about which is which. */
+                currentWeek={month === nowMonth ? nowWeek : 0}
+                viewWeek={currentWeek}
                 counts={counts}
                 doneCounts={doneCounts}
+                onWeek={(week) => setView({ month, week })}
                 onOpen={(week, workType) => setSheet({ week, workType })}
               />
               </>
@@ -486,7 +553,7 @@ export default function MaintenanceModule() {
             today={today}
             saving={saving}
             isAdmin={isAdmin}
-            isDone={(task) => isJobDone(allRecords, {
+            isDone={(task) => isJobDone(accepted, {
               workTypeKey: sheet.workType.key, plot: task.plot,
               chemical: task.chemical, week: sheet.week, month })}
             onSave={handleSheetSave}
@@ -494,111 +561,27 @@ export default function MaintenanceModule() {
           />
         )}
 
-        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest pt-1">
-          {t('mt.completed')}
-        </div>
-
-        {loading ? (
-          <div className="text-center text-slate-400 text-xs font-black uppercase tracking-widest py-16 animate-pulse">
-            {t('common.loading')}
-          </div>
-        ) : visible.length ? (
-          <div className="space-y-2.5">
-            {visible.map((r) => {
-              const wt = workTypeByKey(r.work_type);
-              return (
-                <div
-                  key={r.id}
-                  className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] p-3.5"
-                >
-                  <div className="flex items-start gap-3">
-                    {/* The job's own colour and icon, so the list is scanned
-                        the same way the week above it is. */}
-                    <span className={`w-[38px] h-[38px] rounded-xl grid place-items-center shrink-0 ${tintOf(r.work_type).bg}`}>
-                      <WorkIcon workKey={r.work_type} className={`w-[22px] h-[22px] ${tintOf(r.work_type).fg}`} />
-                    </span>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="font-black text-slate-800 text-[14px] leading-tight">
-                        {workTypeLabel(wt, lang) || r.jenis || '—'} · {r.plot_name}
-                      </div>
-                      {/* One line for everything that is context rather than
-                          content: when, what was used, and who. */}
-                      <div className="text-[11.5px] font-bold text-slate-400 mt-0.5">
-                        {[
-                          relativeDay(r.work_date, today, t),
-                          r.chemical || null,
-                          r.qty != null ? Number(r.qty).toLocaleString() : null,
-                          r.reported_by || null,
-                        ].filter(Boolean).join(' · ')}
-                      </div>
-
-                      {r.batch_name && (
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                          {String(r.batch_name).split(',').map((b) => b.trim()).filter(Boolean).map((b) => (
-                            <span key={b} className="text-[10px] font-black tabular-nums text-slate-600 bg-slate-100 rounded-md px-2 py-0.5">
-                              {b}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      {r.remark && (
-                        <div className="text-[12px] text-slate-500 mt-1.5 italic break-words">{r.remark}</div>
-                      )}
-                      {r.photo_urls && (
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                          {String(r.photo_urls).split(',').map((u) => u.trim()).filter(Boolean).map((u) => (
-                            // Opens full size in a new tab; the card only needs a thumbnail.
-                            <a key={u} href={u} target="_blank" rel="noreferrer">
-                              <img src={u} alt="" loading="lazy"
-                                   className="w-[42px] h-[42px] object-cover rounded-[9px] border border-slate-200" />
-                            </a>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Done, or still on the phone waiting for a signal. */}
-                    {r._pending ? (
-                      <span className="shrink-0 text-[9px] font-black uppercase tracking-widest bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-2 py-1">
-                        ⏳ {t('mt.waiting')}
-                      </span>
-                    ) : (
-                      <svg viewBox="0 0 24 24" aria-hidden="true"
-                           className="w-[18px] h-[18px] text-emerald-600 shrink-0 mt-1"
-                           fill="none" stroke="currentColor" strokeWidth="2.6"
-                           strokeLinecap="round" strokeLinejoin="round">
-                        <path d="m5 13 4 4L19 7" />
-                      </svg>
-                    )}
-                  </div>
-
-                  {mayEdit && !r._pending && (
-                    <div className="flex gap-2 mt-2.5">
-                      <button
-                        onClick={() => setEditing({ record: r })}
-                        className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-[11px] uppercase tracking-widest rounded-xl py-2"
-                      >
-                        {t('mt.edit')}
-                      </button>
-                      <button
-                        onClick={() => handleDelete(r)}
-                        className="px-4 bg-rose-50 hover:bg-rose-100 text-rose-600 font-black text-[11px] uppercase tracking-widest rounded-xl py-2"
-                      >
-                        {t('mt.delete')}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="text-center text-slate-400 text-sm font-bold py-16">
-            {allowed !== null && allowed.length === 0 ? t('mt.noNurseryAccess') : t('mt.noRecords')}
-          </div>
-        )}
       </div>
+
+      {verifying && (
+        <VerifyHub
+          records={deck}
+          columnsReady={verifyReady}
+          staffName={staffName}
+          onClose={() => { setVerifying(false); reload(); }}
+        />
+      )}
+
+      {history && (
+        <HistoryDialog
+          records={visible}
+          today={today}
+          mayEdit={mayEdit}
+          onEdit={(r) => setEditing({ record: r })}
+          onDelete={handleDelete}
+          onClose={() => setHistory(false)}
+        />
+      )}
 
       {editing && (
         <EntrySheet
