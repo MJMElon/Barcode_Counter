@@ -42,8 +42,10 @@ const MAX_PX = 112;
  * the walk with the record. That is the whole point of having walked it.
  *
  * Start is grey until the phone has a fix good enough to walk from — under
- * ±30 m. A Start that presses and then refuses is worse than one that says
- * why it cannot.
+ * ±30 m — and says so on itself, `⌛ ±35 M`. A Start that presses and then
+ * refuses is worse than one that says why it cannot; a paragraph explaining
+ * it four rows above the button is clutter on a screen meant to be worked
+ * down. The button is the honest place for the answer.
  *
  * The map button opens the satellite view — the nursery outline, where the
  * phone is, and the line walked so far, growing as it is walked. It only ever
@@ -56,7 +58,7 @@ const MAX_PX = 112;
  */
 export default function TaskRow({
   task, tint, tracking, session, elapsed, denied, busy,
-  onStart, onPause, onResume, onStop, onComplete, onMap, canStart = true,
+  onStart, onPause, onResume, onStop, onComplete, onMap, canStart = true, waitFor = null,
 }) {
   const { t, lang } = useLang();
   const [dx, setDx] = useState(0);
@@ -192,11 +194,14 @@ export default function TaskRow({
           {!tracking && onStart && (
             <button
               type="button" onClick={onStart} disabled={busy || !canStart}
+              /* Named for what it IS, not for what it currently says — while
+                 it is waiting for a fix its face reads "⌛ Wait · ±35 m". */
+              aria-label={t('wk.start')}
               className="bg-emerald-600 active:bg-emerald-700 disabled:bg-slate-200
                          disabled:text-slate-400 text-white
                          font-black text-[11px] uppercase tracking-widest rounded-xl py-3"
             >
-              ▶ {t('wk.start')}
+              {waitFor ? `⌛ ${waitFor}` : `▶ ${t('wk.start')}`}
             </button>
           )}
           {tracking && session.status === 'running' && (

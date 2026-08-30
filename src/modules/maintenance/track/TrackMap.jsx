@@ -112,8 +112,17 @@ const SIZE = `${OVERSIZE * 100}%`;
  * opening the map to LOOK at a walk must not offer a second Start that would
  * begin a rival recording of the same job. `live` is that walk, handed in and
  * followed as it grows: { points, distance, startedAt, running }.
+ *
+ * `fix` and `watchOwn: false` go with it. The Worker Portal is ALREADY
+ * watching the GPS — it has to be, to know whether Start may be pressed — and
+ * a second watchPosition on top of that is not free and not reliable: with two
+ * running, only the first was answered, so this map never got a position at
+ * all and Find Me did nothing every time. The caller that is already watching
+ * hands its fix in instead. Nobody else passes these, so the FC Portal and a
+ * finished job's map keep their own watch exactly as before.
  */
-export default function TrackMap({ onClose, onDone, initial = null, viewOnly = false, live = null }) {
+export default function TrackMap({ onClose, onDone, initial = null, viewOnly = false, live = null,
+                                   fix: fedFix = null, watchOwn = true }) {
   const { t } = useLang();
 
   const boxRef = useRef(null);          // the hole it is seen through
@@ -123,7 +132,8 @@ export default function TrackMap({ onClose, onDone, initial = null, viewOnly = f
   const lineRef = useRef(null);         // the track drawn so far
   const boundaryRef = useRef(null);     // the nursery outlines, behind both
 
-  const [fix, setFix] = useState(null);            // the newest position
+  const [ownFix, setOwnFix] = useState(null);      // the newest position, when watching for itself
+  const fix = watchOwn ? ownFix : fedFix;
   const [state, setState] = useState(() => (initial && initial.track
     ? { points: initial.track, distance: initial.distance_m || 0, startedAt: initial.started_at }
     : { points: [], distance: 0, startedAt: null }));
@@ -197,6 +207,8 @@ export default function TrackMap({ onClose, onDone, initial = null, viewOnly = f
 
   // ── the position, watched for as long as this is open ──
   useEffect(() => {
+    // Somebody else is watching and handing the fix in; see the note above.
+    if (!watchOwn) return undefined;
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
       flash(t('mt.gpsNone'));
       return undefined;
@@ -208,7 +220,7 @@ export default function TrackMap({ onClose, onDone, initial = null, viewOnly = f
           lat: c.latitude, lng: c.longitude,
           accuracy: c.accuracy == null ? null : Math.round(c.accuracy),
         };
-        setFix(next);
+        setOwnFix(next);
         if (recordingRef.current) {
           const t0 = startedAtMsRef.current || Date.now();
           /* Spread over the old state, not straight from addFix. addFix
@@ -222,7 +234,7 @@ export default function TrackMap({ onClose, onDone, initial = null, viewOnly = f
       { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
     );
     return () => navigator.geolocation.clearWatch(id);
-  }, []);   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [watchOwn]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── the clock, while recording ──
   useEffect(() => {

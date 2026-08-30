@@ -318,17 +318,7 @@ export default function WorkerTasks() {
                 {t('wk.keepScreenOn')}
               </div>
             )}
-            {/* Why Start is grey. Said once, above the list, rather than on
-                every row — it is the same answer for all of them, and it is
-                about the phone, not about any one job. */}
-            {mayGps && !track.running && !track.canStart && (
-              <div className="rounded-xl bg-slate-100 border border-slate-200 px-3 py-2
-                              text-[11px] font-bold text-slate-500 leading-snug">
-                {track.denied ? t('wk.gpsDenied')
-                 : track.accuracy == null ? t('mt.trkWaitingFix')
-                 : t('mt.trkTooRough', { acc: track.accuracy, need: track.needAccuracy })}
-              </div>
-            )}
+
             <div className="space-y-2.5">
               {todo.map((task) => (
                 <TaskRow
@@ -347,6 +337,15 @@ export default function WorkerTasks() {
                   onComplete={() => complete(task, track.trackingId === task.id ? track.stop() : null)}
                   onMap={mayGps ? () => setMapOpen(true) : null}
                   canStart={track.canStart}
+                  /* Why it cannot start, ON the button rather than in a
+                     paragraph above the list. A grey button with no reason is
+                     the app silently doing nothing; a paragraph explaining it
+                     four rows above is clutter on a screen meant to be worked
+                     down. The button itself is the honest place. */
+                  waitFor={track.canStart ? null
+                    : track.denied ? t('wk.waitGpsOff')
+                    : track.accuracy == null ? t('wk.waitGps')
+                    : t('wk.waitAcc', { acc: track.accuracy })}
                 />
               ))}
             </div>
@@ -420,16 +419,34 @@ export default function WorkerTasks() {
         />
       )}
 
+      {/* ABOVE the pocket screen, which is z-70. TrackMap carries z-60 for the
+          FC Portal, so opened from the pocket the black screen sat on top of
+          it — the map could be seen through nothing and every tap on it, Find
+          Me included, was swallowed by the overlay in front. It looked like
+          the map's buttons were dead, and only ever while a walk was running,
+          because that is the only time the pocket screen exists. */}
       {mapOpen && (
-        <Suspense fallback={
-          <div className="fixed inset-0 z-[60] bg-slate-900 grid place-items-center">
-            <div className="text-emerald-400 font-mono text-xs uppercase tracking-[0.3em] animate-pulse">
-              {t('common.loading')}
+        <div className="fixed inset-0 z-[80]">
+          <Suspense fallback={
+            <div className="fixed inset-0 bg-slate-900 grid place-items-center">
+              <div className="text-emerald-400 font-mono text-xs uppercase tracking-[0.3em] animate-pulse">
+                {t('common.loading')}
+              </div>
             </div>
-          </div>
-        }>
-          <TrackMap viewOnly live={live} onClose={() => setMapOpen(false)} onDone={() => setMapOpen(false)} />
-        </Suspense>
+          }>
+            {/* The fix comes from the watch this screen is already running —
+                two watchPosition calls at once left the map with none, and
+                Find Me dead. */}
+            <TrackMap
+              viewOnly
+              live={live}
+              fix={track.fix}
+              watchOwn={false}
+              onClose={() => setMapOpen(false)}
+              onDone={() => setMapOpen(false)}
+            />
+          </Suspense>
+        </div>
       )}
 
       {openDone && (
