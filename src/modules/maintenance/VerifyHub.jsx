@@ -127,10 +127,16 @@ export default function VerifyHub({
 
   const approve = (record) => settle(record, 'verified', () => onApprove(record));
 
-  /* Signing works on any database that has run the verify file; sending back
-     needs the later one. So the ✕ says which file is missing rather than
-     opening a menu whose every answer would fail. */
-  const askWhy = (record) => (canReject ? setAsking(record) : setError(t('mt.rejectSetupNeeded')));
+  /* ✕ always opens the sheet. Signing works on any database that has run the
+     verify file; sending back needs the later one, and where it is missing
+     the sheet says so INSTEAD of the reasons rather than not opening.
+
+     It used to put that message in a strip under the deck and leave the press
+     looking like it had done nothing — four hundred pixels of card above it,
+     and the one thing a conductor needed to read was off the bottom of the
+     screen. A button that opens nothing reads as a broken button, whatever is
+     written somewhere else on the page. */
+  const askWhy = (record) => setAsking(record);
 
   const sendBack = (record, reason) => {
     setAsking(null);
@@ -275,6 +281,13 @@ export default function VerifyHub({
               {t('mt.rejectHint')}
             </div>
 
+            {!canReject ? (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-4
+                              text-[12.5px] font-bold text-amber-800 leading-relaxed">
+                {t('mt.rejectSetupNeeded')}
+              </div>
+            ) : (
+              <>
             <div className="space-y-2">
               {REJECT_REASONS.map((r) => (
                 <button key={r.key} onClick={() => sendBack(asking, r.store)}
@@ -309,11 +322,13 @@ export default function VerifyHub({
                 {t('mt.reject')}
               </button>
             </div>
+              </>
+            )}
 
             <button onClick={() => { setAsking(null); setTyped(''); }}
               className="w-full mt-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-black
                          text-[11px] uppercase tracking-widest rounded-xl py-3 cursor-pointer">
-              {t('common.cancel')}
+              {canReject ? t('common.cancel') : t('common.close')}
             </button>
           </div>
         </div>
@@ -397,7 +412,11 @@ function VerifyCard({ record: r, today, t, lang, yes, no }) {
         <Row label={t('mt.date')} value={relativeDay(r.work_date, today, t)} />
         <Row label={t('mt.nursery')} value={r.nursery_name || '—'} />
         <Row label={t('mt.chemical')} value={r.chemical || t('mt.noChemical')} />
-        <Row label={t('mt.qty')} value={r.qty != null ? Number(r.qty).toLocaleString() : '—'} />
+        {/* No seedling count. It is the sum of the batches ticked on the work
+            sheet, so a spray recorded against a plot rather than a batch —
+            which is most of them — carries nothing, and the card gave over a
+            whole row to an em dash. Where the batches ARE known they are the
+            better answer, and they are on the next line. */}
         {r.batch_name && <Row label={t('mt.batches')} value={r.batch_name} />}
 
         {/* Where the work happened. Opens the phone or tablet's own map rather
