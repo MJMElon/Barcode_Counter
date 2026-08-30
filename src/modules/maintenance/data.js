@@ -302,6 +302,38 @@ export async function saveRecord({ id, plot, workTypeKey, date, qty, chemical, r
 }
 
 /**
+ * Has this record been checked, sent back, or neither?
+ *
+ * Three columns say it — verified_at, rejected_at, and nothing — and exactly
+ * one of them is set at a time. See shared/add_maint_field_verify.sql and
+ * shared/add_maint_field_reject.sql in the office repository.
+ */
+export function verifyState(r) {
+  if (!r) return 'awaiting';
+  if (r.rejected_at) return 'rejected';
+  if (r.verified_at) return 'verified';
+  return 'awaiting';
+}
+
+/** Still waiting for a conductor to look at it. A record on its way up from a
+    phone is not in the deck: there is nothing to sign for until it lands. */
+export const awaitingVerify = (rows) =>
+  (rows || []).filter((r) => !r._pending && verifyState(r) === 'awaiting');
+
+/**
+ * True once the database can hold an answer.
+ *
+ * Read off a row rather than asked of the server: the module already has the
+ * records, and a column that exists comes back as a key whether or not it is
+ * set. With no records at all there is nothing to verify either way, so the
+ * hub is simply empty rather than wrong.
+ */
+export function hasVerifyColumns(rows) {
+  const r = (rows || []).find((x) => x && !x._pending);
+  return !!r && 'verified_at' in r && 'rejected_at' in r;
+}
+
+/**
  * The office's schedule for a nursery and month, and the batches currently
  * standing in each plot. Both feed the week timeline.
  *
@@ -450,17 +482,62 @@ export async function loadWorkers() {
   return data || [];
 }
 
-export async function setVerified(id, who) {
-  const { error } = await supabase
-    .from('nops_maint_field_records')
-    .update(who
-      ? { verified_by: who, verified_at: new Date().toISOString() }
-      : { verified_by: null, verified_at: null })
-    .eq('id', id);
+/* One write for the whole answer, because it IS one answer: a record is
+   waiting, verified, or sent back, and setting one of those means clearing
+   the others. Leaving the old columns behind would give a row two answers at
+   once, which no screen can read.
+
+   The reject columns are shared/add_maint_field_reject.sql and arrived after
+   the verify ones, so a database with only the older file still has to work:
+   naming a column that is not there fails the whole update, and the tick a
+   conductor has been pressing for weeks would stop. So the write is tried
+   whole, and once more without the newer columns if that is what is missing.
+   Only a database missing the verify columns too raises. */
+async function writeVerification(id, full, verifyOnly) {
+  const run = (patch) => supabase
+    .from('nops_maint_field_records').update(patch).eq('id', id);
+
+  let { error } = await run(full);
+  if (error && isMissingColumn(error)) ({ error } = await run(verifyOnly));
   if (error) {
     if (isMissingColumn(error)) throw new Error(VERIFY_SETUP_NEEDED);
     throw error;
   }
+}
+
+/** Checked and signed for — or, with no name, back to waiting. */
+export function setVerified(id, who) {
+  const signed = who
+    ? { verified_by: who, verified_at: new Date().toISOString() }
+    : { verified_by: null, verified_at: null };
+  return writeVerification(
+    id,
+    { ...signed, rejected_by: null, rejected_at: null, reject_reason: null },
+    signed
+  );
+}
+
+/**
+ * Sent back, with the reason.
+ *
+ * The row stays and the work may well have been done — what is refused is the
+ * RECORD of it. The FC Portal stops counting a rejected record towards the
+ * week, so the plot goes back on the list as still outstanding, which is the
+ * whole point of the button.
+ *
+ * There is no "verify only" fallback here: without the reject columns there
+ * is nowhere to put this at all, so it says so rather than silently doing
+ * half of it.
+ */
+export function setRejected(id, who, reason) {
+  const patch = {
+    rejected_by: who || null,
+    rejected_at: new Date().toISOString(),
+    reject_reason: reason || null,
+    verified_by: null,
+    verified_at: null,
+  };
+  return writeVerification(id, patch, patch);
 }
 
 export async function deleteRecord(id) {

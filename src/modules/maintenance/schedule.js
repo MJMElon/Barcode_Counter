@@ -100,6 +100,22 @@ export function applicableSchedules(rows, monthLbl) {
   return [...best.values()];
 }
 
+/**
+ * The month either side of this one, in the office's own wording.
+ *
+ * The week navigator walks off the end of a month — back from week 1 lands in
+ * the previous month's week 4 — and the schedule for that month has to be
+ * asked for by the same label the office files it under.
+ */
+export function shiftMonthLabel(lbl, delta) {
+  const rank = monthRank(lbl);
+  if (rank < 0) return lbl;
+  const n = rank + (delta || 0);
+  const year = Math.floor(n / 12);
+  const idx = n - year * 12;
+  return `${MONTH_ABBR[idx]} ${year}`;
+}
+
 /** The month a date falls in, in the office's own wording. */
 export function monthLabelOf(dateStr) {
   return monthLabel(String(dateStr || '').slice(0, 7));

@@ -23,6 +23,7 @@ import {
   weekOfDate,
 } from '../modules/maintenance/schedule.js';
 import { tintOf } from '../modules/maintenance/tints.js';
+import ProgressDial from '../modules/maintenance/ProgressDial.jsx';
 import WorkIcon from '../modules/maintenance/WorkIcons.jsx';
 
 const CACHE_KEY = 'maintenance_board_month_v2';
@@ -47,36 +48,6 @@ function NavArrow({ dir, disabled, onClick, label }) {
         {dir === 'prev' ? <path d="m15 5-7 7 7 7" /> : <path d="m9 5 7 7-7 7" />}
       </svg>
     </button>
-  );
-}
-
-/**
- * A job's completion as the ring around its icon.
- *
- * The percentage is the ring itself rather than a number beside it — four of
- * these in a row are read as a glance at how full each dial is, which is the
- * question ("what is behind?") without anyone doing arithmetic. The track
- * stays visible underneath so an empty ring reads as nothing done rather
- * than as a missing dial.
- *
- * Rotated -90deg so the arc starts at twelve o'clock; a ring that fills from
- * three o'clock looks broken even when the number is right.
- */
-function ProgressDial({ pct, ringCls, children }) {
-  const R = 26;
-  const C = 2 * Math.PI * R;
-  return (
-    <div className="relative w-[58px] h-[58px] sm:w-[68px] sm:h-[68px]">
-      <svg viewBox="0 0 60 60" className="w-full h-full -rotate-90" aria-hidden="true">
-        <circle cx="30" cy="30" r={R} fill="none" strokeWidth="5" className="text-slate-100" stroke="currentColor" />
-        <circle
-          cx="30" cy="30" r={R} fill="none" strokeWidth="5" strokeLinecap="round"
-          className={ringCls} stroke="currentColor"
-          strokeDasharray={C} strokeDashoffset={C * (1 - Math.min(100, Math.max(0, pct)) / 100)}
-        />
-      </svg>
-      <div className="absolute inset-0 grid place-items-center">{children}</div>
-    </div>
   );
 }
 
