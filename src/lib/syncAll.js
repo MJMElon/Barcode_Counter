@@ -57,6 +57,10 @@ export async function syncAll() {
     const m = await import('../modules/maintenance/data.js');
     await m.flushMaintenance();
   });
+  await run('scan records', async () => {
+    const m = await import('../modules/scan/store.js');
+    await m.flushScanRecords();
+  });
   // PALMS is push AND pull in one call — its own sync merges both ways.
   await run('palms', async () => {
     const m = await import('../modules/palms/sync.js');
@@ -110,6 +114,8 @@ export function startAutoSync(intervalMs = 30000) {
       await culling.flushCulling();
       const maint = await import('../modules/maintenance/data.js');
       await maint.flushMaintenance();
+      const scan = await import('../modules/scan/store.js');
+      await scan.flushScanRecords();
     } catch (e) { /* next tick tries again */ }
     autoBusy = false;
   };

@@ -1,5 +1,6 @@
 import { supabase } from '../../lib/supabase.js';
 import { cacheGet, cacheSet } from '../../lib/cache.js';
+import { PERMANENT, flushOutbox, looksOffline, queueJob } from '../../lib/outbox.js';
 
 // The scan list is now driven by SIGNED CONSENTS from the mobile web
 // (mobile_consent_records). When a consent is signed there, it appears here for
@@ -119,6 +120,45 @@ export async function insertScanRecord(consentId, alNumber, barcode) {
     .from('fcportal_scan_records')
     .insert({ consent_id: consentId, al_number: alNumber, barcode });
   if (error && error.code !== '23505') throw error; // 23505 = unique_violation (safe to ignore)
+}
+
+/* A scan made with no line still reaches the server, later.
+ *
+ * The local progress is what THIS phone counts by, and it never needed the
+ * network — but fcportal_scan_records is how OTHER devices hear a barcode
+ * has been taken, and a scan made offline used to be skipped rather than
+ * queued: the count survived on one phone while every other phone stayed
+ * free to accept the same seedling again. Now it queues like everything
+ * else in this repository and flushes on sync, on reconnect, and on the
+ * 30-second tick. The unique index (23505 ignored above) makes a retry of
+ * a row the server already took a no-op rather than a duplicate.
+ */
+export const SCAN_JOB = 'scan_record';
+
+export async function saveScanRecord(consentId, alNumber, barcode) {
+  try {
+    await insertScanRecord(consentId, alNumber, barcode);
+  } catch (e) {
+    if (looksOffline(e)) {
+      await queueJob(SCAN_JOB, { consentId, alNumber, barcode });
+      return;
+    }
+    // The server refused it for a reason of its own; the local progress
+    // still holds the scan, which is the behaviour this call always had.
+  }
+}
+
+export function flushScanRecords() {
+  return flushOutbox({
+    [SCAN_JOB]: async (p) => {
+      try {
+        await insertScanRecord(p.consentId, p.alNumber, p.barcode);
+      } catch (e) {
+        if (looksOffline(e)) throw e;      // try again later
+        throw new Error(PERMANENT);        // the server refused the row itself
+      }
+    },
+  });
 }
 
 // Pull all barcodes already stored for a consent (from any device).
