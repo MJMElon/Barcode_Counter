@@ -215,7 +215,7 @@ function CaseView({ caseId, me, onBack, onChanged }) {
     if (url) fields.resolution_photo_url = url;
 
     const ok = await patch(fields, `Resolved — ${me.name}`);
-    if (ok) { setShot(null); setFlash({ ok: true, msg: 'Case resolved.' }); }
+    if (ok) { setShot(null); onBack(); }
   }
 
   async function closeCase() {
@@ -240,15 +240,12 @@ function CaseView({ caseId, me, onBack, onChanged }) {
     setBusy(false);
   }
 
-  const back = (
-    <button onClick={onBack}
-      className="text-[11px] font-black uppercase tracking-widest text-violet-700 hover:text-violet-900 cursor-pointer">
-      ‹ Back
-    </button>
-  );
-
-  if (err) return <div className="p-4">{back}<div className="mt-4 text-[12.5px] font-bold text-slate-400">{err}</div></div>;
-  if (!c) return <div className="p-4">{back}<div className="mt-4 text-[12.5px] font-bold text-slate-400">loading case…</div></div>;
+  /* No back button. The window's own ✕ closes it, and closing unmounts the
+     whole thing — so opening it again comes back on the list, which is the
+     way out. A second control saying "back" beside a control saying "close"
+     was two answers to one question. */
+  if (err) return <div className="p-4"><div className="text-[12.5px] font-bold text-slate-400">{err}</div></div>;
+  if (!c) return <div className="p-4"><div className="text-[12.5px] font-bold text-slate-400">loading case…</div></div>;
 
   const s = c.status;
   const pending = s === 'open' || s === 'in_progress';
@@ -281,7 +278,6 @@ function CaseView({ caseId, me, onBack, onChanged }) {
   return (
     <div className="p-4">
       <div className="flex items-center gap-2">
-        {back}
         <span className="ml-auto text-[10px] font-black tracking-wider text-slate-400">{c.case_no || ''}</span>
       </div>
 
