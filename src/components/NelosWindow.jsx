@@ -121,19 +121,16 @@ const fmtStamp = (ts) => {
     return '';
   }
 };
-const initials = (n) =>
-  String(n || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
 
 /* ── One case, opened ────────────────────────────────────────────── */
+
 function CaseView({ caseId, me, onBack, onChanged }) {
   const [c, setC] = useState(null);
-  const [thread, setThread] = useState([]);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
   const [flash, setFlash] = useState(null);
   const [shot, setShot] = useState(null);   // the photo of the fix, if one was taken
   const resolutionRef = useRef(null);
-  const commentRef = useRef(null);
 
   /* select('*') rather than a column list. Nelos has grown columns over
      several migrations, and asking for one this database has not got would
@@ -142,10 +139,6 @@ function CaseView({ caseId, me, onBack, onChanged }) {
     const { data, error } = await supabase.from('nelos_cases').select('*').eq('id', caseId).single();
     if (error) { setErr(error.message || 'Could not open this case.'); return; }
     setC(data);
-    const { data: rows } = await supabase
-      .from('nelos_case_comments').select('*').eq('case_id', caseId)
-      .order('created_at', { ascending: true });
-    setThread(rows || []);
   }, [caseId]);
 
   useEffect(() => { load(); }, [load]);
@@ -176,14 +169,6 @@ function CaseView({ caseId, me, onBack, onChanged }) {
       setFlash({ ok: false, msg: `Could not save — ${e?.message || 'network'}` });
       return false;
     } finally { setBusy(false); }
-  }
-
-  async function start() {
-    // Picking up a case nobody owns makes you the owner — otherwise "In
-    // Progress, unassigned" becomes where cases go to be forgotten.
-    const claim = c.assignee_id ? {} : { assignee_id: me.id, assignee_name: me.name };
-    await patch({ status: 'in_progress', ...claim },
-      `Started work${c.assignee_id ? '' : ' and took ownership'} — ${me.name}`);
   }
 
   /* The photo of the fix, into the same bucket and path shape the dock
@@ -229,21 +214,6 @@ function CaseView({ caseId, me, onBack, onChanged }) {
       `Reopened — ${me.name}`);
   }
 
-  async function postComment() {
-    const body = commentRef.current?.value.trim();
-    if (!body) return;
-    setBusy(true);
-    await note(body, 'comment');
-    commentRef.current.value = '';
-    onChanged();
-    await load();
-    setBusy(false);
-  }
-
-  /* No back button. The window's own ✕ closes it, and closing unmounts the
-     whole thing — so opening it again comes back on the list, which is the
-     way out. A second control saying "back" beside a control saying "close"
-     was two answers to one question. */
   if (err) return <div className="p-4"><div className="text-[12.5px] font-bold text-slate-400">{err}</div></div>;
   if (!c) return <div className="p-4"><div className="text-[12.5px] font-bold text-slate-400">loading case…</div></div>;
 
@@ -256,19 +226,10 @@ function CaseView({ caseId, me, onBack, onChanged }) {
                              : (c.plot_name || '');
   if (c.batch_name) where = (where ? `${where} · ` : '') + `Batch ${c.batch_name}`;
 
-  /* The opening detail is shown above, and every raise path also writes it
-     into the thread as the first comment (shared_nelos.js raiseCase, and the
-     dock's own insert) so the hub reads as one conversation. Shown in both
-     places it is the same words twice on one screen, so the thread drops its
-     copy — the one at the top is the one in the right place.
-
-     Only the FIRST match: a later comment repeating the description word for
-     word is somebody actually saying it again, and dropping that would be
-     editing the conversation. */
-  const opening = c.description
-    ? thread.find((r) => r.kind === 'comment' && r.body === c.description)
-    : null;
-  const visibleThread = opening ? thread.filter((r) => r !== opening) : thread;
+  /* Every status this view knows offers at least one move, so the "nothing
+     to do" line is a fallback for a status arriving from somewhere else —
+     never something shown beside a live button. */
+  const hasActions = s === 'open' || s === 'in_progress' || s === 'resolved' || s === 'closed';
 
   const btn = 'px-3.5 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wider text-white cursor-pointer disabled:opacity-50';
   const sec = 'text-[10px] font-black uppercase tracking-[.11em] text-violet-700';
@@ -287,14 +248,14 @@ function CaseView({ caseId, me, onBack, onChanged }) {
           "FC Portal · Normal · Open" on very nearly every case — three
           words of nothing between the title and the work — and the four-cell
           grid said the same things at greater length. Keep the two in step. */}
-      <div className={`${sec} mt-3`}>{pending ? 'Pending Case Details' : 'Case Details'}</div>
-      <h3 className="mt-1.5 text-[16px] font-black text-slate-800 leading-tight">{c.title}</h3>
+      <div className={`${sec} mt-3`}>Case Details</div>
+      <h3 className="mt-1.5 text-[17px] font-black text-slate-800 leading-[1.25]">{c.title}</h3>
       <div className="mt-1 text-[11px] font-bold text-slate-400">
         Created {fmtDate((c.created_at || '').slice(0, 10))}
         {c.raised_by ? ` · by ${c.raised_by}` : ''}
       </div>
 
-      <div className="grid grid-cols-3 gap-x-2.5 gap-y-2 mt-3 p-3 bg-slate-50 border border-slate-100 rounded-xl">
+      <div className="grid grid-cols-3 gap-x-2.5 gap-y-2 mt-3 px-3.5 py-[11px] bg-slate-50 border border-[#eef2f7] rounded-xl">
         <div className="min-w-0"><div className={kk}>Nursery (Plot)</div><div className={vv}>{where || '—'}</div></div>
         <div className="min-w-0"><div className={kk}>Assigned to</div>
           <div className={vv}>{SOURCE_LABEL[c.assigned_module || c.source_module] || c.assigned_module || c.source_module || '—'}</div></div>
@@ -304,17 +265,21 @@ function CaseView({ caseId, me, onBack, onChanged }) {
 
       {/* What was written about it — the one field saying what is actually
           wrong, and this window never showed it. */}
-      <div className={`mt-3 text-[12.5px] leading-relaxed whitespace-pre-wrap break-words ${
+      <div className={`mt-3 text-[12.5px] leading-[1.55] whitespace-pre-wrap break-words ${
         c.description ? 'text-slate-700' : 'text-slate-400 italic'}`}>
         {c.description || 'No further detail was written.'}
       </div>
 
       {c.resolution && (
         <div className="mt-3 p-3 rounded-xl bg-emerald-50 border border-emerald-200">
-          <div className="text-[9px] font-black uppercase tracking-widest text-emerald-600">Resolution</div>
+          <div className="text-[9px] font-black uppercase tracking-[.1em] text-emerald-600">Resolution</div>
           <div className="text-[12.5px] font-bold text-emerald-800 mt-1 whitespace-pre-wrap">{c.resolution}</div>
           {c.resolution_photo_url &&
             <img src={c.resolution_photo_url} alt="Photo of the fix" className="w-full rounded-lg mt-2 block" />}
+          <div className="text-[10px] font-bold text-emerald-700 mt-1.5">
+            Resolved by {c.resolved_by || 'unknown'}{c.resolved_at ? ` · ${fmtStamp(c.resolved_at)}` : ''}
+            {c.closed_at ? `  ·  Closed by ${c.closed_by || 'unknown'} · ${fmtStamp(c.closed_at)}` : ''}
+          </div>
         </div>
       )}
 
@@ -324,11 +289,11 @@ function CaseView({ caseId, me, onBack, onChanged }) {
       )}
 
       <div className="flex flex-wrap gap-2 mt-3">
-        {s === 'open' && <button className={`${btn} bg-violet-600`} disabled={busy} onClick={start}>▶ Start Work</button>}
         {s === 'resolved' && <button className={`${btn} bg-slate-600`} disabled={busy} onClick={closeCase}>🔒 Close Case</button>}
         {(s === 'resolved' || s === 'closed') && (
           <button className={`${btn} bg-orange-600`} disabled={busy} onClick={reopen}>↩ Reopen</button>
         )}
+        {!hasActions && <span className="text-[11.5px] font-bold text-slate-400">Nothing to do on this case.</span>}
       </div>
 
       {/* Solving is the whole reason a pending case gets opened, so the block
@@ -364,34 +329,10 @@ function CaseView({ caseId, me, onBack, onChanged }) {
           <div className="text-[10px] font-black uppercase tracking-wider text-slate-500 mt-3 mb-1.5">Solve Case Remark</div>
           <textarea ref={resolutionRef} rows={3}
             className="w-full border-[1.5px] border-slate-200 rounded-xl px-3 py-2 text-[13px] font-semibold outline-none focus:border-violet-400" />
-          <button className={`${btn} bg-emerald-600 mt-2`} disabled={busy} onClick={confirmResolve}>Save &amp; Solve</button>
+          <button className={`${btn} bg-green-600 mt-2`} disabled={busy} onClick={confirmResolve}>Save &amp; Solve</button>
         </div>
       )}
 
-      <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-4 mb-1">Thread</div>
-      <div className="mb-3">
-        {visibleThread.length ? visibleThread.map((r) => {
-          const sys = r.kind !== 'comment';
-          return (
-            <div key={r.id || `${r.created_at}-${r.body}`} className="flex gap-2 py-2 border-b border-dashed border-slate-100 last:border-0">
-              <div className={`w-6 h-6 rounded-full grid place-items-center text-[9.5px] font-black shrink-0 ${
-                sys ? 'bg-slate-100 text-slate-400' : 'bg-violet-100 text-violet-700'}`}>
-                {sys ? '⚙' : initials(r.author_name)}
-              </div>
-              <div className="min-w-0 flex-1">
-                <span className="text-[11px] font-black text-slate-700">{r.author_name || 'Unknown'}</span>
-                <span className="text-[10px] font-bold text-slate-300"> · {fmtStamp(r.created_at)}</span>
-                <div className={`text-[12.5px] font-semibold mt-0.5 whitespace-pre-wrap ${
-                  sys ? 'text-slate-400 italic' : 'text-slate-700'}`}>{r.body}</div>
-              </div>
-            </div>
-          );
-        }) : <div className="text-[11.5px] font-bold text-slate-300 py-2">No comments yet.</div>}
-      </div>
-
-      <textarea ref={commentRef} rows={2} placeholder="Add a comment…"
-        className="w-full border-[1.5px] border-slate-200 rounded-xl px-3 py-2 text-[13px] font-semibold outline-none focus:border-violet-400" />
-      <button className={`${btn} bg-violet-600 mt-2`} disabled={busy} onClick={postComment}>Post Comment</button>
     </div>
   );
 }
