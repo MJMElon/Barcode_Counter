@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useLang, LangToggle } from '../context/LanguageContext.jsx';
-import { MAIN_PORTAL_URL } from '../config.js';
 import { supabase } from '../lib/supabase.js';
 
 // A plain left arrow. Every "go back" control in the app is just this — the
@@ -32,8 +31,6 @@ function CogIcon() {
 // Shared top navigation bar.
 // - `title`: heading text
 // - `back`: optional route for a Back link (otherwise the brand block shows)
-// - `portal`: show a link out to the main MJM portal. Used on the dashboard,
-//   which has nowhere to go "back" to inside this app
 // - `user`: optional staff name shown top-right, to the left of the language button
 // - `onSettings`: show a cog beside the staff name; `settingsOn` marks it as
 //   the page currently open
@@ -44,7 +41,6 @@ export default function TopNav({
   title,
   subtitle,
   back,
-  portal,
   user,
   onSettings,
   settingsOn,
@@ -55,42 +51,10 @@ export default function TopNav({
   const { t } = useLang();
   const navigate = useNavigate();
   const dark = theme === 'dark';
-  const [leaving, setLeaving] = useState(false);
 
   async function handleLogout() {
     await signOut();
     navigate('/');
-  }
-
-  /* The portal is a different domain, so the sign-in kept in this one's
-     storage does not travel with the link — following it plainly lands on
-     the portal's login screen even though the user is signed in here.
-     Carry the session across in the URL fragment instead: it is Supabase's
-     own implicit-flow shape, the portal already expects it (it skips its
-     session-reset when the URL carries a token), and supabase-js strips the
-     fragment out of the address bar once it has read it.
-
-     Falls back to a plain link if the session cannot be read, so the button
-     always goes somewhere. */
-  async function goToPortal(e) {
-    if (e) e.preventDefault();
-    if (leaving) return;
-    setLeaving(true);
-    let url = MAIN_PORTAL_URL;
-    try {
-      const { data } = await supabase.auth.getSession();
-      const s = data && data.session;
-      if (s && s.access_token && s.refresh_token) {
-        url +=
-          '#access_token=' + encodeURIComponent(s.access_token) +
-          '&refresh_token=' + encodeURIComponent(s.refresh_token) +
-          '&expires_in=' + (s.expires_in || 3600) +
-          '&token_type=bearer';
-      }
-    } catch (_) {
-      /* keep the plain URL */
-    }
-    window.location.href = url;
   }
 
   const bar = dark
@@ -130,17 +94,6 @@ export default function TopNav({
 
   const leftControls = (
     <>
-      {portal && (
-        <a
-          href={MAIN_PORTAL_URL}
-          onClick={goToPortal}
-          title={t('common.moduleSelection')}
-          aria-label={t('common.moduleSelection')}
-          className={`${backCls} grid place-items-center rounded-full w-9 h-9 border ${dark ? 'border-[#1f2a38]' : 'border-slate-200'} transition-colors no-underline shrink-0 cursor-pointer`}
-        >
-          <BackArrow />
-        </a>
-      )}
       {back && (
         <Link
           to={back}
@@ -205,7 +158,19 @@ export default function TopNav({
   if (book) {
     return (
       <div
-        className={`${bar} border-b px-3 sm:px-6 py-2.5 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 sticky top-0 z-30 shadow-sm`}
+        /* Two EQUAL flexible columns either side of the mark, so it sits on
+           the bar's real centre line rather than in the middle of whatever
+           the buttons leave over. It used to be auto | 1fr | auto, which
+           centred the mark inside the leftover space: with the dashboard's
+           left control gone the left cell collapsed to nothing, the right
+           still held two buttons, and the mark sat 52px left of centre.
+
+           Under 360px it keeps the old columns. Equal sides need the mark's
+           own width plus twice the buttons', which a 320px phone has not
+           got — measured, it overflowed by about 27px — and a bar that
+           scrolls sideways is worse than one whose mark sits a little
+           left. */
+        className={`${bar} border-b px-3 sm:px-6 py-2.5 grid grid-cols-[auto_minmax(0,1fr)_auto] min-[360px]:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 sticky top-0 z-30 shadow-sm`}
       >
         <div className="flex items-center gap-2 sm:gap-3 justify-self-start">{leftControls}</div>
         <div className="justify-self-center min-w-0">{wordmark}</div>
