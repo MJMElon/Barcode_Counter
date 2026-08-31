@@ -83,3 +83,36 @@ export async function syncAll() {
   }
   return { ok, offline: false, steps, at };
 }
+
+/**
+ * The 30-second background flush — the audit module's rhythm, brought here.
+ *
+ * PUSH ONLY, deliberately. The queues are cheap to ask ("anything waiting?"
+ * is a local IndexedDB read, and an empty queue sends nothing), so ticking
+ * them every half minute costs almost nothing and catches the cases the
+ * 'online' event misses — a flush that failed once, a connection that came
+ * back without the browser saying so. The PULL half of syncAll() re-reads
+ * whole tables from the server and belongs behind the button, not on a
+ * timer in every open tab.
+ *
+ * One tick at a time: a slow flush must not stack a second one on top.
+ */
+let autoTimer = null;
+let autoBusy = false;
+
+export function startAutoSync(intervalMs = 30000) {
+  if (autoTimer) return;
+  const tick = async () => {
+    if (autoBusy || !isOnline()) return;
+    autoBusy = true;
+    try {
+      const culling = await import('../modules/palms/cullingOffline.js');
+      await culling.flushCulling();
+      const maint = await import('../modules/maintenance/data.js');
+      await maint.flushMaintenance();
+    } catch (e) { /* next tick tries again */ }
+    autoBusy = false;
+  };
+  autoTimer = setInterval(tick, intervalMs);
+  window.addEventListener('online', tick);
+}

@@ -1,6 +1,13 @@
 import { Suspense, lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext.jsx';
+import { startAutoSync } from './lib/syncAll.js';
+
+// Every 30 seconds, anything queued on this phone tries the server — the
+// same rhythm the audit module keeps. Module-level on purpose: once per
+// app load, whatever screen is open. See startAutoSync for what it does
+// NOT do (no pulls on a timer).
+startAutoSync();
 import AuthScreen from './components/AuthScreen.jsx';
 import Dashboard from './components/Dashboard.jsx';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
