@@ -240,9 +240,13 @@ export function AuthProvider({ children }) {
       if (event === 'SIGNED_OUT' || !useSess) {
         setAllowed(null);
         setPermissions(null);
-        // Signing out takes the cached access with it, or the next person to
-        // use this phone starts inside somebody else's.
-        try { localStorage.removeItem(PERMS_KEY); } catch (e) { /* nothing to do */ }
+        /* The cached permissions used to be removed here too. They stay now:
+           an offline re-login (offlineVault.js) puts the same person back in
+           with no way to re-fetch them, and without this cache every module
+           page would sit on LOADING. Keeping it is safe — cachedPermissions()
+           refuses to answer for a different userId, so the next person to
+           sign in on this phone cannot inherit them, and it is a screen gate,
+           not the security: RLS decides what actually reads and writes. */
         return;
       }
       // Defer to release the auth lock before querying shared_profiles.
