@@ -71,6 +71,10 @@ const rowOf = (unitKey, e) => ({
  * (end_date filled in) or re-dated since the last push is the SAME entry, and
  * the server should end up holding what the phone holds. A first push of a
  * device with a year of history is one statement, not a year of them.
+ *
+ * Which is why syncPalms() pulls BEFORE calling this — see the note there.
+ * Run the other way round, "what the phone holds" overwrites a correction
+ * the office made while this phone was not looking.
  */
 export async function push(db) {
   const rows = [];
@@ -183,12 +187,36 @@ export async function pull(db) {
  * redraws against the merged result instead of the copy it loaded before the
  * sync ran; without that, rows pulled down only appear on the next reload.
  */
+/**
+ * PULL FIRST, THEN PUSH. The order is the whole rule, not a detail.
+ *
+ * push() upserts every local entry — "the server should end up holding what
+ * the phone holds" — and pull() takes the server's dates for an entry both
+ * hold, "because that is the copy everyone else is reading". Those two rules
+ * disagree, and whichever runs second wins.
+ *
+ * It used to be push first, which meant the phone won, and that quietly
+ * undid every correction made from the office:
+ *
+ *   1. The office changes B04 from Culling to Membersih. It closes the
+ *      running entry (end_date = today) and opens a new one.
+ *   2. The phone still holds that entry open — it has not synced since.
+ *   3. push() upserts it back with end_date null, reopening it.
+ *   4. pull() then adds the office's new entry on top.
+ *   5. B04 now has TWO stages running, which is not a state anybody chose,
+ *      and the board drops that row to plain text because a dropdown cannot
+ *      show two stages honestly.
+ *
+ * Pulling first settles it: the phone takes the office's close, and the push
+ * that follows sends back what it was just told. The office is the record;
+ * the phone is a copy of it that can also add to it.
+ */
 export async function syncPalms(target) {
   const db = target || loadDB();
   try {
     if (ensureUids(db)) saveDB(db);
-    const sent = await push(db);
     const got = await pull(db);
+    const sent = await push(db);
     saveDB(db);
     return { ...sent, ...got };
   } catch (e) {
