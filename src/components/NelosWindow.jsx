@@ -25,6 +25,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { isOverdue, pendingCases } from '../lib/nelos.js';
+import { useLang } from '../context/LanguageContext.jsx';
 import NelosNewCase from './NelosNewCase.jsx';
 
 const MODULE = 'scan';                 // this portal's key in nelos_modules
@@ -81,7 +82,7 @@ function anchoredFrame(anchor) {
   return frame;
 }
 
-const PRIORITY_LABEL = { urgent: 'Urgent', high: 'High', normal: 'Normal', low: 'Low' };
+const PRIORITY_KEY = { urgent: 'nel.prUrgent', high: 'nel.prHigh', normal: 'nel.prNormal', low: 'nel.prLow' };
 const SOURCE_LABEL = {
   operation: 'Seedling Stock',
   nursery_ops: 'HQ Operation',
@@ -96,26 +97,26 @@ const DOT = { urgent: 'bg-rose-600', high: 'bg-orange-500', normal: 'bg-sky-500'
 /* A full date, for "Created …". fmtDay below is the DUE-date format and
    deliberately has no year — a due date is always near — but the day a case
    was raised can be months back, and "20 Aug" then says the wrong thing. */
-const fmtDate = (d) => {
+const fmtDate = (d, loc) => {
   if (!d) return '—';
   try {
-    return new Date(`${d}T00:00:00`).toLocaleDateString('en-MY',
+    return new Date(`${d}T00:00:00`).toLocaleDateString(loc,
       { day: 'numeric', month: 'short', year: 'numeric' });
   } catch { return d; }
 };
 
-const fmtDay = (d) => {
+const fmtDay = (d, loc) => {
   if (!d) return '';
   try {
-    return new Date(`${d}T00:00:00`).toLocaleDateString('en-MY', { day: 'numeric', month: 'short' });
+    return new Date(`${d}T00:00:00`).toLocaleDateString(loc, { day: 'numeric', month: 'short' });
   } catch (e) {
     return d;
   }
 };
-const fmtStamp = (ts) => {
+const fmtStamp = (ts, loc) => {
   if (!ts) return '';
   try {
-    return new Date(ts).toLocaleString('en-MY',
+    return new Date(ts).toLocaleString(loc,
       { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' });
   } catch (e) {
     return '';
@@ -125,6 +126,10 @@ const fmtStamp = (ts) => {
 /* ── One case, opened ────────────────────────────────────────────── */
 
 function CaseView({ caseId, me, onBack, onChanged }) {
+  const { t, lang } = useLang();
+  /* The BCP-47 tag for the language the portal is in. 'ms-MY' gives BM
+     month names; the date is part of the wording, not decoration. */
+  const loc = lang === 'ms' ? 'ms-MY' : 'en-MY';
   const [c, setC] = useState(null);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -137,7 +142,7 @@ function CaseView({ caseId, me, onBack, onChanged }) {
      fail the whole read. One row, so the width costs nothing. */
   const load = useCallback(async () => {
     const { data, error } = await supabase.from('nelos_cases').select('*').eq('id', caseId).single();
-    if (error) { setErr(error.message || 'Could not open this case.'); return; }
+    if (error) { setErr(error.message || t('nel.couldNotOpen')); return; }
     setC(data);
   }, [caseId]);
 
@@ -159,14 +164,14 @@ function CaseView({ caseId, me, onBack, onChanged }) {
       const { data, error } = await supabase.from('nelos_cases')
         .update({ updated_by: me.name, updated_at: new Date().toISOString(), ...fields })
         .eq('id', caseId).select().single();
-      if (error) { setFlash({ ok: false, msg: `Could not save — ${error.message}` }); return false; }
+      if (error) { setFlash({ ok: false, msg: t('nel.couldNotSave', { msg: error.message }) }); return false; }
       setC(data);
       onChanged();
       if (noteText) await note(noteText);
       await load();
       return true;
     } catch (e) {
-      setFlash({ ok: false, msg: `Could not save — ${e?.message || 'network'}` });
+      setFlash({ ok: false, msg: t('nel.couldNotSave', { msg: e?.message || t('nel.errNetwork') }) });
       return false;
     } finally { setBusy(false); }
   }
@@ -186,7 +191,7 @@ function CaseView({ caseId, me, onBack, onChanged }) {
   async function confirmResolve() {
     const text = resolutionRef.current?.value.trim();
     if (!text) {
-      setFlash({ ok: false, msg: 'Say what was done before resolving.' });
+      setFlash({ ok: false, msg: t('nel.saySolved') });
       resolutionRef.current?.focus();
       return;
     }
@@ -204,7 +209,7 @@ function CaseView({ caseId, me, onBack, onChanged }) {
   }
 
   async function closeCase() {
-    if (!window.confirm("Close this case? It leaves everyone's To-Do list.")) return;
+    if (!window.confirm(t('nel.closeConfirm'))) return;
     await patch({ status: 'closed', closed_by: me.name, closed_at: new Date().toISOString() },
       `Closed — ${me.name}`);
   }
@@ -215,7 +220,7 @@ function CaseView({ caseId, me, onBack, onChanged }) {
   }
 
   if (err) return <div className="p-4"><div className="text-[12.5px] font-bold text-slate-400">{err}</div></div>;
-  if (!c) return <div className="p-4"><div className="text-[12.5px] font-bold text-slate-400">loading case…</div></div>;
+  if (!c) return <div className="p-4"><div className="text-[12.5px] font-bold text-slate-400">{t('nel.loadingCase')}</div></div>;
 
   const s = c.status;
   const pending = s === 'open' || s === 'in_progress';
@@ -224,7 +229,7 @@ function CaseView({ caseId, me, onBack, onChanged }) {
      missing the thing that identifies it. */
   let where = c.nursery_name ? c.nursery_name + (c.plot_name ? ` (${c.plot_name})` : '')
                              : (c.plot_name || '');
-  if (c.batch_name) where = (where ? `${where} · ` : '') + `Batch ${c.batch_name}`;
+  if (c.batch_name) where = (where ? `${where} · ` : '') + t('nel.batch', { name: c.batch_name });
 
   /* Every status this view knows offers at least one move, so the "nothing
      to do" line is a fallback for a status arriving from somewhere else —
@@ -248,37 +253,38 @@ function CaseView({ caseId, me, onBack, onChanged }) {
           "FC Portal · Normal · Open" on very nearly every case — three
           words of nothing between the title and the work — and the four-cell
           grid said the same things at greater length. Keep the two in step. */}
-      <div className={`${sec} mt-3`}>Case Details</div>
+      <div className={`${sec} mt-3`}>{t('nel.caseDetails')}</div>
       <h3 className="mt-1.5 text-[17px] font-black text-slate-800 leading-[1.25]">{c.title}</h3>
       <div className="mt-1 text-[11px] font-bold text-slate-400">
-        Created {fmtDate((c.created_at || '').slice(0, 10))}
-        {c.raised_by ? ` · by ${c.raised_by}` : ''}
+        {t('nel.created', { date: fmtDate((c.created_at || '').slice(0, 10), loc) })}
+        {c.raised_by ? ` · ${t('nel.createdBy', { who: c.raised_by })}` : ''}
       </div>
 
       <div className="grid grid-cols-3 gap-x-2.5 gap-y-2 mt-3 px-3.5 py-[11px] bg-slate-50 border border-[#eef2f7] rounded-xl">
-        <div className="min-w-0"><div className={kk}>Nursery (Plot)</div><div className={vv}>{where || '—'}</div></div>
-        <div className="min-w-0"><div className={kk}>Assigned to</div>
+        <div className="min-w-0"><div className={kk}>{t('nel.nurseryPlot')}</div><div className={vv}>{where || '—'}</div></div>
+        <div className="min-w-0"><div className={kk}>{t('nel.assignedTo')}</div>
           <div className={vv}>{SOURCE_LABEL[c.assigned_module || c.source_module] || c.assigned_module || c.source_module || '—'}</div></div>
-        <div className="min-w-0"><div className={kk}>PIC</div>
-          <div className={vv}>{c.assignee_name || <span className="text-slate-400 font-semibold">Unassigned</span>}</div></div>
+        <div className="min-w-0"><div className={kk}>{t('nel.pic')}</div>
+          <div className={vv}>{c.assignee_name || <span className="text-slate-400 font-semibold">{t('nel.unassigned')}</span>}</div></div>
       </div>
 
       {/* What was written about it — the one field saying what is actually
           wrong, and this window never showed it. */}
       <div className={`mt-3 text-[12.5px] leading-[1.55] whitespace-pre-wrap break-words ${
         c.description ? 'text-slate-700' : 'text-slate-400 italic'}`}>
-        {c.description || 'No further detail was written.'}
+        {c.description || t('nel.noDetail')}
       </div>
 
       {c.resolution && (
         <div className="mt-3 p-3 rounded-xl bg-emerald-50 border border-emerald-200">
-          <div className="text-[9px] font-black uppercase tracking-[.1em] text-emerald-600">Resolution</div>
+          <div className="text-[9px] font-black uppercase tracking-[.1em] text-emerald-600">{t('nel.resolution')}</div>
           <div className="text-[12.5px] font-bold text-emerald-800 mt-1 whitespace-pre-wrap">{c.resolution}</div>
           {c.resolution_photo_url &&
-            <img src={c.resolution_photo_url} alt="Photo of the fix" className="w-full rounded-lg mt-2 block" />}
+            <img src={c.resolution_photo_url} alt={t('nel.photoOfFix')} className="w-full rounded-lg mt-2 block" />}
           <div className="text-[10px] font-bold text-emerald-700 mt-1.5">
-            Resolved by {c.resolved_by || 'unknown'}{c.resolved_at ? ` · ${fmtStamp(c.resolved_at)}` : ''}
-            {c.closed_at ? `  ·  Closed by ${c.closed_by || 'unknown'} · ${fmtStamp(c.closed_at)}` : ''}
+            {t('nel.resolvedBy', { who: c.resolved_by || t('nel.unknown') })}
+            {c.resolved_at ? ` · ${fmtStamp(c.resolved_at, loc)}` : ''}
+            {c.closed_at ? `  ·  ${t('nel.closedBy', { who: c.closed_by || t('nel.unknown') })} · ${fmtStamp(c.closed_at, loc)}` : ''}
           </div>
         </div>
       )}
@@ -289,11 +295,11 @@ function CaseView({ caseId, me, onBack, onChanged }) {
       )}
 
       <div className="flex flex-wrap gap-2 mt-3">
-        {s === 'resolved' && <button className={`${btn} bg-slate-600`} disabled={busy} onClick={closeCase}>🔒 Close Case</button>}
+        {s === 'resolved' && <button className={`${btn} bg-slate-600`} disabled={busy} onClick={closeCase}>🔒 {t('nel.closeCase')}</button>}
         {(s === 'resolved' || s === 'closed') && (
-          <button className={`${btn} bg-orange-600`} disabled={busy} onClick={reopen}>↩ Reopen</button>
+          <button className={`${btn} bg-orange-600`} disabled={busy} onClick={reopen}>↩ {t('nel.reopen')}</button>
         )}
-        {!hasActions && <span className="text-[11.5px] font-bold text-slate-400">Nothing to do on this case.</span>}
+        {!hasActions && <span className="text-[11.5px] font-bold text-slate-400">{t('nel.nothingToDo')}</span>}
       </div>
 
       {/* Solving is the whole reason a pending case gets opened, so the block
@@ -303,13 +309,13 @@ function CaseView({ caseId, me, onBack, onChanged }) {
           pressed something that sounded like it would solve it already. */}
       {pending && (
         <div className="mt-4 pt-3.5 border-t border-violet-100">
-          <div className={sec}>Solve Case</div>
+          <div className={sec}>{t('nel.solveCase')}</div>
 
           {shot ? (
             <div className="relative mt-2 rounded-xl overflow-hidden bg-slate-100">
-              <img src={URL.createObjectURL(shot)} alt="Photo of the fix"
+              <img src={URL.createObjectURL(shot)} alt={t('nel.photoOfFix')}
                    className="w-full max-h-56 object-cover block" />
-              <button type="button" onClick={() => setShot(null)} aria-label="Remove photo"
+              <button type="button" onClick={() => setShot(null)} aria-label={t('nel.removePhoto')}
                 className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-slate-900/60 text-white text-[12px] leading-none cursor-pointer">✕</button>
             </div>
           ) : (
@@ -317,7 +323,7 @@ function CaseView({ caseId, me, onBack, onChanged }) {
                               border-[1.5px] border-dashed border-violet-200 rounded-xl bg-violet-50/60
                               text-violet-700 text-[11.5px] font-black">
               <span aria-hidden="true">📷</span>
-              <span>Take or attach a photo</span>
+              <span>{t('nel.takePhoto')}</span>
               <input type="file" accept="image/*" capture="environment" className="hidden"
                      onChange={(e) => setShot(e.target.files?.[0] || null)} />
             </label>
@@ -326,10 +332,11 @@ function CaseView({ caseId, me, onBack, onChanged }) {
           {/* Labelled rather than prompted from inside the box: a placeholder
               is gone the moment anybody types, so the one thing saying what
               the box is for disappears as they start filling it in. */}
-          <div className="text-[10px] font-black uppercase tracking-wider text-slate-500 mt-3 mb-1.5">Solve Case Remark</div>
+          <div className="text-[10px] font-black uppercase tracking-wider text-slate-500 mt-3 mb-1.5">{t('nel.solveRemark')}</div>
           <textarea ref={resolutionRef} rows={3}
-            className="w-full border-[1.5px] border-slate-200 rounded-xl px-3 py-2 text-[13px] font-semibold outline-none focus:border-violet-400" />
-          <button className={`${btn} bg-green-600 mt-2`} disabled={busy} onClick={confirmResolve}>Save &amp; Solve</button>
+            className="w-full border-[1.5px] border-slate-200 rounded-xl px-3 py-2 text-[13px] font-semibold
+                       bg-white text-slate-800 outline-none focus:border-violet-400" />
+          <button className={`${btn} bg-green-600 mt-2`} disabled={busy} onClick={confirmResolve}>{t('nel.saveSolve')}</button>
         </div>
       )}
 
@@ -339,16 +346,18 @@ function CaseView({ caseId, me, onBack, onChanged }) {
 
 /* ── The list ────────────────────────────────────────────────────── */
 function Row({ c, onOpen }) {
+  const { t, lang } = useLang();
+  const loc = lang === 'ms' ? 'ms-MY' : 'en-MY';
   const bits = [
     c.case_no,
-    [c.batch_name && `Batch ${c.batch_name}`, c.plot_name, c.nursery_name].filter(Boolean).join(' · '),
+    [c.batch_name && t('nel.batch', { name: c.batch_name }), c.plot_name, c.nursery_name].filter(Boolean).join(' · '),
     c.assignee_name ? `→ ${c.assignee_name}` : null,
   ].filter(Boolean);
   return (
     <button type="button" onClick={() => onOpen(c.id)}
       className="w-full text-left flex items-start gap-2.5 px-4 py-2.5 border-b border-dashed border-slate-100 hover:bg-violet-50 cursor-pointer">
       <span className={`w-2 h-2 rounded-full mt-[7px] shrink-0 ${DOT[c.priority] || DOT.normal}`}
-        title={PRIORITY_LABEL[c.priority] || ''} />
+        title={c.priority ? t(PRIORITY_KEY[c.priority] || 'nel.prNormal') : ''} />
       <span className="min-w-0 flex-1">
         <span className={`block text-[13px] font-bold leading-tight ${isOverdue(c) ? 'text-rose-800' : 'text-slate-800'}`}>
           {c.title}
@@ -359,8 +368,8 @@ function Row({ c, onOpen }) {
           </span>
           {bits.map((b) => <span key={b}> · {b}</span>)}
           {c.due_date && (isOverdue(c)
-            ? <span className="text-rose-700 font-black whitespace-nowrap"> · ⏰ overdue {fmtDay(c.due_date)}</span>
-            : <span className="whitespace-nowrap"> · due {fmtDay(c.due_date)}</span>)}
+            ? <span className="text-rose-700 font-black whitespace-nowrap"> · ⏰ {t('nel.rowOverdue', { day: fmtDay(c.due_date, loc) })}</span>
+            : <span className="whitespace-nowrap"> · {t('nel.rowDue', { day: fmtDay(c.due_date, loc) })}</span>)}
         </span>
       </span>
     </button>
@@ -369,6 +378,7 @@ function Row({ c, onOpen }) {
 
 export default function NelosWindow({ onClose, onCount, anchor }) {
   const { session } = useAuth();
+  const { t } = useLang();
   /* Bumped on resize so the anchored frame — computed fresh from
      window.innerWidth/innerHeight on every render — is recomputed when
      neither the anchor nor anything else here changes, only the window. */
@@ -433,7 +443,7 @@ export default function NelosWindow({ onClose, onCount, anchor }) {
       >
         <div className="shrink-0 bg-white border-b border-slate-200 px-4 py-2.5 flex items-center gap-2">
           <span className="font-black text-slate-800 text-sm">NELOS</span>
-          <span className="font-black text-violet-600 text-[10px] uppercase tracking-[0.18em]">To Do</span>
+          <span className="font-black text-violet-600 text-[10px] uppercase tracking-[0.18em]">{t('nel.toDo')}</span>
           {state.status === 'ready' && !!rows.length && (
             <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">{rows.length}</span>
           )}
@@ -442,10 +452,10 @@ export default function NelosWindow({ onClose, onCount, anchor }) {
           {!openId && !adding && (
             <button onClick={() => { setRaised(null); setAdding(true); }}
               className="ml-auto px-2.5 py-1.5 rounded-full bg-violet-600 hover:bg-violet-700 text-white text-[10px] font-black uppercase tracking-wider cursor-pointer shrink-0">
-              + New Case
+              {t('nel.newCase')}
             </button>
           )}
-          <button onClick={onClose} title="Close" aria-label="Close"
+          <button onClick={onClose} title={t('common.close')} aria-label={t('common.close')}
             className={`grid place-items-center w-9 h-9 rounded-full bg-slate-100 hover:bg-rose-100 text-slate-500 hover:text-rose-600 text-xl leading-none cursor-pointer shrink-0${
               openId || adding ? ' ml-auto' : ' ml-1'}`}>
             ×
@@ -458,7 +468,7 @@ export default function NelosWindow({ onClose, onCount, anchor }) {
               so, or the Field Conductor raises it again. */}
           {!adding && !openId && raised && (
             <div className="mx-4 mt-3 px-3 py-2 rounded-lg text-[11.5px] font-black bg-emerald-100 text-emerald-800">
-              Case raised · {raised}
+              {t('nel.caseRaised', { no: raised })}
             </div>
           )}
           {adding ? (
@@ -468,7 +478,7 @@ export default function NelosWindow({ onClose, onCount, anchor }) {
               onBack={() => setAdding(false)}
               onDone={(c) => {
                 setAdding(false);
-                setRaised(c?.case_no || 'the case');
+                setRaised(c?.case_no || t('nel.theCase'));
                 reload();
               }} />
           ) : openId ? (
@@ -476,33 +486,33 @@ export default function NelosWindow({ onClose, onCount, anchor }) {
               onBack={() => { setOpenId(null); reload(); }}
               onChanged={reload} />
           ) : state.status === 'loading' ? (
-            <div className="py-10 text-center text-[12px] font-bold text-slate-300">loading cases…</div>
+            <div className="py-10 text-center text-[12px] font-bold text-slate-300">{t('nel.loadingCases')}</div>
           ) : state.status === 'failed' ? (
             <div className="py-10 px-6 text-center text-[12px] font-bold text-slate-400">
-              The case log could not be reached.<br />
-              <span className="text-[11px] font-semibold text-slate-300">Everything else in the portal still works.</span>
+              {t('nel.logUnreachable')}<br />
+              <span className="text-[11px] font-semibold text-slate-300">{t('nel.restStillWorks')}</span>
             </div>
           ) : !rows.length ? (
-            <div className="py-10 text-center text-[12px] font-bold text-slate-300">Nothing pending ✓</div>
+            <div className="py-10 text-center text-[12px] font-bold text-slate-300">{t('nel.nothingPending')}</div>
           ) : (
             <>
               {/* Overdue leads and says so: "3 pending" and "3 overdue" are
                   not the same news, so its heading shows even alone. */}
               {!!over.length && (
                 <>
-                  <div className={`${head} text-rose-700 sticky top-0 bg-white`}>⏰ Overdue · {over.length}</div>
+                  <div className={`${head} text-rose-700 sticky top-0 bg-white`}>{t('nel.overdueHead', { n: over.length })}</div>
                   {over.map((c) => <Row key={c.id} c={c} onOpen={setOpenId} />)}
                 </>
               )}
               {!!restMine.length && (
                 <>
-                  {groups > 1 && <div className={head}>Assigned to me · {restMine.length}</div>}
+                  {groups > 1 && <div className={head}>{t('nel.assignedToMe', { n: restMine.length })}</div>}
                   {restMine.map((c) => <Row key={c.id} c={c} onOpen={setOpenId} />)}
                 </>
               )}
               {!!restOther.length && (
                 <>
-                  {groups > 1 && <div className={head}>Other pending cases · {restOther.length}</div>}
+                  {groups > 1 && <div className={head}>{t('nel.otherPending', { n: restOther.length })}</div>}
                   {restOther.map((c) => <Row key={c.id} c={c} onOpen={setOpenId} />)}
                 </>
               )}

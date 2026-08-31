@@ -32,8 +32,8 @@
    cannot hold a file that was never fetched. Field test found it exactly
    that way — sync pressed, airplane mode on, a tab that had not been opened
    online refused to draw. */
-const VER = 'fc-shell-mth6cezh';
-const PRECACHE = ["./","./index.html","./icon.svg","./assets/CullingModule-BBVxHE2-.js","./assets/DoModule-CyoW7Me6.js","./assets/EntryModal-D570xAkb.js","./assets/MaintenanceModule-Bv9HihHf.js","./assets/PalmsBody-VxAuiVUm.js","./assets/PalmsModule-D0TvYoVc.js","./assets/ScanModule-Csh8UhbQ.js","./assets/TrackMap-Dgihpmma.css","./assets/TrackMap-wZk3sHWA.js","./assets/WorkerPortal-DcW7xGCJ.js","./assets/app-0pGmIPuk.js","./assets/app-DpGW8rnf.css","./assets/b1-CSzJ9mIh.jpeg","./assets/b4-DxhMv_2i.jpeg","./assets/cullingData-D3zjo7-x.js","./assets/cullingOffline-CYe7JKEp.js","./assets/cullingSource-lO1yjoYX.js","./assets/html2canvas.esm-CBrSDip1.js","./assets/icon-B5EoKwz6.svg","./assets/index.es-qoOv0DP9.js","./assets/purify.es-BwoZCkIS.js","./assets/store-BhJjWPzK.js","./assets/sync-DQDk5Umf.js","./assets/track-Bec9ja7e.js","./assets/u8-C1D4M1Bz.jpeg","./assets/workerApi-DeJjq_eh.js"];
+const VER = 'fc-shell-mth6lzg4';
+const PRECACHE = ["./","./index.html","./icon.svg","./assets/CullingModule-CxJ4_ilT.js","./assets/DoModule-Dqb4DNiw.js","./assets/EntryModal-BIf2D8Hm.js","./assets/MaintenanceModule-DoqwIt5p.js","./assets/PalmsBody-CHV4hxl6.js","./assets/PalmsModule-BNDp6b3p.js","./assets/ScanModule-CSuCA4jn.js","./assets/TrackMap-DRbqzrDI.js","./assets/TrackMap-Dgihpmma.css","./assets/WorkerPortal-DhDEhNde.js","./assets/app-BxypvlY1.js","./assets/app-CEv8f5JT.css","./assets/b1-CSzJ9mIh.jpeg","./assets/b4-DxhMv_2i.jpeg","./assets/cullingData-DC6l7JVh.js","./assets/cullingOffline-CX2BAP8O.js","./assets/cullingSource-CaObG2Ar.js","./assets/html2canvas.esm-CBrSDip1.js","./assets/icon-B5EoKwz6.svg","./assets/index.es-C7T7amad.js","./assets/purify.es-BwoZCkIS.js","./assets/store-p6PvHgUw.js","./assets/sync-BkXslb_E.js","./assets/track--G332K_0.js","./assets/u8-C1D4M1Bz.jpeg","./assets/workerApi-RgtaROyN.js"];
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();
