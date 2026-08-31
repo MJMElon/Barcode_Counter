@@ -22,9 +22,15 @@ What is specific to this repository:
   (`src/lib/outbox.js`) and are sent from there, so the same code runs with a
   bar of signal or none. There is no separate offline branch to be in the wrong
   one of.
-- **`sw.js` is a self-destruct service worker on purpose.** It exists to undo an
-  earlier precaching one that served a stale app shell. Re-introducing
-  precaching is a real decision with a production incident behind it — do not
-  do it casually.
+- **`public/sw.js` is a runtime-caching service worker, network-first for
+  HTML.** It replaced a self-destruct worker whose job was to undo an earlier
+  PRECACHING one that served a stale app shell — a real production incident.
+  Offline entry was then asked for on purpose (a Field Conductor loses signal
+  for hours and must still open the portal), and network-first HTML is what
+  makes that safe to have again: with signal the live deploy always wins, and
+  the cache only answers when the network itself fails. That property is
+  load-bearing — do not flip it to cache-first, that is how the incident
+  happened. app.html's recovery code still removes workers and caches when
+  the app fails to mount, so a misbehaving worker cleans itself up.
 - Rules shared with the office repository carry a comment saying so in both
   copies. Change one, change the other.
