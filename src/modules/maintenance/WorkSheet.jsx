@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLang } from '../../context/LanguageContext.jsx';
+import GpsTrack from './GpsTrack.jsx';
 import { workTypeLabel } from './helpers.js';
 import PhotoSlots from './PhotoSlots.jsx';
 import WhoDidIt from './WhoDidIt.jsx';
@@ -31,6 +32,10 @@ const shortChemical = (c) => String(c || '').split(/\s*\+\s*/)[0].replace(/\s+[\
 export default function WorkSheet({
   workType, week, weekDates, month, tasks, batchMap, isDone, isAdmin,
   today, saving, onSave, onClose, allowPhotos = true, workers = null,
+  /* Which parts of this form the office has left switched on for the person
+     holding the phone. All on unless somebody said otherwise; GPS off unless
+     somebody asked for it. See modules/maintenance/functions.js. */
+  showBatches = true, showGps = false, showRemark = true,
 }) {
   const { t, lang } = useLang();
   const [plot, setPlot] = useState(null);      // the task being recorded
@@ -42,6 +47,9 @@ export default function WorkSheet({
   const [photos, setPhotos] = useState(() => Array(MAX_PHOTOS).fill(null));
   // Whose work this was, when the conductor is keying it for somebody else.
   const [workedBy, setWorkedBy] = useState([]);
+  // Where the phone was when the job was written down. Null until the stamp
+  // is taken, and null is a perfectly good answer — it never blocks a save.
+  const [gps, setGps] = useState(null);
 
 
   /* Work already recorded is not re-recordable: a second save would be a
@@ -58,6 +66,7 @@ export default function WorkSheet({
     setRemark('');
     setPhotos(Array(MAX_PHOTOS).fill(null));
     setWorkedBy([]);
+    setGps(null);
   }, [workType.key, week]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // Plots the schedule asks for twice this week — the pest spray and the
@@ -81,6 +90,7 @@ export default function WorkSheet({
     setRemark('');
     setPhotos(Array(MAX_PHOTOS).fill(null));
     setWorkedBy([]);
+    setGps(null);
   }
 
   // The seedlings worked on ARE the batches ticked, so the quantity is their
@@ -186,6 +196,7 @@ export default function WorkSheet({
             </div>
 
             {/* The only real choice on this form */}
+            {showBatches && (
             <div>
               <span className={label}>{t('mt.batchesInPlot')}</span>
               {plotBatches.length === 0 ? (
@@ -214,6 +225,7 @@ export default function WorkSheet({
                 </div>
               )}
             </div>
+            )}
 
             {/* Proof the work was done. Same numbered slots as the plot audit,
                 and every picture is shrunk before it leaves the phone. */}
@@ -228,22 +240,26 @@ export default function WorkSheet({
                 <WhoDidIt workers={workers} value={workedBy} onChange={setWorkedBy} t={t} />
               )}
 
+              {showGps && <GpsTrack value={gps} onChange={setGps} />}
+
               {allowPhotos && <>
                 <span className={label}>{t('mt.photos', { n: MAX_PHOTOS })}</span>
                 <PhotoSlots value={photos} onChange={setPhotos} max={MAX_PHOTOS} />
               </>}
             </div>
 
+            {showRemark && (
             <div>
               <span className={label}>{t('mt.remark')}</span>
               <textarea rows={2} value={remark} onChange={(e) => setRemark(e.target.value)}
                 placeholder={t('mt.remarkHint')}
                 className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-[14px] font-semibold text-slate-800 outline-none focus:border-emerald-500" />
             </div>
+            )}
 
             <button
               disabled={saving}
-              onClick={() => onSave({ task: plot, batches, remark, photos: taken, qty, workedBy })}
+              onClick={() => onSave({ task: plot, batches, remark, photos: taken, qty, workedBy, gps })}
               className="w-full rounded-2xl bg-emerald-600 disabled:bg-slate-300 text-white font-black uppercase tracking-widest text-[13px] py-3.5">
               {saving ? t('common.saving') : isDone(plot) ? t('mt.saveCorrection') : t('mt.save')}
             </button>

@@ -13,16 +13,32 @@ import { useWorker } from './WorkerAuthContext.jsx';
  * with an e-mail address and a password because a Field Conductor has an
  * office account; a worker has a number the office wrote on their row of the
  * Payroll register, and asking them for anything more is asking them for
- * something they were never given. No sign-up link either — a worker cannot
- * make themselves an account, and offering one would only teach forty people
- * to tap something that cannot work.
+ * something they were never given.
+ *
+ * Under it, a way to put yourself ON that register: name and a PIN of your
+ * own choosing, and nothing else, because everything else is the office's to
+ * decide. What that makes is a row waiting to be allocated, which can see
+ * nothing at all until somebody files it — see RUN_ME_worker_signup.sql in
+ * the office repository. The form is the same two lines of the same cover
+ * rather than a second screen: a worker who taps the wrong one should be able
+ * to tap back without losing where they were.
  */
 export default function WorkerCover() {
   const { t } = useLang();
-  const { signIn, offline } = useWorker();
+  const { signIn, signUp, offline } = useWorker();
+  const [mode, setMode] = useState('in');     // 'in' | 'up'
   const [pin, setPin] = useState('');
+  const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+
+  const cleanPin = (v) => v.toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+  function swap(next) {
+    setMode(next);
+    setErr(null);
+    setPin('');
+  }
 
   async function handleSignIn() {
     if (!pin.trim()) return setErr(t('wk.enterPin'));
@@ -34,6 +50,23 @@ export default function WorkerCover() {
     } catch (e) {
       setErr((e && e.message) || t('wk.signInFailed'));
       setPin('');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /* Checked here as well as in the database, and the database is the one that
+     counts — this is only so somebody is told before the round trip rather
+     than after it. The rules are the same ones worker_signup enforces. */
+  async function handleSignUp() {
+    if (name.trim().length < 3) return setErr(t('wk.enterName'));
+    if (!/^[A-Z0-9]{4,12}$/.test(pin)) return setErr(t('wk.pinRule'));
+    setBusy(true);
+    setErr(null);
+    try {
+      await signUp(name.trim(), pin);
+    } catch (e) {
+      setErr((e && e.message) || t('wk.signInFailed'));
     } finally {
       setBusy(false);
     }
@@ -61,6 +94,20 @@ export default function WorkerCover() {
             {offline && <div className="bk-note bk-warn">{t('wk.offline')}</div>}
             {err && <div className="bk-note bk-err">{err}</div>}
 
+            {mode === 'up' && (
+              <input
+                type="text"
+                autoCapitalize="words"
+                autoCorrect="off"
+                autoComplete="name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSignUp()}
+                placeholder={t('wk.yourName')}
+                className="bk-field"
+              />
+            )}
+
             <input
               /* Not type="password": this is a door number, the worker is
                  standing in a field, and a PIN they cannot see is a PIN they
@@ -82,21 +129,45 @@ export default function WorkerCover() {
               spellCheck={false}
               autoComplete="off"
               value={pin}
-              onChange={(e) => setPin(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
-              onKeyDown={(e) => e.key === 'Enter' && handleSignIn()}
-              placeholder={t('wk.pin')}
+              onChange={(e) => setPin(cleanPin(e.target.value))}
+              onKeyDown={(e) => e.key === 'Enter' && (mode === 'in' ? handleSignIn() : handleSignUp())}
+              placeholder={mode === 'in' ? t('wk.pin') : t('wk.choosePin')}
               className="bk-field"
               style={{ letterSpacing: '.18em' }}
             />
 
-            <button onClick={handleSignIn} disabled={busy} className="bk-btn">
-              {busy ? t('wk.signingIn') : t('wk.signIn')}
+            <button
+              onClick={mode === 'in' ? handleSignIn : handleSignUp}
+              disabled={busy}
+              className="bk-btn"
+            >
+              {busy
+                ? t(mode === 'in' ? 'wk.signingIn' : 'wk.signingUp')
+                : t(mode === 'in' ? 'wk.signIn' : 'wk.signUpGo')}
             </button>
 
             <div className="bk-links">
-              <span className="bk-link" style={{ cursor: 'default', borderBottom: 0, opacity: 0.75 }}>
-                {t('wk.askOffice')}
-              </span>
+              {mode === 'in' ? (
+                <span
+                  className="bk-link"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => swap('up')}
+                  onKeyDown={(e) => e.key === 'Enter' && swap('up')}
+                >
+                  {t('wk.newHere')}
+                </span>
+              ) : (
+                <span
+                  className="bk-link"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => swap('in')}
+                  onKeyDown={(e) => e.key === 'Enter' && swap('in')}
+                >
+                  {t('wk.havePin')}
+                </span>
+              )}
             </div>
           </div>
         </div>

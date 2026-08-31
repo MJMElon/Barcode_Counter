@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLang } from '../context/LanguageContext.jsx';
+import { MAINT_FUNCTIONS, MAINT_FUNCTION_DEFAULT } from '../modules/maintenance/functions.js';
 import { useWorker } from './WorkerAuthContext.jsx';
 import * as api from './workerApi.js';
 import WorkerNav from './WorkerNav.jsx';
@@ -19,6 +20,12 @@ import WorkerNav from './WorkerNav.jsx';
  * row. That is the default, it is shown as such, and it is why most workers
  * never need touching here at all.
  */
+/* What each switch means when nobody has said. `record` is not in the shared
+   table — it is an older tick with its own rule in the module — so it is
+   spelt out here, and everything else comes from the one list rather than a
+   second opinion of it. */
+const DEFAULT_FN = { record: true, ...MAINT_FUNCTION_DEFAULT };
+
 export default function WorkerSettings() {
   const { t } = useLang();
   const { token, worker, refresh } = useWorker();
@@ -73,6 +80,29 @@ export default function WorkerSettings() {
 
   function setModule(key, on) {
     setDraft((d) => ({ ...d, modules: { ...(d.modules || {}), [key]: on } }));
+  }
+
+  /* ── The functions inside Maintenance ──
+     The same switches, with the same keys and the same defaults, that the
+     office sets per Field Conductor on ai.mjmnursery.com → 555 Worker Portal
+     Manage → Setting. One list, in modules/maintenance/functions.js.
+
+     Absent is left absent rather than written as `true`: the default lives in
+     one place, and a row full of ticks written out here would freeze today's
+     defaults onto every worker who was ever opened in this screen. */
+  const fnOn = (d, key) => {
+    const v = (((d && d.actions) || {}).maintenance || {})[key];
+    return v === undefined ? DEFAULT_FN[key] === true : !!v;
+  };
+
+  function setFn(key, on) {
+    setDraft((d) => ({
+      ...d,
+      actions: {
+        ...(d.actions || {}),
+        maintenance: { ...((d.actions || {}).maintenance || {}), [key]: on },
+      },
+    }));
   }
 
   /* null ⇄ array. "Everything" is a real state, distinct from a list that
@@ -235,6 +265,53 @@ export default function WorkerSettings() {
                             ⚙️ {t('wk.modSettings')}
                           </button>
                         </div>
+
+                        {/* ── What they may do inside Maintenance ──
+                            Only while Maintenance itself is open to them: a
+                            list of functions under a module that is switched
+                            off is a list of settings with nothing to govern. */}
+                        {!!(d.modules || {}).maintenance && (
+                          <>
+                            <div className={head}>{t('wk.fnTitle')}</div>
+                            <div className="mb-4 space-y-2">
+                              {MAINT_FUNCTIONS.map((fn) => (
+                                <div key={fn.key}>
+                                  <button onClick={() => setFn(fn.key, !fnOn(d, fn.key))}
+                                          className={tick(fnOn(d, fn.key))}>
+                                    {fn.icon} {t(fn.label)}
+                                  </button>
+
+                                  {/* The record form's own parts, indented
+                                      under it and only while it is on. */}
+                                  {!!fn.children && fnOn(d, fn.key) && (
+                                    <div className="flex gap-2 flex-wrap mt-2 ml-4 pl-3 border-l-2 border-slate-200">
+                                      {/* Every one of them settable. Which a
+                                          worker gets is the office's call,
+                                          so nothing is withheld here — but
+                                          one is stored ahead of being acted
+                                          on, and says so rather than being
+                                          discovered on a phone in a plot. */}
+                                      {fn.children.map((sub) => (
+                                        <button key={sub.key}
+                                                title={sub.notYet ? t('wk.fnNotYet') : undefined}
+                                                onClick={() => setFn(sub.key, !fnOn(d, sub.key))}
+                                                className={`${tick(fnOn(d, sub.key))} ${
+                                                  sub.notYet && fnOn(d, sub.key)
+                                                    ? '!bg-amber-500 !border-amber-500' : ''}`}>
+                                          {sub.icon} {t(sub.label)}
+                                          {sub.notYet && <span className="ml-1 opacity-70">*</span>}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                            <div className="text-[11px] font-semibold text-slate-400 mb-4 -mt-2">
+                              {t('wk.fnNotYetHint')}
+                            </div>
+                          </>
+                        )}
 
                         {/* ── Boundary setting ── */}
                         <div className={head}>{t('wk.boundarySetting')}</div>

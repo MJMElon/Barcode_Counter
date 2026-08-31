@@ -13,8 +13,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Outfit:wght@400;600;700;900&family=Caveat:wght@500;600;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet" />
-  <script type="module" crossorigin src="./assets/app-5qa8Cdrs.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/app-CyFPyYM7.css">
+  <script type="module" crossorigin src="./assets/app-CKBDUybc.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/app-DcWG-Ptr.css">
 </head>
 <body>
   <div id="root"></div>
@@ -43,18 +43,20 @@
         errs.push('promise: ' + ((r && (r.stack || r.message)) || r));
       });
 
-      // Proactively remove any service worker + caches left by the old PWA so
-      // they can never serve a stale shell again. No reload — just clean up.
+      // The offline app shell. This spot used to do the OPPOSITE — unregister
+      // every worker and clear every cache on each load, cleanup after an old
+      // precaching worker that served a stale shell. Offline entry is wanted
+      // on purpose now (a Field Conductor loses signal for hours and must
+      // still open the portal), and the new /sw.js is built network-first for
+      // HTML so it cannot repeat that incident — see the notes in sw.js.
+      // hardReset() below still removes workers and caches when the app fails
+      // to mount, so a misbehaving worker stays two automatic reloads from
+      // gone.
       try {
         if ('serviceWorker' in navigator) {
-          navigator.serviceWorker.getRegistrations().then(function (rs) {
-            rs.forEach(function (r) { r.unregister(); });
-          }).catch(function () {});
-        }
-        if (window.caches && caches.keys) {
-          caches.keys().then(function (ks) {
-            ks.forEach(function (k) { caches.delete(k); });
-          }).catch(function () {});
+          window.addEventListener('load', function () {
+            navigator.serviceWorker.register('./sw.js').catch(function () {});
+          });
         }
       } catch (e) {}
       /* Every build renames the JS: assets/index-<hash>.js, and one chunk per

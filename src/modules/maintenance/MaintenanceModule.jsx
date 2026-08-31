@@ -9,9 +9,12 @@ import {
   VERIFY_SETUP_NEEDED,
   WORK_TYPES,
   allowedNurseries,
+  awaitingVerify,
   canMaintain,
   deleteRecord,
   flushMaintenance,
+  hasRejectColumns,
+  hasVerifyColumns,
   isModuleAdmin,
   loadMaintenanceData,
   loadPlotBatches,
@@ -19,6 +22,7 @@ import {
   loadSchedules,
   nurseryKey,
   pendingRecords,
+  setRejected,
   setVerified,
   submitRecord,
   toCsv,
@@ -27,44 +31,32 @@ import {
   workTypeByKey,
   workTypeLabel,
 } from './data.js';
+import { canMaintFn, canMaintCorrect } from './functions.js';
 import { generalWorkers } from './helpers.js';
+import { formatDistance, mapsUrl } from './track/track.js';
+import GpsTrack from './GpsTrack.jsx';
+import HistoryDialog from './HistoryDialog.jsx';
 import PhotoSlots from './PhotoSlots.jsx';
-import ThisWeek from './ThisWeek.jsx';
-import Timeline from './Timeline.jsx';
+import VerifyHub from './VerifyHub.jsx';
+import WeekBoard from './WeekBoard.jsx';
 import WorkIcon from './WorkIcons.jsx';
 import WhoDidIt from './WhoDidIt.jsx';
 import WorkSheet from './WorkSheet.jsx';
 import { batchesIn } from './plotBatches.js';
+import RecordCard from './RecordCard.jsx';
 import { tintOf } from './tints.js';
 import {
   WEEKS,
   isDone as isJobDone,
   mergeWeekTasks,
   monthLabelOf,
+  shiftMonthLabel,
   weekDates,
   weekOfDate,
 } from './schedule.js';
 
 /** Matches the work sheet: three photos is enough to show a job was done. */
 const MAX_PHOTOS = 3;
-
-/* "Today", "Yesterday", then the date. Most of the list is the last day or
-   two, and a Field Conductor reads those faster as words than as 2026-08-22.
-   Anything older gets the date, because "5 days ago" is a sum nobody wants
-   to do. */
-function relativeDay(iso, today, t) {
-  if (!iso) return '—';
-  if (iso === today) return t('mt.today');
-  const ms = Date.parse(iso), now = Date.parse(today);
-  if (Number.isFinite(ms) && Number.isFinite(now)) {
-    if (Math.round((now - ms) / 86400000) === 1) return t('mt.yesterday');
-    const d = new Date(ms);
-    if (!isNaN(d.getTime())) {
-      return d.toLocaleDateString('en-MY', { day: '2-digit', month: 'short', year: 'numeric' });
-    }
-  }
-  return iso;
-}
 
 /* Where the module gets its data and who it thinks is asking.
  *
@@ -86,6 +78,7 @@ const FC_SOURCE = {
   submitRecord,
   deleteRecord,
   setVerified,
+  setRejected,
   flushQueue:     flushMaintenance,
   pending:        pendingRecords,
 };
@@ -105,9 +98,6 @@ export default function MaintenanceModule({
   /* A worker's boundary can name individual plots, which a nursery list
      cannot express. Absent means every plot in the allowed nurseries. */
   plotFilter = null,
-  /* The documents bucket takes uploads from `authenticated` only, so the
-     camera is offered to a Field Conductor and not to a worker. */
-  allowPhotos = true,
   subtitle = 'FC Portal',
   back = '/dashboard',
 }) {
@@ -122,12 +112,12 @@ export default function MaintenanceModule({
   const [error, setError] = useState(null);
   const [setup, setSetup] = useState(false);
   const [nursery, setNursery] = useState('');
-  const [query, setQuery] = useState('');
   const [editing, setEditing] = useState(null); // { record? } — open sheet
   const [toast, setToast] = useState(null);
   const [schedule, setSchedule] = useState([]);     // one row per nursery that has a plan
   const [batchMap, setBatchMap] = useState(new Map());
   const [sheet, setSheet] = useState(null);         // { week, workType }
+  const [history, setHistory] = useState(false);
   const [saving, setSaving] = useState(false);
   const [workers, setWorkers] = useState([]);   // the roster a conductor may credit work to
   const [pending, setPending] = useState([]);   // records the queue is holding
@@ -137,17 +127,56 @@ export default function MaintenanceModule({
   // This page's own nursery list — Maintenance and PALMS are set separately.
   const allowed = allowedNurseries(permissions, 'maintenance');
   const mayRecord = canMaintain(permissions, 'record');
-  // Changing or removing a record already made is an admin's job. A Field
-  // Conductor records the work; correcting the books is not the same act, and
-  // the office is who answers for it. The maintenance 'edit' tick still has to
-  // be on, so an admin can also be kept out of a module they do not run.
-  const isAdmin   = isModuleAdmin(permissions, 'operation');
-  const mayEdit   = isAdmin && canMaintain(permissions, 'edit');
+  /* Changing a record already made, and removing one, are two ticks now —
+     Setting → a person → Maintenance → Edit work done / Delete work done —
+     because they are two different acts. Correcting a quantity somebody
+     mis-keyed is bookkeeping; making the morning disappear is not.
+
+     Neither falls open. An unticked box that still erases records would be
+     the screen lying in the expensive direction. See canMaintCorrect. */
+  const mayEdit   = canMaintCorrect(permissions, 'edit');
+  const mayDelete = canMaintCorrect(permissions, 'delete');
   const mayExport = canMaintain(permissions, 'export');
-  /* Signing off a worker's morning. Set on the FC Scan Portal's User Access
-     under Schedule Maintenance Work; a worker's own portal never offers it,
-     because nobody verifies their own work. */
+  /* Not a permission — what the work sheet uses to decide whether a job
+     already ticked off can be opened again. Nothing is changed or removed by
+     it; it re-opens a form. That is why it is still the plain admin question
+     and not one of the two ticks above. */
+  const isAdmin   = isModuleAdmin(permissions, 'operation');
+  /* Signing off a worker's morning.
+   *
+   * TWO conditions, and they are different in kind. The tick — Setting → a
+   * person → Maintenance → Verify work done — is who the office has decided
+   * may sign. `source.setVerified` is whether signing is possible at all from
+   * this door, and the Worker Portal's source deliberately has none: there is
+   * no worker_* function to verify with, so a worker holds no button whatever
+   * anybody ticks. Nobody signs off their own morning.
+   *
+   * Which is why a record a worker saves appears in the completed list with
+   * nothing to press, and the same record in the FC Portal carries the button
+   * — one board, one list, and the difference is who is holding the phone. */
   const mayVerify = !!source.setVerified && canMaintain(permissions, 'verify');
+
+  /* The functions inside Maintenance, switched on one at a time — the office
+     sets them per Field Conductor on the FC Portal's Setting screen, and per
+     worker in the Worker Portal's Settings. Same keys, same defaults, one
+     list: see functions.js.
+
+     Every one of them defaults ON, so a person whose access predates the
+     switches keeps the form they had. GPS is the exception and stays off
+     until it is asked for. */
+  const maySchedule = canMaintFn(permissions, 'schedule');
+  const fnBatches   = canMaintFn(permissions, 'batches');
+  const fnWorkers   = canMaintFn(permissions, 'workers');
+  const fnGps       = canMaintFn(permissions, 'gps');
+  /* The camera, like everything else on this form, is the switch and nothing
+     else. It used to be the switch AND a prop the Worker Portal passed as
+     false, which made the two portals differ for a reason that was not on any
+     screen. A worker still gets no camera — a PIN sign-in is `anon` and the
+     documents bucket takes uploads from `authenticated` only — but that is
+     now said in ONE place, workerMaintSource.js, as a permission the worker
+     cannot have, rather than as a second hidden rule here. */
+  const fnPhotos    = canMaintFn(permissions, 'photos');
+  const fnRemark    = canMaintFn(permissions, 'remark');
 
   const flash = (text) => {
     setToast(text);
@@ -246,24 +275,58 @@ export default function MaintenanceModule({
      twice. The dashboard's month summary counts the same way (withQueued). */
   const allRecords = useMemo(() => withQueued(records, pending), [records, pending]);
 
-  // Records this user may see, then the on-screen filters.
-  const visible = useMemo(() => {
-    const q = query.toLowerCase().trim();
-    return allRecords.filter(
+  // Records this user may see, in the nursery they are looking at.
+  const visible = useMemo(
+    () => allRecords.filter(
       (r) =>
         (allowed === null || allowed.includes(r.nursery_name)) &&
         (!plotFilter || plotFilter(r.plot_name)) &&
-        (!nursery || r.nursery_name === nursery) &&
-        (!q ||
-          (r.plot_name || '').toLowerCase().includes(q) ||
-          (r.remark || '').toLowerCase().includes(q))
-    );
-  }, [allRecords, allowed, plotFilter, nursery, query]);
+        (!nursery || r.nursery_name === nursery)
+    ),
+    [allRecords, allowed, plotFilter, nursery]
+  );
+
+  /* A record sent back is a record refused, so the plot it was made against
+     goes back on the list as still outstanding — that is the whole point of
+     the Verify Hub's left swipe. Everything that COUNTS work reads this list;
+     everything that LISTS records reads the other, because the rejected
+     record itself must stay visible or nobody can see what was refused. */
+  const accepted = useMemo(() => allRecords.filter((r) => !r.rejected_at), [allRecords]);
+
+  /* What the database can hold an answer in, read off the records already
+     loaded rather than asked for separately — a column that exists comes back
+     as a key whether or not it is set.
+
+     TWO questions, not one, and conflating them emptied the deck. Signing
+     needs verified_at, which shared/add_maint_field_verify.sql has been
+     adding for months. Sending back needs rejected_at, which arrived with
+     shared/add_maint_field_reject.sql and may not have been run yet — and a
+     database with only the older file must still show a conductor the
+     morning's work with a tick on it, not an empty hub. */
+  const verifyReady = !records.length || hasVerifyColumns(records);
+  const rejectReady = !records.length || hasRejectColumns(records);
+  const deck = useMemo(
+    () => (verifyReady ? awaitingVerify(visible) : []),
+    [visible, verifyReady]
+  );
 
   const today = todayStr();
-  const month = monthLabelOf(today);
+  const nowMonth = monthLabelOf(today);
+  const nowWeek = weekOfDate(today);
 
-  const currentWeek = weekOfDate(today);
+  /* Which week is on screen. Back and next walk off the end of a month into
+     the one either side, so a conductor catching up on the last days of last
+     month does not have to know that the schedule is filed per month. */
+  const [view, setView] = useState({ month: nowMonth, week: nowWeek });
+  const month = view.month;
+  const currentWeek = view.week;
+  const viewingNow = month === nowMonth && currentWeek === nowWeek;
+  const stepWeek = (d) => setView((v) => {
+    const w = v.week + d;
+    if (w < 1) return { month: shiftMonthLabel(v.month, -1), week: WEEKS.length };
+    if (w > WEEKS.length) return { month: shiftMonthLabel(v.month, 1), week: 1 };
+    return { month: v.month, week: w };
+  });
 
   // Which nurseries the timeline covers: the one the filter names, or every
   // one this person can see. "All nurseries" used to be a dead end asking
@@ -326,14 +389,14 @@ export default function MaintenanceModule({
   const doneCounts = useMemo(() => WEEKS.reduce((acc, w) => {
     acc[w] = WORK_TYPES.reduce((c, wt) => {
       c[wt.key] = tasksByWeek[w][wt.key].filter((x) =>
-        isJobDone(allRecords, { workTypeKey: wt.key, plot: x.plot,
-                                chemical: x.chemical, week: w, month })).length;
+        isJobDone(accepted, { workTypeKey: wt.key, plot: x.plot,
+                              chemical: x.chemical, week: w, month })).length;
       return c;
     }, {});
     return acc;
-  }, {}), [tasksByWeek, allRecords, month]);
+  }, {}), [tasksByWeek, accepted, month]);
 
-  async function handleSheetSave({ task, batches, remark, photos, qty, workedBy }) {
+  async function handleSheetSave({ task, batches, remark, photos, qty, workedBy, gps }) {
     const plot = visiblePlots.find((p) => p.plot_name === task.plot)
       || { plot_name: task.plot, nursery_name: task.nursery || nursery || null };
     setSaving(true);
@@ -353,6 +416,7 @@ export default function MaintenanceModule({
         reportedBy: staffName,
         workedBy,
         photos,
+        gps,
       });
       if (queued) {
         flash(t('mt.savedOffline', { plot: task.plot }));
@@ -385,6 +449,7 @@ export default function MaintenanceModule({
         workedBy: form.workedBy,
         batches: form.batches,
         photos: form.photos,
+        gps: form.gps,
       });
       if (queued) {
         flash(t('mt.savedOffline', { plot: plot.plot_name }));
@@ -403,7 +468,7 @@ export default function MaintenanceModule({
   }
 
   async function handleDelete(rec) {
-    if (!mayEdit) return flash(t('mt.noPermEdit'));
+    if (!mayDelete) return flash(t('mt.noPermDelete'));
     if (!window.confirm(t('mt.confirmDelete'))) return;
     try {
       await source.deleteRecord(rec.id);
@@ -412,6 +477,14 @@ export default function MaintenanceModule({
     } catch (e) {
       flash(t('mt.saveErr', { msg: e.message || String(e) }));
     }
+  }
+
+  /* Sending a record back, from the deck. The row stays and nothing is
+     deleted — what is refused is the record of it, so the plot goes back on
+     the week as still outstanding. */
+  function handleReject(rec, reason) {
+    if (!mayVerify) return Promise.resolve();
+    return source.setRejected(rec.id, staffName, reason);
   }
 
   async function handleVerify(rec) {
@@ -462,12 +535,13 @@ export default function MaintenanceModule({
               ))}
             </select>
           )}
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={t('mt.searchPlot')}
-            className="flex-1 min-w-[140px] bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-semibold outline-none focus:border-emerald-500"
-          />
+          <button
+            onClick={() => setHistory(true)}
+            className="bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 font-black text-[11px] uppercase tracking-widest rounded-xl px-4 py-2.5"
+          >
+            🗂️ {t('mt.history')}
+          </button>
+          <div className="flex-1" />
           {mayExport && !!visible.length && (
             <button
               onClick={handleExport}
@@ -502,26 +576,71 @@ export default function MaintenanceModule({
           </div>
         )}
 
-        {/* The week in hand, first and at full width — a Field Conductor
-            opens this standing in a nursery with a job to start, not to read
-            a month's plan. Only the jobs actually due appear. */}
-        {!setup && schedule.length > 0 && mayRecord && (
-          <>
-            <div className="flex items-baseline justify-between pt-1">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                {t('mt.thisWeekTitle')}
-              </span>
-              <span className="text-[11px] font-black text-slate-500">
-                {t('mt.weekN', { n: currentWeek })} · {weekDates(currentWeek, month)}
-              </span>
-            </div>
-            <ThisWeek
-              week={currentWeek}
-              counts={counts[currentWeek]}
-              doneCounts={doneCounts[currentWeek]}
-              onOpen={(week, workType) => setSheet({ week, workType })}
-            />
-          </>
+        {/* One week at a time, at full width, and any week — a Field
+            Conductor is as often catching up on last week or reading ahead to
+            next as working the one we are standing in. The same card the
+            portal's front page draws, except that here the dials are buttons:
+            tapping one opens the record form for that job's plots. */}
+        {!setup && maySchedule && (
+          <div className="space-y-3 pt-1">
+            {!mayRecord ? (
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-4 text-[13px] font-bold text-amber-800">
+                {t('mt.noPermRecord')}
+              </div>
+            ) : (
+              <>
+                <WeekBoard
+                  month={month}
+                  week={currentWeek}
+                  isNow={viewingNow}
+                  counts={counts[currentWeek]}
+                  doneCounts={doneCounts[currentWeek]}
+                  onPrev={() => stepWeek(-1)}
+                  onNext={() => stepWeek(1)}
+                  onNow={() => setView({ month: nowMonth, week: nowWeek })}
+                  onOpen={(week, workType) => setSheet({ week, workType })}
+                />
+                {/* The three answers the month's list used to carry. They are
+                    about the plan, not about the four weeks it was drawn as,
+                    so they outlive it. */}
+                {!timelineNurseries.length ? (
+                  <div className="bg-white border border-slate-200 rounded-2xl px-4 py-5 text-center text-[13px] font-bold text-slate-400">
+                    {t('mt.noPlots')}
+                  </div>
+                ) : !schedule.length ? (
+                  <div className="bg-white border border-slate-200 rounded-2xl px-4 py-5 text-center text-[13px] font-bold text-slate-400">
+                    {t('mt.noSchedule', { nursery: timelineNurseries.join(', '), month })}
+                  </div>
+                ) : schedule.some((r) => r.carried) ? (
+                  <div className="bg-sky-50 border border-sky-200 rounded-xl px-3.5 py-2.5 text-[11px] font-bold text-sky-800">
+                    {t('mt.carriedFrom', {
+                      month: [...new Set(schedule.filter((r) => r.carried).map((r) => r.month))].join(', '),
+                    })}
+                  </div>
+                ) : null}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* The morning's submissions, one card at a time. On the page rather
+            than behind a button: checking the morning is part of the morning,
+            and a deck nobody can see is a deck nobody opens.
+
+            Only where signing is possible at all — the Worker Portal's source
+            has no setVerified, so a worker never sees this. Nobody signs off
+            their own morning. */}
+        {!setup && mayVerify && (
+          <VerifyHub
+            records={deck}
+            columnsReady={verifyReady}
+            canReject={rejectReady}
+            staffName={staffName}
+            onApprove={(rec) => source.setVerified(rec.id, staffName)}
+            onReject={handleReject}
+            onUndo={(rec) => source.setVerified(rec.id, null)}
+            onChanged={reload}
+          />
         )}
 
         {mayRecord && (
@@ -540,51 +659,6 @@ export default function MaintenanceModule({
           </div>
         )}
 
-        {/* The month's schedule, as four blocks of seven days. Tap a job to
-            record it against the plots the office asked for. */}
-        {/* Always drawn once the table exists. It used to disappear entirely
-            when a Field Conductor was not allowed to record, which looks
-            exactly like the feature not being there. */}
-        {!setup && (
-          <>
-            <div className="flex items-baseline justify-between pt-1">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                {t('mt.thisMonth')}
-              </span>
-              <span className="text-[11px] font-black text-slate-500">{month}</span>
-            </div>
-            {!mayRecord ? (
-              <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-4 text-[13px] font-bold text-amber-800">
-                {t('mt.noPermRecord')}
-              </div>
-            ) : !timelineNurseries.length ? (
-              <div className="bg-white border border-slate-200 rounded-2xl px-4 py-5 text-center text-[13px] font-bold text-slate-400">
-                {t('mt.noPlots')}
-              </div>
-            ) : !schedule.length ? (
-              <div className="bg-white border border-slate-200 rounded-2xl px-4 py-5 text-center text-[13px] font-bold text-slate-400">
-                {t('mt.noSchedule', { nursery: timelineNurseries.join(', '), month })}
-              </div>
-            ) : (
-              <>
-                {schedule.some((r) => r.carried) && (
-                  <div className="bg-sky-50 border border-sky-200 rounded-xl px-3.5 py-2.5 text-[11px] font-bold text-sky-800">
-                    {t('mt.carriedFrom', {
-                      month: [...new Set(schedule.filter((r) => r.carried).map((r) => r.month))].join(', '),
-                    })}
-                  </div>
-                )}
-              <Timeline
-                month={month}
-                currentWeek={currentWeek}
-                counts={counts}
-                doneCounts={doneCounts}
-                onOpen={(week, workType) => setSheet({ week, workType })}
-              />
-              </>
-            )}
-          </>
-        )}
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm font-bold">
             {t('mt.loadErr', { msg: error })}
@@ -602,9 +676,12 @@ export default function MaintenanceModule({
             today={today}
             saving={saving}
             isAdmin={isAdmin}
-            allowPhotos={allowPhotos}
-            workers={nurseryWorkers.length ? nurseryWorkers : null}
-            isDone={(task) => isJobDone(allRecords, {
+            allowPhotos={fnPhotos}
+            showBatches={fnBatches}
+            showGps={fnGps}
+            showRemark={fnRemark}
+            workers={fnWorkers && nurseryWorkers.length ? nurseryWorkers : null}
+            isDone={(task) => isJobDone(accepted, {
               workTypeKey: sheet.workType.key, plot: task.plot,
               chemical: task.chemical, week: sheet.week, month })}
             onSave={handleSheetSave}
@@ -612,156 +689,34 @@ export default function MaintenanceModule({
           />
         )}
 
-        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest pt-1">
-          {t('mt.completed')}
-        </div>
-
-        {loading ? (
-          <div className="text-center text-slate-400 text-xs font-black uppercase tracking-widest py-16 animate-pulse">
+        {loading && (
+          <div className="text-center text-slate-400 text-xs font-black uppercase tracking-widest py-6 animate-pulse">
             {t('common.loading')}
           </div>
-        ) : visible.length ? (
-          <div className="space-y-2.5">
-            {visible.map((r) => {
-              const wt = workTypeByKey(r.work_type);
-              return (
-                <div
-                  key={r.id}
-                  className="bg-white rounded-2xl border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,.06)] p-3.5"
-                >
-                  <div className="flex items-start gap-3">
-                    {/* The job's own colour and icon, so the list is scanned
-                        the same way the week above it is. */}
-                    <span className={`w-[38px] h-[38px] rounded-xl grid place-items-center shrink-0 ${tintOf(r.work_type).bg}`}>
-                      <WorkIcon workKey={r.work_type} className={`w-[22px] h-[22px] ${tintOf(r.work_type).fg}`} />
-                    </span>
+        )}
 
-                    <div className="flex-1 min-w-0">
-                      <div className="font-black text-slate-800 text-[14px] leading-tight">
-                        {workTypeLabel(wt, lang) || r.jenis || '—'} · {r.plot_name}
-                      </div>
-                      {/* When and what was used. Who did it used to be the
-                          last item on this grey line; now that workers record
-                          their own mornings it is the thing a conductor is
-                          reading the list FOR, so it has a line of its own
-                          below. */}
-                      <div className="text-[11.5px] font-bold text-slate-400 mt-0.5">
-                        {[
-                          relativeDay(r.work_date, today, t),
-                          r.chemical || null,
-                          r.qty != null ? Number(r.qty).toLocaleString() : null,
-                        ].filter(Boolean).join(' · ')}
-                      </div>
-
-                      {/* Who did the work. worked_by is set only when the
-                          conductor keyed it for somebody else, so when it is
-                          there it is the answer and reported_by is merely who
-                          held the phone — said quietly underneath. */}
-                      <div className="text-[12.5px] font-black text-slate-600 mt-1">
-                        {r.worked_by || r.reported_by || t('mt.byNobody')}
-                      </div>
-                      {r.worked_by && r.reported_by && r.worked_by !== r.reported_by && (
-                        <div className="text-[11px] font-semibold text-slate-400">
-                          {t('mt.keyedBy', { name: r.reported_by })}
-                        </div>
-                      )}
-
-                      {r.batch_name && (
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                          {String(r.batch_name).split(',').map((b) => b.trim()).filter(Boolean).map((b) => (
-                            <span key={b} className="text-[10px] font-black tabular-nums text-slate-600 bg-slate-100 rounded-md px-2 py-0.5">
-                              {b}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      {r.remark && (
-                        <div className="text-[12px] text-slate-500 mt-1.5 italic break-words">{r.remark}</div>
-                      )}
-                      {r.photo_urls && (
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                          {String(r.photo_urls).split(',').map((u) => u.trim()).filter(Boolean).map((u) => (
-                            // Opens full size in a new tab; the card only needs a thumbnail.
-                            <a key={u} href={u} target="_blank" rel="noreferrer">
-                              <img src={u} alt="" loading="lazy"
-                                   className="w-[42px] h-[42px] object-cover rounded-[9px] border border-slate-200" />
-                            </a>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Done, or still on the phone waiting for a signal. */}
-                    {r._pending ? (
-                      <span className="shrink-0 text-[9px] font-black uppercase tracking-widest bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-2 py-1">
-                        ⏳ {t('mt.waiting')}
-                      </span>
-                    ) : (
-                      <svg viewBox="0 0 24 24" aria-hidden="true"
-                           className="w-[18px] h-[18px] text-emerald-600 shrink-0 mt-1"
-                           fill="none" stroke="currentColor" strokeWidth="2.6"
-                           strokeLinecap="round" strokeLinejoin="round">
-                        <path d="m5 13 4 4L19 7" />
-                      </svg>
-                    )}
-                  </div>
-
-                  {/* Verified, or the button to verify it. Shown to everyone
-                      — a worker seeing "checked by Encik Ramli" against their
-                      own morning is the point of the signature — but only a
-                      conductor with the tick can press it. A queued record has
-                      not reached the database and cannot be signed for yet. */}
-                  {!r._pending && (r.verified_at || mayVerify) && (
-                    <div className="mt-2.5">
-                      {r.verified_at ? (
-                        <button
-                          onClick={() => handleVerify(r)}
-                          disabled={!mayVerify}
-                          className={`w-full flex items-center justify-center gap-1.5 rounded-xl py-2 border text-[11px] font-black uppercase tracking-widest
-                            bg-emerald-50 border-emerald-200 text-emerald-700
-                            ${mayVerify ? 'cursor-pointer hover:bg-emerald-100' : 'cursor-default'}`}
-                          title={mayVerify ? t('mt.unverify') : undefined}
-                        >
-                          <span aria-hidden="true">✓</span>
-                          {t('mt.verifiedBy', { name: r.verified_by || '—' })}
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handleVerify(r)}
-                          className="w-full rounded-xl py-2 border border-dashed border-slate-300 bg-white hover:bg-slate-50 hover:border-emerald-400 text-slate-500 hover:text-emerald-700 text-[11px] font-black uppercase tracking-widest cursor-pointer transition-colors"
-                        >
-                          {t('mt.verify')}
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  {mayEdit && !r._pending && (
-                    <div className="flex gap-2 mt-2.5">
-                      <button
-                        onClick={() => setEditing({ record: r })}
-                        className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-[11px] uppercase tracking-widest rounded-xl py-2"
-                      >
-                        {t('mt.edit')}
-                      </button>
-                      <button
-                        onClick={() => handleDelete(r)}
-                        className="px-4 bg-rose-50 hover:bg-rose-100 text-rose-600 font-black text-[11px] uppercase tracking-widest rounded-xl py-2"
-                      >
-                        {t('mt.delete')}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="text-center text-slate-400 text-sm font-bold py-16">
-            {allowed !== null && allowed.length === 0 ? t('mt.noNurseryAccess') : t('mt.noRecords')}
+        {/* Nothing on this page can do anything until somebody opens a
+            nursery. Said once, here, rather than as an empty list. */}
+        {!loading && allowed !== null && allowed.length === 0 && (
+          <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl px-4 py-3 text-sm font-bold">
+            {t('mt.noNurseryAccess')}
           </div>
         )}
       </div>
+
+      {history && (
+        <HistoryDialog
+          records={visible}
+          today={today}
+          mayVerify={mayVerify}
+          mayEdit={mayEdit}
+          mayDelete={mayDelete}
+          onVerify={handleVerify}
+          onEdit={(r) => setEditing({ record: r })}
+          onDelete={handleDelete}
+          onClose={() => setHistory(false)}
+        />
+      )}
 
       {editing && (
         <EntrySheet
@@ -770,8 +725,11 @@ export default function MaintenanceModule({
           batchMap={batchMap}
           onClose={() => setEditing(null)}
           onSave={handleSave}
-          allowPhotos={allowPhotos}
-          workers={nurseryWorkers.length ? nurseryWorkers : null}
+          allowPhotos={fnPhotos}
+          showBatches={fnBatches}
+          showGps={fnGps}
+          showRemark={fnRemark}
+          workers={fnWorkers && nurseryWorkers.length ? nurseryWorkers : null}
           t={t}
           lang={lang}
         />
@@ -787,7 +745,8 @@ export default function MaintenanceModule({
 }
 
 // Bottom sheet to record a job, or correct one already recorded.
-function EntrySheet({ record, plots, batchMap, onClose, onSave, allowPhotos = true, workers = null, t, lang }) {
+function EntrySheet({ record, plots, batchMap, onClose, onSave, allowPhotos = true, workers = null,
+                      showBatches = true, showGps = false, showRemark = true, t, lang }) {
   const [workTypeKey, setWorkTypeKey] = useState(record ? record.work_type : WORK_TYPES[0].key);
   const [plotName, setPlotName] = useState(record ? record.plot_name : '');
   const [date, setDate] = useState(record ? record.work_date : todayStr());
@@ -803,6 +762,25 @@ function EntrySheet({ record, plots, batchMap, onClose, onSave, allowPhotos = tr
     record && record.batch_name
       ? String(record.batch_name).split(',').map((b) => b.trim()).filter(Boolean)
       : []
+  );
+  /* The track walked for this job. Only offered when the switch is on, and an
+     edit keeps the track the record already carries rather than replacing it
+     with a walk round the office. The points come back only when the record
+     was read with the full row; without them the summary still shows, so
+     correcting a remark never silently drops somebody's track. */
+  const [gps, setGps] = useState(
+    record && record.gps_lat != null && record.gps_lng != null
+      ? {
+          track: record.gps_track || null,
+          points: record.gps_points ?? null,
+          distance_m: record.gps_distance_m ?? null,
+          started_at: record.gps_started_at || null,
+          ended_at: record.gps_ended_at || null,
+          lat: record.gps_lat,
+          lng: record.gps_lng,
+          accuracy: record.gps_accuracy ?? null,
+        }
+      : null
   );
   const [photos, setPhotos] = useState(() => {
     const a = Array(MAX_PHOTOS).fill(null);
@@ -909,6 +887,7 @@ function EntrySheet({ record, plots, batchMap, onClose, onSave, allowPhotos = tr
           </>
         )}
 
+        {showBatches && <>
         <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
           {t('mt.batchesInPlot')}
         </label>
@@ -951,10 +930,13 @@ function EntrySheet({ record, plots, batchMap, onClose, onSave, allowPhotos = tr
         <div className="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-3 text-sm font-black text-slate-700 mb-3">
           {qty ? qty.toLocaleString() : '—'}
         </div>
+        </>}
 
         {workers && (
           <WhoDidIt workers={workers} value={workedBy} onChange={setWorkedBy} t={t} />
         )}
+
+        {showGps && <GpsTrack value={gps} onChange={setGps} />}
 
         {allowPhotos && <>
         <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
@@ -965,6 +947,7 @@ function EntrySheet({ record, plots, batchMap, onClose, onSave, allowPhotos = tr
         </div>
         </>}
 
+        {showRemark && <>
         <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
           {t('mt.remark')}
         </label>
@@ -974,12 +957,13 @@ function EntrySheet({ record, plots, batchMap, onClose, onSave, allowPhotos = tr
           onChange={(e) => setRemark(e.target.value)}
           className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-sm font-semibold outline-none focus:border-emerald-500 mb-4"
         />
+        </>}
 
         <button
           onClick={async () => {
             setSaving(true);
             await onSave({ workTypeKey, plotName, date, qty, chemical: chemical.trim(),
-                           remark: remark.trim(), batches, workedBy,
+                           remark: remark.trim(), batches, workedBy, gps,
                            photos: photos.filter(Boolean) });
             setSaving(false);
           }}

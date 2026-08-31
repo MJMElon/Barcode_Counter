@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import * as api from './workerApi.js';
+import { visibleModules } from '../lib/portalSettings.js';
 
 /*
  * Who is holding the phone, in the worker portal.
@@ -61,6 +62,18 @@ export function WorkerAuthProvider({ children }) {
     return who;
   }, []);
 
+  /* Signing up signs you in, on the same session a PIN would have made. Not
+     for convenience: the answer to "did that work" is then the portal itself
+     saying their details are with the office, rather than a message on a
+     login screen they have to believe. */
+  const signUp = useCallback(async (name, pin) => {
+    const who = await api.signUp(name, pin);
+    api.keepToken(who.token);
+    setIdentity(who);
+    setOffline(false);
+    return who;
+  }, []);
+
   const signOut = useCallback(async () => {
     const token = identity && identity.token;
     setIdentity(null);
@@ -86,11 +99,31 @@ export function WorkerAuthProvider({ children }) {
     identity,
     token: identity ? identity.token : null,
     worker: identity ? identity.worker : null,
-    modules: (identity && identity.modules) || {},
+    /* What this worker was given, with the company's Worker Portal column over
+       the top of it — System Setting → Portal View & Function. Off there beats
+       on here, and it is applied once, at the door, so the home screen and the
+       route guard behind it cannot end up disagreeing. */
+    modules: visibleModules(identity && identity.modules, identity && identity.company),
+    /* Which functions inside a module this worker gets — the same switches
+       the office sets per Field Conductor, set here per worker in Settings.
+       Absent on a database that has not re-run create_worker_portal.sql, and
+       absent means the defaults, so the portal works either way. */
+    actions: (identity && identity.actions) || {},
+    /* The company's master switches for the worker portal — System Setting →
+       Portal View & Function. They arrive with the sign-in because a PIN
+       sign-in is `anon` and cannot read that table for itself. Absent on a
+       database that has not re-run create_worker_portal.sql, and absent means
+       nothing is vetoed, so the portal works either way. */
+    company: (identity && identity.company) || null,
     boundary: (identity && identity.boundary) || {},
+    /* Signed up, but nobody has filed them under a nursery yet. The database
+       is the one that says so — see worker_pending — because it is the one
+       refusing to answer anything else about them. */
+    pending: !!(identity && identity.pending),
     loading,
     offline,
     signIn,
+    signUp,
     signOut,
     refresh,
   };

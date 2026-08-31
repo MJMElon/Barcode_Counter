@@ -3,7 +3,7 @@
   "private": true,
   "version": "2.0.0",
   "type": "module",
-  "description": "MJM Nursery FC Portal \u2014 Scan, Issue Collection DO, Plot Status, Maintenance, PALMS (React + Supabase)",
+  "description": "MJM Nursery FC Portal — Scan, Issue Collection DO, Plot Status, Maintenance, PALMS (React + Supabase)",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -15,6 +15,7 @@
     "@supabase/supabase-js": "^2.45.4",
     "html5-qrcode": "^2.3.8",
     "jspdf": "^2.5.1",
+    "leaflet": "^1.9.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.26.2"

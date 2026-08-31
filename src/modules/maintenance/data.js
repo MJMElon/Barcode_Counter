@@ -41,6 +41,13 @@ function isMissingTable(error) {
   return /relation .* does not exist|Could not find the table|schema cache/i.test(m);
 }
 
+/** Told no, as opposed to not answered — a setup problem, not a wobble. */
+function isPermissionDenied(error) {
+  const m = String((error && error.message) || '');
+  const code = String((error && error.code) || '');
+  return code === '42501' || /permission denied|not authori[sz]ed|insufficient privilege/i.test(m);
+}
+
 export async function loadMaintenanceData() {
   const [plotsRes, recRes] = await Promise.all([
     supabase.from('shared_plots').select('nursery_name, plot_name').order('plot_name'),
@@ -103,6 +110,26 @@ export async function uploadMaintPhotos(dataUrls, { plot, workTypeKey, date }) {
  */
 export function queuedAsRecord(job) {
   const a = (job && job.payload) || {};
+
+  /* Two portals queue two shapes, and this has to read both.
+   *
+   * The FC portal parks the arguments it was called with — { plot: {…},
+   * workTypeKey, date, weekNo }. The Worker Portal parks the finished database
+   * row instead, because its RPC takes exactly that (workerMaintSource's
+   * payloadOf). Read only the first shape, a worker's queued job came back
+   * with plot_name undefined and work_type undefined, so isDone matched
+   * nothing: a worker who finished a plot with no signal was shown it as still
+   * due and did it again. The row shape is already the answer, so it is
+   * carried through rather than translated. */
+  if (a.plot_name !== undefined || a.work_type !== undefined) {
+    return {
+      id: a.id != null ? a.id : 'pending:' + (job && job.uid),
+      _pendingEdit: a.id != null,
+      _pending: true,
+      ...a,
+    };
+  }
+
   return {
     // A queued EDIT keeps the id of the row it is changing, so it stands in
     // place of that row rather than appearing beside it as a second copy.
@@ -121,6 +148,11 @@ export function queuedAsRecord(job) {
     week_no: a.weekNo || null,
     schedule_month: a.scheduleMonth || null,
     photo_urls: (a.photos || []).join(','),
+    gps_lat: (a.gps && a.gps.lat) ?? null,
+    gps_lng: (a.gps && a.gps.lng) ?? null,
+    gps_accuracy: (a.gps && a.gps.accuracy) ?? null,
+    gps_points: (a.gps && a.gps.points) ?? null,
+    gps_distance_m: (a.gps && a.gps.distance_m) ?? null,
   };
 }
 
@@ -201,7 +233,8 @@ export async function pendingRecords() {
 
 /** Create or update one record. `id` present = update. */
 export async function saveRecord({ id, plot, workTypeKey, date, qty, chemical, remark, reportedBy,
-                                   workedBy, batches, weekNo, scheduleMonth, photoUrls, clientUid }) {
+                                   workedBy, batches, weekNo, scheduleMonth, photoUrls, gps,
+                                   clientUid }) {
   const wt = workTypeByKey(workTypeKey);
   const row = {
     work_date: date,
@@ -232,6 +265,25 @@ export async function saveRecord({ id, plot, workTypeKey, date, qty, chemical, r
      Sent only when there is something to say, so a record made the ordinary
      way still saves against a table without the column. */
   if (workedBy && workedBy.length) extra.worked_by = workedBy.join(', ');
+  /* The track walked while the job was done, when the GPS switch is on for
+     this person and they actually recorded one. Columns from
+     shared/add_maint_field_gps.sql; a database without them falls into the
+     retry below and the job itself still saves.
+
+     The summary is written into its own columns beside the track rather than
+     being worked out from it later: the office lists a nursery's month, and
+     adding up a thousand points per row to show one distance is not a query
+     anybody wants to run. */
+  if (gps && gps.lat != null && gps.lng != null) {
+    extra.gps_lat = gps.lat;
+    extra.gps_lng = gps.lng;
+    if (gps.accuracy != null)   extra.gps_accuracy   = gps.accuracy;
+    if (gps.track)              extra.gps_track      = gps.track;
+    if (gps.points != null)     extra.gps_points     = gps.points;
+    if (gps.distance_m != null) extra.gps_distance_m = gps.distance_m;
+    if (gps.started_at)         extra.gps_started_at = gps.started_at;
+    if (gps.ended_at)           extra.gps_ended_at   = gps.ended_at;
+  }
 
   const run = (payload) => (id
     ? supabase.from('nops_maint_field_records').update(payload).eq('id', id)
@@ -247,6 +299,49 @@ export async function saveRecord({ id, plot, workTypeKey, date, qty, chemical, r
     throw new Error(BATCH_SETUP_NEEDED);
   }
   if (error) throw error;
+}
+
+/**
+ * Has this record been checked, sent back, or neither?
+ *
+ * Three columns say it — verified_at, rejected_at, and nothing — and exactly
+ * one of them is set at a time. See shared/add_maint_field_verify.sql and
+ * shared/add_maint_field_reject.sql in the office repository.
+ */
+export function verifyState(r) {
+  if (!r) return 'awaiting';
+  if (r.rejected_at) return 'rejected';
+  if (r.verified_at) return 'verified';
+  return 'awaiting';
+}
+
+/** Still waiting for a conductor to look at it. A record on its way up from a
+    phone is not in the deck: there is nothing to sign for until it lands. */
+export const awaitingVerify = (rows) =>
+  (rows || []).filter((r) => !r._pending && verifyState(r) === 'awaiting');
+
+/**
+ * What the database can hold an answer in.
+ *
+ * Read off a row rather than asked of the server: the caller already has the
+ * records, and a column that exists comes back as a key whether or not it is
+ * set. With no records at all there is nothing to verify either way.
+ *
+ * TWO questions, deliberately. Signing needs verified_at, which
+ * shared/add_maint_field_verify.sql has been adding for months. Sending back
+ * needs rejected_at, which arrived later with
+ * shared/add_maint_field_reject.sql. Asking them as one question emptied the
+ * whole hub on every database that had run only the first file — the
+ * morning's work was there, and the conductor was shown nothing.
+ */
+export function hasVerifyColumns(rows) {
+  const r = (rows || []).find((x) => x && !x._pending);
+  return !!r && 'verified_at' in r;
+}
+
+export function hasRejectColumns(rows) {
+  const r = (rows || []).find((x) => x && !x._pending);
+  return !!r && 'rejected_at' in r;
 }
 
 /**
@@ -292,10 +387,31 @@ export async function loadPlotBatches() {
     .select('plot_key, plot_name, batch_name, qty')
     .order('plot_key', { ascending: true }));
   if (!view.error) return mapFromBalances(view.data || []);
-  // Any trouble with the view at all — not created yet, not granted, renamed —
-  // falls back to the long way rather than leaving a Field Conductor standing
-  // in a plot with no batches to tick. Same figures, just more of them moved.
-  console.warn('[maintenance] plot balance view unavailable, reading the ledger:',
+
+  /* The long way round is for a view that is NOT THERE — never created, not
+     granted, renamed. It is emphatically NOT for a view that merely failed to
+     answer, and it used to be used for both.
+
+     That mattered, because of when it fires. A database under strain is
+     exactly when the view read fails, and the old rule answered a failure by
+     paging the ENTIRE inventory ledger — tens of thousands of rows, a
+     thousand at a time — from every phone that opened Maintenance. So the
+     moment the database started struggling, every Field Conductor's phone
+     began doing the single most expensive thing this module knows how to do.
+     A wobble became a stampede, and the stampede kept the wobble going.
+
+     A missing view is a permanent condition and a one-off cost, and still
+     takes the long way. A failure is transient and is raised: the caller
+     already draws a board with no batches, which is a form a conductor can
+     still work with — and the read is retried next time it is opened rather
+     than a hundred times in the same minute. */
+  if (!isMissingTable(view.error) && !isPermissionDenied(view.error)) {
+    console.warn('[maintenance] plot balances could not be read, and the ledger is ' +
+      'not a substitute for a database that is already struggling:', view.error.message);
+    throw view.error;
+  }
+
+  console.warn('[maintenance] plot balance view is not there, reading the ledger:',
     view.error.message);
   return loadPlotBatchesFromLedger();
 }
@@ -377,17 +493,62 @@ export async function loadWorkers() {
   return data || [];
 }
 
-export async function setVerified(id, who) {
-  const { error } = await supabase
-    .from('nops_maint_field_records')
-    .update(who
-      ? { verified_by: who, verified_at: new Date().toISOString() }
-      : { verified_by: null, verified_at: null })
-    .eq('id', id);
+/* One write for the whole answer, because it IS one answer: a record is
+   waiting, verified, or sent back, and setting one of those means clearing
+   the others. Leaving the old columns behind would give a row two answers at
+   once, which no screen can read.
+
+   The reject columns are shared/add_maint_field_reject.sql and arrived after
+   the verify ones, so a database with only the older file still has to work:
+   naming a column that is not there fails the whole update, and the tick a
+   conductor has been pressing for weeks would stop. So the write is tried
+   whole, and once more without the newer columns if that is what is missing.
+   Only a database missing the verify columns too raises. */
+async function writeVerification(id, full, verifyOnly) {
+  const run = (patch) => supabase
+    .from('nops_maint_field_records').update(patch).eq('id', id);
+
+  let { error } = await run(full);
+  if (error && isMissingColumn(error)) ({ error } = await run(verifyOnly));
   if (error) {
     if (isMissingColumn(error)) throw new Error(VERIFY_SETUP_NEEDED);
     throw error;
   }
+}
+
+/** Checked and signed for — or, with no name, back to waiting. */
+export function setVerified(id, who) {
+  const signed = who
+    ? { verified_by: who, verified_at: new Date().toISOString() }
+    : { verified_by: null, verified_at: null };
+  return writeVerification(
+    id,
+    { ...signed, rejected_by: null, rejected_at: null, reject_reason: null },
+    signed
+  );
+}
+
+/**
+ * Sent back, with the reason.
+ *
+ * The row stays and the work may well have been done — what is refused is the
+ * RECORD of it. The FC Portal stops counting a rejected record towards the
+ * week, so the plot goes back on the list as still outstanding, which is the
+ * whole point of the button.
+ *
+ * There is no "verify only" fallback here: without the reject columns there
+ * is nowhere to put this at all, so it says so rather than silently doing
+ * half of it.
+ */
+export function setRejected(id, who, reason) {
+  const patch = {
+    rejected_by: who || null,
+    rejected_at: new Date().toISOString(),
+    reject_reason: reason || null,
+    verified_by: null,
+    verified_at: null,
+  };
+  return writeVerification(id, patch, patch);
 }
 
 export async function deleteRecord(id) {

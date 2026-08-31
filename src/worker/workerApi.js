@@ -94,8 +94,40 @@ export async function plotBatches(token) {
   return unwrap(await supabase.rpc('worker_plot_batches', { p_token: token })) || [];
 }
 
+/**
+ * A worker who is not on the register yet, putting themselves on it.
+ *
+ * Name and PIN, and nothing else — everything that decides what they can see
+ * is the office's to fill in afterwards. The row this makes has no nursery
+ * and no section, so it lands in the Worker System board's "Waiting to be
+ * allocated" strip, and until somebody files it there the database answers
+ * every question about it with nothing: no modules, no plots. See
+ * shared/RUN_ME_worker_signup.sql in the office repository, which says at
+ * more length why a door open to the world has to work that way.
+ */
+export async function signUp(name, pin) {
+  return unwrap(await supabase.rpc('worker_signup', { p_name: name, p_pin: pin }));
+}
+
 export async function submitMaintenance(token, payload) {
   return unwrap(await supabase.rpc('worker_submit_maint', { p_token: token, p_payload: payload }));
+}
+
+/**
+ * One finished job's walked track.
+ *
+ * Asked for a record at a time, when somebody opens that job and wants to see
+ * the line. The list call deliberately leaves the track out — see
+ * shared/RUN_ME_worker_track_view.sql, which says why at more length: two
+ * thousand records with a thousand points each is tens of megabytes down a
+ * nursery's signal to draw a list that only ever shows "820 m".
+ *
+ * Answers null for a job recorded without a walk, and for a plot outside the
+ * boundary. Both mean "there is no line to draw" as far as the screen is
+ * concerned, and neither is a fault.
+ */
+export async function maintTrack(token, id) {
+  return unwrap(await supabase.rpc('worker_maint_track', { p_token: token, p_id: id }));
 }
 
 export async function myRecords(token, limit = 60) {
@@ -117,6 +149,15 @@ export async function schedules(token) {
 
 export async function roster(token) {
   return unwrap(await supabase.rpc('worker_roster', { p_token: token })) || [];
+}
+
+/* The colleagues a worker may credit a job to — names only, inside their own
+   boundary. A different function from roster() above on purpose: that one is
+   behind the Settings module and answers with portal settings and who has a
+   PIN, which is not something the tick list on a record form has any business
+   knowing. See worker_maint_roster in create_worker_portal.sql. */
+export async function maintRoster(token) {
+  return unwrap(await supabase.rpc('worker_maint_roster', { p_token: token })) || [];
 }
 
 export async function setPortal(token, workerId, portal) {

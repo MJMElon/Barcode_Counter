@@ -29,8 +29,59 @@ import NelosNewCase from './NelosNewCase.jsx';
 
 const MODULE = 'scan';                 // this portal's key in nelos_modules
 
+/* Anchored to the dock icon, the way the portal's own Nelos dock
+   (shared/shared_nelos_dock.js, in mjm-ai-system) has always worked: the
+   button and its panel are one thing, and the panel opens attached to
+   wherever the button currently is — not a dialog that appears somewhere
+   else on the screen, unrelated to what was tapped.
+
+   That file keeps the fab and the panel as flex siblings inside one
+   positioned wrapper, so the panel simply falls in beside the button. A
+   window opened from a separate React tree cannot be a flex sibling of
+   the button that opened it, so this gets the same result with maths
+   instead: given where the button sits (anchor) and which quarter of the
+   screen its centre is in, pick the edge of the button the panel grows
+   away from, and how much room that direction actually has.
+
+   PANEL is the reference dock's own DEF_W/MIN_W/MIN_H (shared_nelos_dock.js)
+   — one size, everywhere, rather than a phone shape and a desktop shape
+   fighting over which one is "right". */
+const GAP = 10;
+const PANEL = { w: 370, minW: 280, minH: 220 };
+
+function anchoredFrame(anchor) {
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const ax = anchor?.x ?? vw - 78, ay = anchor?.y ?? vh - 168;
+  const size = anchor?.size ?? 62;
+  const cx = ax + size / 2, cy = ay + size / 2;
+
+  const openLeft = cx <= vw / 2;   // icon on the left half -> panel grows rightward from it
+  const openUp = cy > vh / 2;      // icon in the bottom half -> panel grows upward from it
+
+  const width = Math.max(PANEL.minW, Math.min(PANEL.w, vw - 24));
+  const maxHeight = openUp
+    ? Math.max(PANEL.minH, ay - GAP - 12)
+    : Math.max(PANEL.minH, vh - (ay + size) - GAP - 12);
+
+  /* Always resolved to a single 'left' value, clamped inside the viewport,
+     rather than picking 'left' or 'right' the way the vertical axis picks
+     'top' or 'bottom'. The reference dock (shared_nelos_dock.js) can get
+     away with that because its fab naturally rests in a corner; this one
+     can be dragged anywhere along the width of the screen, including the
+     middle, where a 370px-wide panel aligned flush to one edge of a
+     62px icon would run off the OTHER edge of a narrow phone. Clamping
+     keeps it beside the icon everywhere that fits, and at the nearest
+     screen edge instead of off it everywhere else. */
+  const idealLeft = openLeft ? ax : ax + size - width;
+  const left = Math.min(Math.max(idealLeft, 12), Math.max(12, vw - width - 12));
+
+  const frame = { position: 'fixed', left, width, maxWidth: 'calc(100vw - 24px)', maxHeight };
+  frame[openUp ? 'bottom' : 'top'] = openUp
+    ? Math.max(12, vh - ay + GAP) : Math.max(12, ay + size + GAP);
+  return frame;
+}
+
 const PRIORITY_LABEL = { urgent: 'Urgent', high: 'High', normal: 'Normal', low: 'Low' };
-const STATUS_LABEL = { open: 'Open', in_progress: 'In Progress', resolved: 'Resolved', closed: 'Closed' };
 const SOURCE_LABEL = {
   operation: 'Seedling Stock',
   nursery_ops: 'HQ Operation',
@@ -41,6 +92,17 @@ const SOURCE_LABEL = {
   nelos: 'Nelos',
 };
 const DOT = { urgent: 'bg-rose-600', high: 'bg-orange-500', normal: 'bg-sky-500', low: 'bg-slate-400' };
+
+/* A full date, for "Created …". fmtDay below is the DUE-date format and
+   deliberately has no year — a due date is always near — but the day a case
+   was raised can be months back, and "20 Aug" then says the wrong thing. */
+const fmtDate = (d) => {
+  if (!d) return '—';
+  try {
+    return new Date(`${d}T00:00:00`).toLocaleDateString('en-MY',
+      { day: 'numeric', month: 'short', year: 'numeric' });
+  } catch { return d; }
+};
 
 const fmtDay = (d) => {
   if (!d) return '';
@@ -68,8 +130,8 @@ function CaseView({ caseId, me, onBack, onChanged }) {
   const [thread, setThread] = useState([]);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [resolving, setResolving] = useState(false);
   const [flash, setFlash] = useState(null);
+  const [shot, setShot] = useState(null);   // the photo of the fix, if one was taken
   const resolutionRef = useRef(null);
   const commentRef = useRef(null);
 
@@ -124,6 +186,18 @@ function CaseView({ caseId, me, onBack, onChanged }) {
       `Started work${c.assignee_id ? '' : ' and took ownership'} — ${me.name}`);
   }
 
+  /* The photo of the fix, into the same bucket and path shape the dock
+     uses (mjm-ai-system/shared/shared_nelos_dock.js → uploadShot) so one
+     case's picture is in the same place whichever surface solved it. */
+  async function uploadShot(file) {
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const path = `solve/${caseId}-${Date.now()}.${ext || 'jpg'}`;
+    const { error } = await supabase.storage.from('nelos-photos')
+      .upload(path, file, { contentType: file.type || 'application/octet-stream' });
+    if (error) return null;
+    return supabase.storage.from('nelos-photos').getPublicUrl(path).data?.publicUrl || null;
+  }
+
   async function confirmResolve() {
     const text = resolutionRef.current?.value.trim();
     if (!text) {
@@ -131,10 +205,17 @@ function CaseView({ caseId, me, onBack, onChanged }) {
       resolutionRef.current?.focus();
       return;
     }
-    const ok = await patch(
-      { status: 'resolved', resolution: text, resolved_by: me.name, resolved_at: new Date().toISOString() },
-      `Resolved — ${me.name}`);
-    if (ok) { setResolving(false); setFlash({ ok: true, msg: 'Case resolved.' }); }
+    /* Upload BEFORE the patch: a failed upload leaves the case as it was,
+       whereas patching first would mark work solved and then lose the
+       picture of it. The column is written only when there is a photo, so
+       a database without migration_nelos_solve_photo.sql still resolves. */
+    const url = shot ? await uploadShot(shot) : null;
+    const fields = { status: 'resolved', resolution: text, resolved_by: me.name,
+                     resolved_at: new Date().toISOString() };
+    if (url) fields.resolution_photo_url = url;
+
+    const ok = await patch(fields, `Resolved — ${me.name}`);
+    if (ok) { setShot(null); setFlash({ ok: true, msg: 'Case resolved.' }); }
   }
 
   async function closeCase() {
@@ -170,9 +251,32 @@ function CaseView({ caseId, me, onBack, onChanged }) {
   if (!c) return <div className="p-4">{back}<div className="mt-4 text-[12.5px] font-bold text-slate-400">loading case…</div></div>;
 
   const s = c.status;
-  const subject = [c.batch_name && `Batch ${c.batch_name}`, c.plot_name && `Plot ${c.plot_name}`, c.nursery_name]
-    .filter(Boolean).join('  ·  ');
+  const pending = s === 'open' || s === 'in_progress';
+  /* Where the work is: the nursery with its plot in brackets, and the batch
+     only when there is one — a batch case that did not say so would be
+     missing the thing that identifies it. */
+  let where = c.nursery_name ? c.nursery_name + (c.plot_name ? ` (${c.plot_name})` : '')
+                             : (c.plot_name || '');
+  if (c.batch_name) where = (where ? `${where} · ` : '') + `Batch ${c.batch_name}`;
+
+  /* The opening detail is shown above, and every raise path also writes it
+     into the thread as the first comment (shared_nelos.js raiseCase, and the
+     dock's own insert) so the hub reads as one conversation. Shown in both
+     places it is the same words twice on one screen, so the thread drops its
+     copy — the one at the top is the one in the right place.
+
+     Only the FIRST match: a later comment repeating the description word for
+     word is somebody actually saying it again, and dropping that would be
+     editing the conversation. */
+  const opening = c.description
+    ? thread.find((r) => r.kind === 'comment' && r.body === c.description)
+    : null;
+  const visibleThread = opening ? thread.filter((r) => r !== opening) : thread;
+
   const btn = 'px-3.5 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wider text-white cursor-pointer disabled:opacity-50';
+  const sec = 'text-[10px] font-black uppercase tracking-[.11em] text-violet-700';
+  const kk  = 'text-[8.5px] font-black uppercase tracking-widest text-slate-400';
+  const vv  = 'text-[12px] font-bold text-slate-800 mt-0.5 leading-snug break-words';
 
   return (
     <div className="p-4">
@@ -181,38 +285,40 @@ function CaseView({ caseId, me, onBack, onChanged }) {
         <span className="ml-auto text-[10px] font-black tracking-wider text-slate-400">{c.case_no || ''}</span>
       </div>
 
-      <h3 className="mt-2 text-[16px] font-black text-slate-800 leading-tight">{c.title}</h3>
-
-      <div className="flex flex-wrap gap-1.5 mt-2">
-        <span className="text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-full bg-violet-100 text-violet-700">
-          {SOURCE_LABEL[c.source_module] || c.source_module}
-        </span>
-        <span className="text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-full bg-slate-100 text-slate-600">
-          {PRIORITY_LABEL[c.priority] || c.priority}
-        </span>
-        <span className="text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-full bg-slate-100 text-slate-600">
-          {STATUS_LABEL[s] || s}
-        </span>
+      {/* The dock's case pane, move for move
+          (mjm-ai-system/shared/shared_nelos_dock.js → detailHtml): two
+          blocks in the order the job is done. The pills that were here read
+          "FC Portal · Normal · Open" on very nearly every case — three
+          words of nothing between the title and the work — and the four-cell
+          grid said the same things at greater length. Keep the two in step. */}
+      <div className={`${sec} mt-3`}>{pending ? 'Pending Case Details' : 'Case Details'}</div>
+      <h3 className="mt-1.5 text-[16px] font-black text-slate-800 leading-tight">{c.title}</h3>
+      <div className="mt-1 text-[11px] font-bold text-slate-400">
+        Created {fmtDate((c.created_at || '').slice(0, 10))}
+        {c.raised_by ? ` · by ${c.raised_by}` : ''}
       </div>
 
-      {subject && <div className="mt-2 text-[11px] font-bold text-slate-500">📍 {subject}</div>}
+      <div className="grid grid-cols-3 gap-x-2.5 gap-y-2 mt-3 p-3 bg-slate-50 border border-slate-100 rounded-xl">
+        <div className="min-w-0"><div className={kk}>Nursery (Plot)</div><div className={vv}>{where || '—'}</div></div>
+        <div className="min-w-0"><div className={kk}>Assigned to</div>
+          <div className={vv}>{SOURCE_LABEL[c.assigned_module || c.source_module] || c.assigned_module || c.source_module || '—'}</div></div>
+        <div className="min-w-0"><div className={kk}>PIC</div>
+          <div className={vv}>{c.assignee_name || <span className="text-slate-400 font-semibold">Unassigned</span>}</div></div>
+      </div>
 
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 mt-3 p-3 bg-slate-50 rounded-xl">
-        <div><dt className="text-[8.5px] font-black uppercase tracking-widest text-slate-400">Raised by</dt>
-          <dd className="text-[12px] font-bold text-slate-700 mt-0.5">{c.raised_by || '—'}</dd></div>
-        <div><dt className="text-[8.5px] font-black uppercase tracking-widest text-slate-400">Assigned to</dt>
-          <dd className="text-[12px] font-bold text-slate-700 mt-0.5">{c.assignee_name || 'unassigned'}</dd></div>
-        <div><dt className="text-[8.5px] font-black uppercase tracking-widest text-slate-400">Due</dt>
-          <dd className={`text-[12px] font-bold mt-0.5 ${isOverdue(c) ? 'text-rose-700' : 'text-slate-700'}`}>
-            {c.due_date ? fmtDay(c.due_date) : '—'}</dd></div>
-        <div><dt className="text-[8.5px] font-black uppercase tracking-widest text-slate-400">Category</dt>
-          <dd className="text-[12px] font-bold text-slate-700 mt-0.5">{c.category || '—'}</dd></div>
-      </dl>
+      {/* What was written about it — the one field saying what is actually
+          wrong, and this window never showed it. */}
+      <div className={`mt-3 text-[12.5px] leading-relaxed whitespace-pre-wrap break-words ${
+        c.description ? 'text-slate-700' : 'text-slate-400 italic'}`}>
+        {c.description || 'No further detail was written.'}
+      </div>
 
       {c.resolution && (
         <div className="mt-3 p-3 rounded-xl bg-emerald-50 border border-emerald-200">
           <div className="text-[9px] font-black uppercase tracking-widest text-emerald-600">Resolution</div>
           <div className="text-[12.5px] font-bold text-emerald-800 mt-1 whitespace-pre-wrap">{c.resolution}</div>
+          {c.resolution_photo_url &&
+            <img src={c.resolution_photo_url} alt="Photo of the fix" className="w-full rounded-lg mt-2 block" />}
         </div>
       )}
 
@@ -223,26 +329,52 @@ function CaseView({ caseId, me, onBack, onChanged }) {
 
       <div className="flex flex-wrap gap-2 mt-3">
         {s === 'open' && <button className={`${btn} bg-violet-600`} disabled={busy} onClick={start}>▶ Start Work</button>}
-        {(s === 'open' || s === 'in_progress') && (
-          <button className={`${btn} bg-emerald-600`} disabled={busy} onClick={() => setResolving((v) => !v)}>✓ Mark Resolved</button>
-        )}
         {s === 'resolved' && <button className={`${btn} bg-slate-600`} disabled={busy} onClick={closeCase}>🔒 Close Case</button>}
         {(s === 'resolved' || s === 'closed') && (
           <button className={`${btn} bg-orange-600`} disabled={busy} onClick={reopen}>↩ Reopen</button>
         )}
       </div>
 
-      {resolving && (
-        <div className="mt-2">
-          <textarea ref={resolutionRef} rows={3} placeholder="What was done?" autoFocus
+      {/* Solving is the whole reason a pending case gets opened, so the block
+          to do it is ON SCREEN — the dock's case pane works this way and this
+          did not: it hid the photo and the remark behind a "Mark Resolved"
+          button, so opening a case showed no way to solve it until you had
+          pressed something that sounded like it would solve it already. */}
+      {pending && (
+        <div className="mt-4 pt-3.5 border-t border-violet-100">
+          <div className={sec}>Solve Case</div>
+
+          {shot ? (
+            <div className="relative mt-2 rounded-xl overflow-hidden bg-slate-100">
+              <img src={URL.createObjectURL(shot)} alt="Photo of the fix"
+                   className="w-full max-h-56 object-cover block" />
+              <button type="button" onClick={() => setShot(null)} aria-label="Remove photo"
+                className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-slate-900/60 text-white text-[12px] leading-none cursor-pointer">✕</button>
+            </div>
+          ) : (
+            <label className="mt-2 flex flex-col items-center justify-center gap-1 min-h-[68px] cursor-pointer
+                              border-[1.5px] border-dashed border-violet-200 rounded-xl bg-violet-50/60
+                              text-violet-700 text-[11.5px] font-black">
+              <span aria-hidden="true">📷</span>
+              <span>Take or attach a photo</span>
+              <input type="file" accept="image/*" capture="environment" className="hidden"
+                     onChange={(e) => setShot(e.target.files?.[0] || null)} />
+            </label>
+          )}
+
+          {/* Labelled rather than prompted from inside the box: a placeholder
+              is gone the moment anybody types, so the one thing saying what
+              the box is for disappears as they start filling it in. */}
+          <div className="text-[10px] font-black uppercase tracking-wider text-slate-500 mt-3 mb-1.5">Solve Case Remark</div>
+          <textarea ref={resolutionRef} rows={3}
             className="w-full border-[1.5px] border-slate-200 rounded-xl px-3 py-2 text-[13px] font-semibold outline-none focus:border-violet-400" />
-          <button className={`${btn} bg-emerald-600 mt-2`} disabled={busy} onClick={confirmResolve}>Confirm Resolved</button>
+          <button className={`${btn} bg-emerald-600 mt-2`} disabled={busy} onClick={confirmResolve}>Save &amp; Solve</button>
         </div>
       )}
 
       <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-4 mb-1">Thread</div>
       <div className="mb-3">
-        {thread.length ? thread.map((r) => {
+        {visibleThread.length ? visibleThread.map((r) => {
           const sys = r.kind !== 'comment';
           return (
             <div key={r.id || `${r.created_at}-${r.body}`} className="flex gap-2 py-2 border-b border-dashed border-slate-100 last:border-0">
@@ -298,8 +430,12 @@ function Row({ c, onOpen }) {
   );
 }
 
-export default function NelosWindow({ onClose, onCount }) {
+export default function NelosWindow({ onClose, onCount, anchor }) {
   const { session } = useAuth();
+  /* Bumped on resize so the anchored frame — computed fresh from
+     window.innerWidth/innerHeight on every render — is recomputed when
+     neither the anchor nor anything else here changes, only the window. */
+  const [, forceResize] = useState(0);
   const [state, setState] = useState({ status: 'loading', rows: [], uid: null });
   const [openId, setOpenId] = useState(null);
   const [adding, setAdding] = useState(false);
@@ -320,6 +456,21 @@ export default function NelosWindow({ onClose, onCount }) {
 
   useEffect(() => { reload(); }, [reload]);
 
+  useEffect(() => {
+    const onResize = () => forceResize((n) => n + 1);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  // Escape closes it, the same as every other window on the device —
+  // there is no dark backdrop to tap any more (see the transparent
+  // click-catcher below), so the keyboard needs its own way out too.
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   const { rows, uid } = state;
   const mine = (c) => !!uid && c.assignee_id === uid;
   const over = rows.filter(isOverdue);
@@ -329,12 +480,18 @@ export default function NelosWindow({ onClose, onCount }) {
   const groups = [over.length, restMine.length, restOther.length].filter(Boolean).length;
   const head = 'px-4 pt-2.5 pb-1 text-[9px] font-black uppercase tracking-widest text-slate-400';
 
+  const frame = anchoredFrame(anchor);
+
   return (
     <>
-      <div onClick={onClose} className="fixed inset-0 z-[55] bg-slate-900/55 backdrop-blur-[2px]" />
+      {/* No dark backdrop — a pop-out beside the icon reads as attached to
+          it, not as a dialog that has taken over the screen; a full-screen
+          tint would say the latter. This catcher is only for a tap
+          somewhere else to close it, same as the icon itself does. */}
+      <div onClick={onClose} className="fixed inset-0 z-[55]" />
       <div
-        style={{ position: 'fixed', left: 0, right: 0, bottom: 0, maxHeight: '92vh', zIndex: 56 }}
-        className="bg-white rounded-t-3xl shadow-[0_-24px_70px_rgba(0,0,0,.35)] flex flex-col overflow-hidden sm:left-1/2 sm:right-auto sm:-translate-x-1/2 sm:w-[560px] sm:bottom-6 sm:rounded-3xl"
+        style={{ ...frame, zIndex: 56 }}
+        className="bg-white rounded-2xl shadow-[0_16px_50px_rgba(0,0,0,.28)] border border-slate-200 flex flex-col overflow-hidden"
         role="dialog" aria-modal="true" aria-label="Nelos"
       >
         <div className="shrink-0 bg-white border-b border-slate-200 px-4 py-2.5 flex items-center gap-2">

@@ -1,4 +1,6 @@
 import { fetchAllRows, supabase } from '../../lib/supabase.js';
+import { cacheBlocks, cachedBlocks } from './cullingOffline.js';
+import { isOnline } from '../../lib/outbox.js';
 import { batchKey, plotKey } from '../maintenance/plotBatches.js';
 import { nurseryOfPlot } from './data.js';
 
@@ -9,15 +11,29 @@ import { nurseryOfPlot } from './data.js';
  * it goes back in. The screen reads only from here, so wiring the calculator
  * up means filling in these functions and touching nothing else.
  *
- * Two reads, both against one block — a plot AND a batch:
+ * The list is now gated on ONE thing: PALMS's plot status. A plot is on this
+ * screen when it is at Pengambilan, full stop — a Field Conductor moving it
+ * there is what puts it here, and moving it on is what takes it off. This was
+ * tried once before and reverted (see pengambilanPlots below for the two
+ * ways it failed), so this is a considered second attempt, not an oversight
+ * of the first one. What changed is the batch step: rather than the screen
+ * guessing which batch in the plot is meant, the Field Conductor is handed
+ * every batch standing there and picks the one they are standing in front
+ * of. A young batch with nothing to judge yet is still offered — it is on
+ * the person, not the screen, to know they have not started collecting from
+ * it.
  *
- *   pengambilan   Customer Order Monitoring. A Delivery Order collecting from
- *                 a plot is what says that plot is being collected from, and
- *                 the sum of those collections is what has gone.
- *   transplanting The Batch Report's Transplanting tab, which records the
- *                 date, the plot, the batch and the quantity that went in.
- *   3rd culling   Also the Batch Report. A block leaves this screen when its
- *                 3rd culling row carries a drone MAP QUANTITY — not when it
+ * Three reads, all matched on the plot AND the batch together where a batch
+ * applies:
+ *
+ *   pengambilan   The PLOT STATUS. Decides which plots are offered at all.
+ *   transplanting The Batch Report's Transplanting tab — decides which
+ *                 batches within an offered plot are offered, and supplies
+ *                 the transplanted-in figure.
+ *   delivery      Still read, but only for the COLLECTED figure once a plot
+ *   orders        and batch are chosen. It is a figure now, not a gate.
+ *   3rd culling   The Batch Report. A block leaves this screen when its 3rd
+ *                 culling row carries a drone MAP QUANTITY — not when it
  *                 carries a culled figure, which goes in while the counting
  *                 is still under way.
  *
@@ -43,25 +59,48 @@ import { nurseryOfPlot } from './data.js';
  */
 
 /**
- * Which plots are in pengambilan, and which batch of each.
+ * Which plots are at Pengambilan, right now. THE gate for the plot list.
  *
- * A plot is in pengambilan when a customer is collecting off it, and the
- * Customer Order Monitoring page is where that is said: a Delivery Order names
- * the plot and the batch the seedlings came from. So a collection on a D/O is
- * what puts a plot on this screen, and nothing else does — a plot nobody is
- * collecting from never appears, and nor does a -R plot however much is
- * collected off it.
+ * This was the gate once before, was reverted, and is the gate again — on
+ * the person who asked for it back knowing why it left. It failed in both
+ * directions the first time:
  *
- * One entry per plot AND batch, not per plot. A D/O collects from a named
- * batch, so a plot holding three of them is three separate blocks of ground
- * being emptied on their own timetables, and rolling them into one row would
- * average away the only figures worth having. They are kept side by side
- * instead — see byPlotThenBatch.
+ *   Status is easy to lose by accident. Every activity left out of a day's
+ *   PALMS selection is recorded as finished, so one Field Conductor saving a
+ *   day's log without Pengambilan in it silently closed that status across a
+ *   whole nursery — emptying the calculator while customers were still
+ *   actively collecting.
  *
- * @returns {Promise<Array<{ key, plot, batch, nursery, collected, firstDate,
- *   lastDate, transplant, transplantedOn, balance, daysCollecting }>>}
- *   `key` is what the screen selects on — a plot alone is not unique once its
- *   batches are separated.
+ *   Status doesn't distinguish batches. One plot at Pengambilan can hold a
+ *   batch a month from empty right beside one transplanted last week —
+ *   gating on plot status alone offered the Field Conductor young stock with
+ *   nothing yet to judge.
+ *
+ * Neither failure is fixed here — they can't be, from a plot status alone.
+ * What changed is what the SECOND one costs: the plot no longer carries a
+ * figure by itself. Choosing a plot at Pengambilan is only the first step;
+ * the Field Conductor still has to choose which batch standing in it they
+ * mean, by name, off a list built from the Batch Report (loadTransplanting),
+ * not guessed at from this status. A young batch offered by mistake is a
+ * batch somebody has to actively pick before it can do anything, not one
+ * silently averaged into a figure. The first failure — losing the status by
+ * accident — is unchanged and is the field's problem to keep an eye on, the
+ * same as any other PALMS status.
+ *
+ * A -R plot never appears — see loadPlots, which applies isReplantPlot to
+ * every batch this returns before it reaches the screen.
+ *
+ * Matched by NAME rather than by "the last stage in the list", because the
+ * list is the office's to extend: a nursery that adds a stage after
+ * Pengambilan (Up-keep, say) would otherwise silently move the gate onto it.
+ * Falls back to the last stage only when nothing is named Pengambilan at all.
+ *
+ * A split plot logs against "B2#A". The plot is what the delivery orders and
+ * the batch report name, so an area at Pengambilan puts its PLOT on the
+ * screen — the batches inside it come from the Batch Report either way.
+ *
+ * @returns {Promise<Set<string>|null>} plot keys, or null when the read
+ *   failed — never an empty set standing in for "could not tell".
  */
 /** Every delivery order, or null if they could not be read. Its own function
     so the diagnosis below reads exactly what the list reads. */
@@ -83,40 +122,102 @@ async function loadDeliveryOrders() {
   return res.data || [];
 }
 
+/**
+ * Which plots PALMS says are at Pengambilan, right now.
+ *
+ * Read for the DIAGNOSIS, not for the list. The status answers a question
+ * about a plot — is the field collecting from it — and the calculator's
+ * question is about a batch: is this block nearly empty. One does not answer
+ * the other. A plot at Pengambilan holds batches months apart in age, and
+ * the young ones have nothing to judge.
+ *
+ * It is not a gate for a second reason: it can be lost. Every activity left
+ * out of a day's PALMS selection is recorded as finished, so one save from a
+ * screen that had not finished syncing closed Pengambilan across a whole
+ * nursery. Gating on it emptied the calculator while customers were still
+ * collecting.
+ *
+ * So what it does now is report. cullDebug names a plot being collected from
+ * that nobody has moved to Pengambilan, which is a missing status worth
+ * fixing — but it is the field's problem to fix, not a reason to hide the
+ * work from the Field Conductor standing in front of it.
+ *
+ * Matched by NAME rather than by "the last stage in the list", because the
+ * list is the office's to extend: a nursery that adds a stage after
+ * Pengambilan (Up-keep, say) would otherwise silently move the gate onto it.
+ * Falls back to the last stage only when nothing is named Pengambilan at all.
+ *
+ * A split plot logs against "B2#A". The plot is what the delivery orders and
+ * the batch report name, so an area at Pengambilan puts its PLOT on the
+ * screen — the figures are per batch either way.
+ */
+export async function pengambilanPlots() {
+  const [logs, stages] = await Promise.all([
+    fetchAllRows(() =>
+      supabase
+        .from('fcportal_palms_plot_logs')
+        .select('plot_name, act_n, end_date')
+        .is('end_date', null)
+        .order('id', { ascending: true })
+    ),
+    supabase.from('nops_plot_status_stages').select('name, sort_order').order('sort_order'),
+  ]);
+  if (logs.error) {
+    console.warn('[culling] could not read the plot status:', logs.error.message);
+    return null;                 // null = could not tell, which is not "none"
+  }
+  if (stages.error || !(stages.data || []).length) {
+    console.warn('[culling] could not read the stage list:', stages.error && stages.error.message);
+    return null;
+  }
+  const list = stages.data;
+  const hit = list.find((x) => String(x.name).trim().toLowerCase() === 'pengambilan')
+           || list[list.length - 1];
+  const want = hit.sort_order;
+  const out = new Set();
+  (logs.data || []).forEach((r) => {
+    if (r.act_n !== want) return;
+    out.add(plotKey(String(r.plot_name || '').split('#')[0]));
+  });
+  return out;
+}
+
 export async function loadPlots() {
-  const dos = await loadDeliveryOrders();
-  if (!dos) return [];
+  /* Standing in a plot is where there is no signal, so the last good read is
+     kept on the device and served when a read cannot be made. Every read here
+     answers null on failure rather than "nothing", so a partial failure falls
+     back whole instead of quietly listing an empty nursery — and, worse,
+     saving that emptiness over the cache. */
+  if (!isOnline()) return (cachedBlocks() || { rows: [] }).rows;
+
+  const [atPengambilan, planted, finished, dos] = await Promise.all([
+    pengambilanPlots(), loadTransplanting(), loadFinished(), loadDeliveryOrders(),
+  ]);
+  if (!atPengambilan || !planted || !finished || !dos) {
+    return (cachedBlocks() || { rows: [] }).rows;
+  }
 
   const today = new Date().toISOString().slice(0, 10);
-  const by = new Map();
+
+  /* The collected figure, per plot and batch, from the delivery orders — a
+     FIGURE now, not a gate. A block with nothing collected against it yet
+     simply carries zero here; it is still listed, because the plot and
+     batch it belongs to were already offered by the walk below. */
+  const collected = new Map();
   for (const d of dos) {
     if (isCancelled(d)) continue;
     for (const line of collectionLines(d)) {
-      if (isReplantPlot(line.plot)) continue;
-      if (isOldBatch(line.batch)) continue;
       const key = `${line.plot}#${line.batch}`;
-      if (!by.has(key)) {
-        by.set(key, {
-          key,
-          plot: line.plot,
-          batch: line.batch,
-          nursery: nurseryOfPlot(line.plot) || '',
-          collected: 0,
-          firstDate: '',   // when collection opened on this block
-          lastDate: '',    // and the most recent one
-          /* The orders the collected figure is made of. A block collected on
-             four delivery orders shows one number, and "which D/O is that?"
-             has no answer from the number alone — least of all when no single
-             order carries it, because it is their sum. */
-          orders: [],
-        });
+      if (!collected.has(key)) {
+        collected.set(key, { collected: 0, firstDate: '', lastDate: '', orders: [] });
       }
-      const e = by.get(key);
+      const e = collected.get(key);
       e.collected += line.qty;
+      /* The orders the collected figure is made of. A block collected on
+         four delivery orders shows one number, and "which D/O is that?" has
+         no answer from the number alone — least of all when no single order
+         carries it, because it is their sum. */
       e.orders.push({ do: d.do_number || '', on: String(d.delivery_date || ''), qty: line.qty });
-      /* Both ends of the collection. The FIRST is when pengambilan opened on
-         this block, which is what says how far through it is; the last is
-         only the most recent order. */
       const on = String(d.delivery_date || '');
       if (on) {
         if (!e.firstDate || on < e.firstDate) e.firstDate = on;
@@ -125,90 +226,134 @@ export async function loadPlots() {
     }
   }
 
-  /* What went in, and what has finished. Both are matched on the same
-     plot-and-batch key the collections were gathered under, so a figure can
-     only ever meet the block it actually belongs to. */
-  const [planted, finished] = await Promise.all([loadTransplanting(), loadFinished()]);
-  by.forEach((e) => {
-    const t = planted.get(e.key);
-    e.transplant = t ? t.qty : 0;
-    e.transplantedOn = t ? t.last : '';
-    e.balance = e.transplant - e.collected;
+  /* A BLOCK is here because PALMS has its plot at Pengambilan and the Batch
+     Report has stock standing in it — that is the whole test now. Whether
+     anything has been collected off it yet is not part of the test; it is
+     part of the figure, read above. */
+  const rows = [];
+  planted.forEach((t, key) => {
+    const plot = key.split('#')[0];
+    const batch = key.slice(plot.length + 1);
+    if (!atPengambilan.has(plot)) return;
+    if (isReplantPlot(plot)) return;
+    if (isOldBatch(batch)) return;
+    /* A map quantity against a block means the drone has flown it and the
+       count is settled. The block is finished: offering it again would
+       invite a second count of stock that is no longer standing. */
+    if (finished.has(key)) return;
+    const c = collected.get(key);
+    rows.push({
+      key,
+      plot,
+      batch,
+      nursery: nurseryOfPlot(plot) || '',
+      collected: c ? c.collected : 0,
+      firstDate: c ? c.firstDate : '',
+      lastDate: c ? c.lastDate : '',
+      transplant: t.qty,
+      transplantedOn: t.last,
+      balance: t.qty - (c ? c.collected : 0),
+      orders: c
+        ? c.orders.slice().sort((a, b) => a.on.localeCompare(b.on) || String(a.do).localeCompare(String(b.do)))
+        : [],
+    });
   });
-
-  /* A map quantity against a block means the drone has flown it and the count
-     is settled. The block is finished: offering it again would invite a
-     second count of stock that is no longer standing.
-
-     And a block the transplanting report has never heard of is dropped
-     outright. A delivery order's batch column is typed by hand, so B11 batch
-     232 can be collected against on paper when no batch 232 ever went into
-     B11 — there is no transplanted-in figure to subtract from, so there is no
-     balance and nothing here to judge. */
-  const rows = [...by.values()].filter((e) => e.transplant > 0 && !finished.has(e.key));
   rows.forEach((e) => {
-    // How long collection has been running on each.
+    // How long collection has been running on each — null when nothing has
+    // been collected yet, which sends it to the back of byPlotThenBatch.
     e.daysCollecting = daysSince(e.firstDate, today);
-    // Its orders in the order they happened, which is how they are looked up.
-    e.orders.sort((a, b) => a.on.localeCompare(b.on) || String(a.do).localeCompare(String(b.do)));
   });
-  return byPlotThenBatch(rows);
+  const out = byPlotThenBatch(rows);
+  cacheBlocks(out);
+  return out;
 }
 
 /**
  * Why a block is on this screen, or why it is not.
  *
- * A block that ought to be here and is not has been stopped by exactly one of
- * the rules above, and from the screen there is no way to tell which — the
- * list simply does not have it. This walks every collection line on every
- * delivery order and says, per line, which rule it fell at, in the order the
- * list applies them.
+ * The list is now built by walking the Batch Report's transplanting entries
+ * for plots PALMS has at Pengambilan, so that is the walk this mirrors: one
+ * row per plot-and-batch the Batch Report knows about, saying which rule
+ * kept it off the screen or that it is on it. A second, shorter list follows
+ * for delivery-order lines collected against a plot-and-batch the Batch
+ * Report has never heard of — those can never be listed, whatever PALMS
+ * says, because there is nothing to hold a transplanted-in figure.
  *
  * Run it from the browser's console with the calculator open:
  *
- *     cullDebug('B4')            every line for a plot
+ *     cullDebug('B4')            every batch the report holds for a plot
  *     cullDebug('U17', '237')    one block
  *     cullDebug()                all of them
  *
  * @param   {string} plot   optional, to narrow it
  * @param   {string} batch  optional, likewise
- * @returns {Promise<Array<{ do, on, plot, batch, qty, transplanted, why }>>}
+ * @returns {Promise<Array<{ plot, batch, transplanted, collected, orders, why }>>}
  *   `why` is 'LISTED' or the rule that stopped it.
  */
 export async function diagnose(plot = '', batch = '') {
   const wantPlot = plotKey(plot);
   const wantBatch = batchKey(batch);
-  const dos = await loadDeliveryOrders();
-  if (!dos) return [{ why: 'the delivery orders could not be read at all' }];
-  const [planted, finished] = await Promise.all([loadTransplanting(), loadFinished()]);
+  const [dos, planted0, finished0, atPengambilan] = await Promise.all([
+    loadDeliveryOrders(), loadTransplanting(), loadFinished(), pengambilanPlots(),
+  ]);
+  if (!atPengambilan) return [{ why: 'the plot status could not be read at all' }];
+  /* Either read answers null when it could not be made, so that loadPlots can
+     fall back to the device's copy rather than list an empty nursery. The
+     diagnosis has no cache to fall back to and says what it can with what it
+     got. */
+  const planted = planted0 || new Map();
+  const finished = finished0 || new Set();
+  const dosList = dos || [];
 
-  const out = [];
-  for (const d of dos) {
-    for (let i = 1; i <= 5; i++) {
-      const rawPlot = d[`plot_${i}`];
-      const rawBatch = d[`batch_${i}`];
-      const rawQty = d[`qty_${i}`];
-      // An untouched line slot is not a collection anybody expected to see.
-      if (!rawPlot && !rawBatch && !rawQty) continue;
-
-      const p = plotKey(rawPlot);
-      const b = batchKey(rawBatch);
-      const q = Math.abs(Number(rawQty || 0));
-      if (wantPlot && p !== wantPlot) continue;
-      if (wantBatch && b !== wantBatch) continue;
-
-      const t = planted.get(`${p}#${b}`);
-      out.push({
-        do: d.do_number,
-        on: d.delivery_date,
-        plot: rawPlot,
-        batch: rawBatch,
-        qty: rawQty,
-        transplanted: t ? t.qty : 0,
-        why: whyNot(d, p, b, q, planted, finished),
-      });
+  // Collection lines, gathered per block, for the FIGURE only — matches the
+  // read loadPlots makes for `collected`, not the gate.
+  const orders = new Map();
+  for (const d of dosList) {
+    if (isCancelled(d)) continue;
+    for (const line of collectionLines(d)) {
+      const key = `${line.plot}#${line.batch}`;
+      if (!orders.has(key)) orders.set(key, []);
+      orders.get(key).push({ do: d.do_number || '', on: String(d.delivery_date || ''), qty: line.qty });
     }
   }
+
+  const out = [];
+
+  // Every batch the Batch Report has standing in a plot — the actual walk
+  // the list makes.
+  planted.forEach((t, key) => {
+    const p = key.split('#')[0];
+    const b = key.slice(p.length + 1);
+    if (wantPlot && p !== wantPlot) return;
+    if (wantBatch && b !== wantBatch) return;
+    const ord = orders.get(key) || [];
+    out.push({
+      plot: p,
+      batch: b,
+      transplanted: t.qty,
+      collected: ord.reduce((n, o) => n + o.qty, 0),
+      orders: ord,
+      why: whyNot(p, b, finished, atPengambilan),
+    });
+  });
+
+  // Collected against a plot-and-batch the Batch Report never heard of —
+  // covered above if it was, so only the orphans are left to explain.
+  orders.forEach((ord, key) => {
+    if (planted.has(key)) return;
+    const p = key.split('#')[0];
+    const b = key.slice(p.length + 1);
+    if (wantPlot && p !== wantPlot) return;
+    if (wantBatch && b !== wantBatch) return;
+    out.push({
+      plot: p,
+      batch: b,
+      transplanted: 0,
+      collected: ord.reduce((n, o) => n + o.qty, 0),
+      orders: ord,
+      why: `the batch report has no batch ${b} transplanted into ${p}`,
+    });
+  });
   return out;
 }
 
@@ -226,7 +371,7 @@ export async function diagnose(plot = '', batch = '') {
 export async function plantedNear(plot = '', batch = '') {
   const wantPlot = plotKey(plot);
   const wantBatch = batchKey(batch);
-  const planted = await loadTransplanting();
+  const planted = (await loadTransplanting()) || new Map();
   const out = [];
   planted.forEach((v, key) => {
     const [p, b] = key.split('#');
@@ -248,16 +393,11 @@ export async function plantedNear(plot = '', batch = '') {
 /* The gates, in the same order loadPlots applies them. Kept beside the
    diagnosis rather than inside it so the wording of each answer sits next to
    the rule it reports on. */
-function whyNot(d, p, b, q, planted, finished) {
-  if (isCancelled(d)) return 'the order is cancelled';
-  if (!p) return 'no plot on this line';
-  if (!b) return 'no batch on this line — the calculator cannot tell the plot’s batches apart without one';
-  if (!q) return 'no quantity on this line';
+function whyNot(p, b, finished, atPengambilan) {
   if (isReplantPlot(p)) return 'a -R plot, which does not belong on this screen';
   if (isOldBatch(b)) return `batch ${b} is before ${MIN_BATCH}`;
-  const key = `${p}#${b}`;
-  if (!planted.has(key)) return `the batch report has no batch ${b} transplanted into ${p}`;
-  if (finished.has(key)) return 'the 3rd culling map qty is in — this block is done';
+  if (finished.has(`${p}#${b}`)) return 'the 3rd culling map qty is in — this block is done';
+  if (!atPengambilan.has(p)) return 'PALMS does not have this plot at Pengambilan';
   return 'LISTED';
 }
 
@@ -358,8 +498,11 @@ export async function loadTransplanting() {
       .order('id', { ascending: true })
   );
   if (res.error) {
+    /* null, not an empty map. An empty map means "nothing was transplanted
+       anywhere", which would drop every block on the screen and then be
+       cached as the truth. A read that failed has to say it failed. */
     console.warn('[culling] could not read the transplanting:', res.error.message);
-    return new Map();
+    return null;
   }
   return transplantedByBlock(res.data || []);
 }
@@ -374,8 +517,9 @@ export async function loadFinished() {
       .order('id', { ascending: true })
   );
   if (res.error) {
+    // Likewise: an empty set would mean "nothing is finished".
     console.warn('[culling] could not read the 3rd culling:', res.error.message);
-    return new Set();
+    return null;
   }
   return finishedBlocks(res.data || []);
 }

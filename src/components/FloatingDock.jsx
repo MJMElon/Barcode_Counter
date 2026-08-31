@@ -30,6 +30,7 @@ import { NURSERIES } from '../modules/palms/data.js';
 import { applyCachedOfficeConfig, refreshOfficeConfig } from '../modules/palms/officeConfig.js';
 import { visibleNurseries } from '../lib/access.js';
 import { pendingCases } from '../lib/nelos.js';
+import Coin from './Coin.jsx';
 import PalmsWindow from './PalmsWindow.jsx';
 import NelosWindow from './NelosWindow.jsx';
 import { Train, todayProgress } from './PalmsDock.jsx';
@@ -76,6 +77,19 @@ function NelosMark() {
     </span>
   );
 }
+
+/* The trigger's own face — neither module's. It used to wear the train,
+   which is PALMS's engine and stays there, in the fan, as PALMS's own
+   button below. What opens the fan belongs to both, so it wears the MJM
+   coin instead: the M on one face and a palm seedling on the other, the
+   two things PALMS and Nelos are between them about.
+
+   The coin is Coin.jsx, and it is a real one: a stack of discs whose rims
+   are its thickness, so halfway through a turn you see its SIDE. What was
+   here before was a flat disc that hopped and spun once every forty seconds
+   — the same idea, but as a picture turning rather than an object, with
+   nothing on the far face because it had no far face. Its styles have gone
+   from index.css with it rather than being left behind unused. */
 
 export default function FloatingDock() {
   const { session, allowed, permissions } = useAuth();
@@ -180,8 +194,13 @@ export default function FloatingDock() {
     setDragging(false);
     if (!d) return;
     if (d.moved < DRAG_SLOP) {
-      // One thing behind the button is not a fan — tapping opens it.
-      if (soloRef.current) { setOpen(soloRef.current); return; }
+      // One thing behind the button is not a fan — tapping opens it, and
+      // tapping it again is how you pop it back in, now that there is no
+      // backdrop behind the window to tap instead.
+      if (soloRef.current) {
+        if (open === soloRef.current) closeCurrent(); else setOpen(soloRef.current);
+        return;
+      }
       setFan((v) => !v);
       return;
     }
@@ -234,9 +253,18 @@ export default function FloatingDock() {
   const miniCls =
     'fixed grid place-items-center rounded-full bg-white border-2 shadow-[0_6px_18px_rgba(0,0,0,.2)] cursor-pointer select-none';
 
+  // What the × on each window already does on close, shared with the two
+  // other ways a window now closes without it: tapping the trigger again,
+  // and picking the same fan action a second time.
+  function closeCurrent() {
+    if (open === 'palms') refreshPalms();
+    else if (open === 'nelos') refreshCases();
+    setOpen(null);
+  }
+
   function choose(which) {
     setFan(false);
-    setOpen(which);
+    if (open === which) closeCurrent(); else setOpen(which);
   }
 
   return (
@@ -291,18 +319,26 @@ export default function FloatingDock() {
           transition: dragging ? 'none' : 'box-shadow .15s, transform .15s',
           transform: dragging ? 'scale(1.06)' : 'none',
         }}
-        className={`grid place-items-center rounded-full border-2 bg-white shadow-[0_8px_24px_rgba(0,0,0,.22)] select-none ${
-          total ? 'border-slate-300' : 'border-teal-500'
+        className={`relative grid place-items-center rounded-full select-none ${
+          fan
+            ? 'bg-white border-2 border-slate-300 shadow-[0_8px_24px_rgba(0,0,0,.22)]'
+            : 'drop-shadow-[0_8px_18px_rgba(0,0,0,.35)]'
         }`}
       >
-        {/* Closed, it keeps the train: that is the face this button has always
-            had, and the round is still the first job of the day. Fanned open
-            it becomes a cross — the train is already in the fan, and the same
-            engine twice, one above the other, reads as two PALMS rather than
-            "close this". */}
+        {/* Closed, it is a coin — neither module's, which the train was.
+            Fanned open it becomes a cross: the train is already in the fan
+            as PALMS's own button, and the same engine twice, one above the
+            other, would read as two PALMS rather than "close this".
+
+            The coin draws its own gold, its own rim and its own thickness, so
+            the button behind it carries no background or border of its own —
+            two rims, one flat and one struck, read as a coin sitting in a
+            ring. It stops turning while it is being dragged: a thumb moving
+            it across the screen is doing something, and the coin should not
+            look like it is doing something else at the same time. */}
         {fan
           ? <span className="text-[26px] leading-none font-black text-slate-500">×</span>
-          : <Train steaming={!total} />}
+          : <Coin size={SIZE} spin={!dragging} />}
 
         {!fan && total > 0 && (
           <span className="absolute -top-1 -right-1 min-w-[22px] h-[22px] px-1 grid place-items-center rounded-full bg-rose-600 text-white text-[11px] font-black tabular-nums border-2 border-white">
@@ -320,7 +356,8 @@ export default function FloatingDock() {
         <PalmsWindow onClose={() => { setOpen(null); refreshPalms(); }} onDayChange={refreshPalms} />
       )}
       {open === 'nelos' && (
-        <NelosWindow onClose={() => { setOpen(null); refreshCases(); }} onCount={setCases} />
+        <NelosWindow onClose={() => { setOpen(null); refreshCases(); }} onCount={setCases}
+          anchor={{ x: pos.x, y: pos.y, size: SIZE }} />
       )}
     </>
   );

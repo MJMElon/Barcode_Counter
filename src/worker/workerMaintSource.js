@@ -25,6 +25,7 @@ import { PERMANENT, flushOutbox, isOnline, listJobs, looksOffline, queueJob } fr
 import { sortRecords, workTypeByKey } from '../modules/maintenance/helpers.js';
 import { batchKey, plotKey } from '../modules/maintenance/plotBatches.js';
 import { applicableSchedules } from '../modules/maintenance/schedule.js';
+import { applyCompanySwitches } from '../lib/portalSettings.js';
 import * as api from './workerApi.js';
 
 /* Its own queue kind, separate from the FC portal's 'maint_record'. The two
@@ -55,7 +56,8 @@ function asBatchMap(rows) {
 
 /** What the phone actually sends when a job is recorded. */
 function payloadOf(args) {
-  const { plot, workTypeKey, date, qty, chemical, remark, batches, weekNo, scheduleMonth } = args || {};
+  const { plot, workTypeKey, date, qty, chemical, remark, batches, weekNo, scheduleMonth,
+          gps } = args || {};
   const wt = workTypeByKey(workTypeKey);
   return {
     plot_name:  plot && plot.plot_name,
@@ -68,6 +70,17 @@ function payloadOf(args) {
     batch_name: batches && batches.length ? batches.join(', ') : null,
     week_no:    weekNo || null,
     schedule_month: scheduleMonth || null,
+    // The track walked, when the GPS switch is on for this worker and they
+    // recorded one. worker_submit_maint writes these only if the columns are
+    // there, so a database part way through the migrations still takes the job.
+    gps_lat:        (gps && gps.lat) ?? null,
+    gps_lng:        (gps && gps.lng) ?? null,
+    gps_accuracy:   (gps && gps.accuracy) ?? null,
+    gps_track:      (gps && gps.track) || null,
+    gps_points:     (gps && gps.points) ?? null,
+    gps_distance_m: (gps && gps.distance_m) ?? null,
+    gps_started_at: (gps && gps.started_at) || null,
+    gps_ended_at:   (gps && gps.ended_at) || null,
   };
 }
 
@@ -143,12 +156,42 @@ export function makeWorkerMaintSource(token) {
       }
     },
 
-    /* No roster. The tick list exists so a conductor can key a job for
-       somebody whose phone is broken; a worker signing in with their own PIN
-       has already answered the question, and handing them a list of
-       colleagues to credit work to would be handing them a way to credit it
-       to the wrong person. The module offers it only when a source has one. */
-    loadWorkers: null,
+    /* The colleagues this worker may credit a job to.
+     *
+     * This used to be null — no roster for a PIN sign-in at all — on the
+     * reasoning that a worker recording their own morning has already
+     * answered the question, and a list of colleagues is a way to credit work
+     * to the wrong person. That is a judgement about how a nursery is run,
+     * not a fact about the software, and it is the office's to make: it is a
+     * switch now, in System Setting and on the worker's own row, and this
+     * just answers when asked.
+     *
+     * Names only, and only inside the boundary — worker_maint_roster, not the
+     * Settings screen's roster. The module asks only when the `workers`
+     * switch is on, and a database without the function simply has no tick
+     * list rather than a broken form.
+     */
+    /* One record's walked line, fetched only when somebody opens that job.
+       A database that has not run RUN_ME_worker_track_view.sql simply has no
+       function to call, and the summary then shows the distance without the
+       map rather than failing to open. */
+    async loadTrack(id) {
+      try {
+        return await api.maintTrack(token, id);
+      } catch (e) {
+        console.warn('[worker-maint] track unavailable:', e && e.message);
+        return null;
+      }
+    },
+
+    async loadWorkers() {
+      try {
+        return await api.maintRoster(token);
+      } catch (e) {
+        console.warn('[worker-maint] roster unavailable:', e && e.message);
+        return [];
+      }
+    },
 
     deleteRecord() {
       return Promise.reject(new Error('Only the office can remove a record.'));
@@ -180,21 +223,57 @@ export function makeWorkerMaintSource(token) {
  * the rules, and a worker's boundary is just another way of arriving at the
  * same two answers — which nurseries, and which actions.
  *
- *   record   yes, that is the whole point of the portal
- *   edit     no — and isModuleAdmin stays false, which is what the module
- *            actually gates deleting on
+ *   record   yes, that is the whole point of the portal — unless a supervisor
+ *            has switched it off in the Worker Portal's Settings
+ *   edit     no, and `delete` likewise. Both are answered here rather than
+ *            left absent, because an absent one now falls back to "is this an
+ *            Operation admin" and a worker must not depend on that staying
+ *            false. There is no worker_* function to change or remove a record
+ *            with either, so the buttons would fail on the phone.
  *   export   no; a worker does not need the nursery's month as a spreadsheet
+ *
+ * `actions` is the worker's own row of switches — portal.actions.maintenance,
+ * set per worker in Settings, the same keys the office sets per Field
+ * Conductor. It goes in LAST so a supervisor's answer wins, and anything not
+ * set there is left absent so functions.js can apply the documented default
+ * rather than this file inventing a second one.
+ *
+ * `workers` used to be forced off here and is not any more — the tick list is
+ * the office's decision, and worker_maint_roster answers it with names inside
+ * the boundary and nothing else.
+ *
+ * `photos` is still forced off, and this one is not a judgement: there is no
+ * upload path for a PIN sign-in at all. The documents bucket takes uploads
+ * from `authenticated`, a worker is `anon`, and the anon key is public — so
+ * opening that bucket to it would open it to anybody who reads the app
+ * bundle. Honouring the switch needs a way for a worker to upload that does
+ * not hand the internet a writable bucket, and until there is one the tick
+ * is refused here rather than failing on the phone every time it is pressed.
  */
-export function workerPermissions(boundary) {
+export function workerPermissions(boundary, actions, company) {
   const nurseries = boundary && boundary.nurseries;
-  return {
+  const a = (actions && actions.maintenance) || {};
+  const built = {
     manage_users: false,
     modules: {},
     scan_nurseries: Array.isArray(nurseries) ? { maintenance: nurseries } : {},
     scan_actions: {
-      maintenance: { view: true, record: true, edit: false, export: false },
+      maintenance: {
+        ...a,
+        view: true,
+        record: a.record === false ? false : true,
+        edit: false,
+        delete: false,
+        export: false,
+        photos: false,
+      },
     },
   };
+  /* And then the company's own vetoes over the top of all of it — the switches
+     on System Setting → Portal View & Function, which reach this phone with
+     the sign-in because `anon` cannot read that table for itself. Off beats
+     on, so this can only ever take something away. */
+  return applyCompanySwitches(built, company);
 }
 
 /* The plot half of a boundary, as a predicate. null means every plot in the
