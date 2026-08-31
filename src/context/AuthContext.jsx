@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { applyCompanySwitches } from '../lib/portalSettings.js';
+import { isOnline } from '../lib/outbox.js';
 
 /**
  * The company's master switches for THIS portal — Worker Portal Manage →
@@ -82,8 +83,19 @@ function hasOpsAccess(profile) {
 /* The session Supabase already has in this browser, read synchronously so the
    app can render on the first paint. supabase.auth.getSession() returns the
    same thing but as a promise, and that one tick was long enough to show a
-   loading screen in front of every entry. Anything doubtful — no token, past
-   its expiry, unparseable — returns null and the normal async path decides. */
+   loading screen in front of every entry. Anything doubtful — no token,
+   unparseable — returns null and the normal async path decides.
+
+   An expired token is where OFFLINE changes the answer. ONLINE, expired means
+   supabase-js is about to refresh it (or the refresh token itself is bad and
+   a real sign-in is needed) — so it still returns null there and lets that
+   path run. OFFLINE, there is no refresh to have: the access token turns a
+   year old sitting in a nursery with no line the same way it turns an hour
+   old, and neither is a reason to hand a Field Conductor already standing in
+   the field a login screen that a bar of signal is the only way to use. RLS
+   is what actually protects a table, and a request made with a stale token
+   goes nowhere without a network to carry it — so trusting the token to
+   PAINT THE SCREEN costs nothing it was not already going to cost. */
 function cachedSession() {
   try {
     const key = Object.keys(localStorage).find((k) => /^sb-.+-auth-token$/.test(k));
@@ -91,7 +103,7 @@ function cachedSession() {
     const raw = JSON.parse(localStorage.getItem(key));
     const s = (raw && (raw.currentSession || raw)) || null;
     if (!s || !s.access_token || !s.user) return null;
-    if (s.expires_at && Number(s.expires_at) * 1000 <= Date.now()) return null;
+    if (s.expires_at && Number(s.expires_at) * 1000 <= Date.now() && isOnline()) return null;
     return s;
   } catch (e) {
     return null;
@@ -163,14 +175,22 @@ export function AuthProvider({ children }) {
     let answered = false;
     supabase.auth.getSession().then(
       ({ data: { session: sess } }) => {
+        answered = true;
+        /* supabase-js answers null here for two very different reasons: nobody
+           has ever signed in on this device, or somebody has but the token had
+           expired and the refresh it tried needed a network that is not there.
+           Offline cannot tell those apart by asking again, so it falls back to
+           the same tolerant read cachedSession() above already does — if
+           storage still has a token for SOMEBODY, that is who is standing
+           here, expired clock or not. */
+        const useSess = sess || (!isOnline() ? cachedSession() : null);
         // Knowing there IS a session is enough to render the app. The ops gate
         // is a network round-trip; waiting for it put a loading screen in front
         // of every entry. It now resolves behind the app and only bounces
         // somebody out if it comes back denied.
-        answered = true;
-        setSession(sess);
+        setSession(useSess);
         setLoading(false);
-        if (sess) runOpsGate(sess);
+        if (useSess) runOpsGate(useSess);
       },
       (e) => {
         /* It failed rather than hung. Stop waiting, but do NOT throw away the
@@ -209,9 +229,15 @@ export function AuthProvider({ children }) {
         setLoading(false);
         return;
       }
-      setSession(sess);
+      /* INITIAL_SESSION can report null for the same reason getSession()
+         above can — an expired token with no network there to refresh it,
+         not a real sign-out. Only an actual SIGNED_OUT means somebody signed
+         out; anything else null falls back to the same tolerant read while
+         offline, so it does not undo what getSession() already recovered. */
+      const useSess = sess || (event !== 'SIGNED_OUT' && !isOnline() ? cachedSession() : null);
+      setSession(useSess);
       setLoading(false);
-      if (event === 'SIGNED_OUT' || !sess) {
+      if (event === 'SIGNED_OUT' || !useSess) {
         setAllowed(null);
         setPermissions(null);
         // Signing out takes the cached access with it, or the next person to
@@ -220,7 +246,7 @@ export function AuthProvider({ children }) {
         return;
       }
       // Defer to release the auth lock before querying shared_profiles.
-      setTimeout(() => runOpsGate(sess), 0);
+      setTimeout(() => runOpsGate(useSess), 0);
     });
 
     return () => { clearTimeout(watchdog); sub.subscription.unsubscribe(); };
