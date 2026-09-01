@@ -7,7 +7,7 @@ import {
 } from './cullingSource.js';
 import { todayStr } from './data.js';
 import { openCasePlots } from '../../lib/nelos.js';
-import { flushCulling, submitCase } from './cullingOffline.js';
+import { submitCase } from './cullingOffline.js';
 
 /**
  * The Culling Calculator.
@@ -107,20 +107,20 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
     return () => { live = false; };
   }, []);
 
-  /* Anything counted without a signal goes up the moment there is one — on
-     opening the screen and again whenever the phone reconnects, because a
-     Field Conductor who walked back into coverage should not have to know
-     there is a queue, let alone press something to empty it. */
+  /* Anything counted without a signal goes up on its own — but NOT from
+     here. lib/syncAll.js already empties every queue on reconnect and every
+     thirty seconds, with a guard so two passes cannot overlap, and a second
+     listener on this screen meant the same job was picked up by both and the
+     case posted twice. One auditor sent to one plot twice is exactly what the
+     dedupe is there to prevent, and racing it is not a way to test it.
+
+     What is left here is only the screen keeping up: when the phone comes
+     back, re-read which plots already have a case so the picker's tick is
+     right. */
   useEffect(() => {
-    let live = true;
-    const send = () => {
-      flushCulling().then((r) => {
-        if (live && r && r.sent) { reloadRaised(); flash(t('cull.raised', { n: '' }).trim()); }
-      }, () => {});
-    };
-    send();
-    window.addEventListener('online', send);
-    return () => { live = false; window.removeEventListener('online', send); };
+    const onUp = () => reloadRaised();
+    window.addEventListener('online', onUp);
+    return () => window.removeEventListener('online', onUp);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
