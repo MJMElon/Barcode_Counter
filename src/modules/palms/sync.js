@@ -31,6 +31,7 @@ import { loadDB, nurseryOfPlot, saveDB } from './data.js';
 
 const LOGS = 'fcportal_palms_plot_logs';
 const HISTORY = 'fcportal_palms_history';
+const TOMBSTONES = 'fcportal_palms_tombstones';
 
 /* A unit key is the plot while it is whole ("B2") and "B2#A" once it is split
    into areas. The server keeps the whole key in plot_name — an area IS the
@@ -128,6 +129,33 @@ export async function pull(db) {
     .order('id', { ascending: true }));
   if (error) throw error;
 
+  /* Rows the office deleted ON PURPOSE. "The server has not got it" used to
+     mean only one thing — this phone keyed it and has not sent it yet — so
+     push sent it, and a log the office had replaced wholesale was rebuilt,
+     entry by entry, by every phone that came back into signal. The
+     tombstone list is how the server now says which missing rows are
+     missing BY DECISION: drop our copy of those instead of resending it.
+     A record keyed on this phone and never synced has a uid the server has
+     never seen, so it can never be in this list — nothing here can discard
+     an unsent field record. The office board reads the server directly and
+     needs none of this; the guarding triggers live in
+     mjm-ai-system/shared/migration_palms_no_takebacks.sql.
+     Tolerated as absent: an office that has not run that migration yet has
+     no tombstones to read, and sync must not stop working because of it. */
+  let buried = 0;
+  const tomb = await fetchAllRows(() => supabase.from(TOMBSTONES).select('client_uid'));
+  if (!tomb.error) {
+    const dead = new Set((tomb.data || []).map((r) => r.client_uid));
+    if (dead.size) {
+      Object.keys(db.logs || {}).forEach((key) => {
+        const kept = (db.logs[key] || []).filter((e) => !e.uid || !dead.has(e.uid));
+        buried += (db.logs[key] || []).length - kept.length;
+        if (kept.length) db.logs[key] = kept;
+        else delete db.logs[key];
+      });
+    }
+  }
+
   const byUid = new Map();
   Object.keys(db.logs || {}).forEach((key) =>
     (db.logs[key] || []).forEach((e) => { if (e.uid) byUid.set(e.uid, { key, e }); })
@@ -175,7 +203,7 @@ export async function pull(db) {
       else db.history.push(row);
     }
   }
-  return { added, updated };
+  return { added, updated, buried };
 }
 
 /**
