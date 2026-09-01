@@ -31,6 +31,7 @@ import { loadDB, nurseryOfPlot, saveDB } from './data.js';
 
 const LOGS = 'fcportal_palms_plot_logs';
 const HISTORY = 'fcportal_palms_history';
+const TOMBSTONES = 'fcportal_palms_tombstones';
 
 /* A unit key is the plot while it is whole ("B2") and "B2#A" once it is split
    into areas. The server keeps the whole key in plot_name — an area IS the
@@ -78,15 +79,22 @@ const rowOf = (unitKey, e) => ({
  */
 export async function push(db) {
   const rows = [];
+  const sentEntries = [];
   Object.keys(db.logs || {}).forEach((key) => {
     // e.demo is the sample data a fresh install seeds itself with. It exists
     // so an empty phone has something to look at; sending it would show the
     // office 52 plots of activity that never happened.
-    (db.logs[key] || []).forEach((e) => { if (e.uid && !e.demo) rows.push(rowOf(key, e)); });
+    (db.logs[key] || []).forEach((e) => {
+      if (e.uid && !e.demo) { rows.push(rowOf(key, e)); sentEntries.push(e); }
+    });
   });
   if (rows.length) {
     const { error } = await supabase.from(LOGS).upsert(rows, { onConflict: 'client_uid' });
     if (error) throw error;
+    // Delivered. Only now do these stop counting as local unsent changes —
+    // a failed push keeps the mark, and the next sync protects and resends
+    // them. (On failure the throw above skips this line.)
+    sentEntries.forEach((e) => { if (e.dirty) delete e.dirty; });
   }
 
   // The daily report: one row per unit per day, so a nursery saved twice in
@@ -128,6 +136,33 @@ export async function pull(db) {
     .order('id', { ascending: true }));
   if (error) throw error;
 
+  /* Rows the office deleted ON PURPOSE. "The server has not got it" used to
+     mean only one thing — this phone keyed it and has not sent it yet — so
+     push sent it, and a log the office had replaced wholesale was rebuilt,
+     entry by entry, by every phone that came back into signal. The
+     tombstone list is how the server now says which missing rows are
+     missing BY DECISION: drop our copy of those instead of resending it.
+     A record keyed on this phone and never synced has a uid the server has
+     never seen, so it can never be in this list — nothing here can discard
+     an unsent field record. The office board reads the server directly and
+     needs none of this; the guarding triggers live in
+     mjm-ai-system/shared/migration_palms_no_takebacks.sql.
+     Tolerated as absent: an office that has not run that migration yet has
+     no tombstones to read, and sync must not stop working because of it. */
+  let buried = 0;
+  const tomb = await fetchAllRows(() => supabase.from(TOMBSTONES).select('client_uid'));
+  if (!tomb.error) {
+    const dead = new Set((tomb.data || []).map((r) => r.client_uid));
+    if (dead.size) {
+      Object.keys(db.logs || {}).forEach((key) => {
+        const kept = (db.logs[key] || []).filter((e) => !e.uid || !dead.has(e.uid));
+        buried += (db.logs[key] || []).length - kept.length;
+        if (kept.length) db.logs[key] = kept;
+        else delete db.logs[key];
+      });
+    }
+  }
+
   const byUid = new Map();
   Object.keys(db.logs || {}).forEach((key) =>
     (db.logs[key] || []).forEach((e) => { if (e.uid) byUid.set(e.uid, { key, e }); })
@@ -153,6 +188,11 @@ export async function pull(db) {
       // Keep the device's counter ahead of anything it has just been handed,
       // or the next entry keyed in here reuses a number already in use.
       if (entry.no > (db.seq || 0)) db.seq = entry.no;
+    } else if (have.e.dirty) {
+      /* This phone changed the entry and has not delivered the change yet —
+         the local copy is NEWER than the server's, not staler. Taking the
+         server's dates here would revert a close saved seconds ago (pull
+         runs before push on purpose). push sends it and clears the mark. */
     } else if (have.e.start !== entry.start || (have.e.end || null) !== entry.end) {
       Object.assign(have.e, { start: entry.start, end: entry.end });
       updated++;
@@ -175,7 +215,54 @@ export async function pull(db) {
       else db.history.push(row);
     }
   }
-  return { added, updated };
+
+  const settled = settleAgainstLatestReport(db);
+  return { added, updated, buried, settled };
+}
+
+/* THE LATEST REPORT WINS — same rule as the office database's
+   palms_history_latest_wins trigger (mjm-ai-system:
+   shared/migration_palms_latest_wins.sql). Change one, change the other.
+
+   applyDailySelection already closes whatever a day report leaves out — but
+   only among the entries this phone HELD when the report was keyed. An open
+   entry it learns about afterwards (the office set a status, a seed loaded
+   one, another phone pushed one) sailed past that rule and ran forever, so
+   the office board kept showing a stage the Field Conductor had already
+   moved past.
+
+   So after every merge: a unit's single LATEST day report rules on every
+   open entry that STARTED BEFORE that report's date. In the report's list —
+   still running. Not in it — it was finished by then, and is closed at the
+   report's date. push() then carries the close up, so the office board
+   settles too.
+
+   Strictly BEFORE: an entry starting ON the report's date is never closed
+   by it, so an office correction made later the same day survives a
+   same-day report keyed from a stale screen. And only the latest report
+   rules — an old report replayed by an old phone closes nothing, because a
+   newer statement about that unit exists. */
+function settleAgainstLatestReport(db) {
+  const latest = new Map();
+  (db.history || []).forEach((h) => {
+    if (!h || !h.key || !h.at || h.demo) return;
+    const cur = latest.get(h.key);
+    if (!cur || String(h.at) > String(cur.at)) latest.set(h.key, h);
+  });
+  let settled = 0;
+  latest.forEach((rep, key) => {
+    const acts = (rep.acts || []).map(Number);
+    (db.logs[key] || []).forEach((e) => {
+      if (e.end === null && !e.demo
+          && String(e.start) < String(rep.at)
+          && !acts.includes(Number(e.actN))) {
+        e.end = rep.at;
+        e.dirty = 1;
+        settled++;
+      }
+    });
+  });
+  return settled;
 }
 
 /**

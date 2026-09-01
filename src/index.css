@@ -3,7 +3,14 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: light dark;
+  /* light, not 'light dark'. Every surface this portal draws is light — a
+     white card on #f1f5f9 — and nothing here has a dark theme to switch to.
+     'light dark' told the browser otherwise, so on a phone set to dark mode
+     the UA painted its own widgets dark: any <input>, <select> or <textarea>
+     that did not name its own colours came out as a black box on a white
+     card. The Nelos solve remark was one. Pinning the scheme fixes the whole
+     class of it rather than the one box that got reported. */
+  color-scheme: light;
 }
 
 * {

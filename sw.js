@@ -23,10 +23,40 @@
  * every worker and clears every cache when the app fails to mount, so a
  * misbehaving worker is two automatic reloads away from gone.
  */
-const VER = 'fc-shell-v1';
+/* Both lines are rewritten by the build (see the sw-precache plugin in
+   vite.config.js): VER gets a per-build value so every deploy opens a fresh
+   cache, and PRECACHE gets the full list of built files — the entry HTML and
+   every hashed chunk. Without the list, a module tab nobody had opened while
+   online had no code on the phone at all: the modules are lazy chunks,
+   fetched the first time their tab is pressed, and a runtime-only cache
+   cannot hold a file that was never fetched. Field test found it exactly
+   that way — sync pressed, airplane mode on, a tab that had not been opened
+   online refused to draw. */
+const VER = 'fc-shell-mti9cqkn';
+const PRECACHE = ["./","./index.html","./icon.svg","./assets/CullingModule-nI8c9-z8.js","./assets/DoModule-CS-930ar.js","./assets/EntryModal-DvOocsTH.js","./assets/MaintenanceModule-CfcyG9iN.js","./assets/PalmsBody-Bopjrgj1.js","./assets/PalmsModule-DjOtk2yY.js","./assets/ScanModule-CuL3aVZk.js","./assets/TrackMap-DdehTq7J.js","./assets/TrackMap-Dgihpmma.css","./assets/WorkerPortal-Bolwrne1.js","./assets/app-C9rsKlxN.css","./assets/app-DWMSJYqa.js","./assets/apple-touch-icon-S6sv4MlH.png","./assets/b1-CSzJ9mIh.jpeg","./assets/b4-DxhMv_2i.jpeg","./assets/cullingData-lktxFBMX.js","./assets/cullingOffline-D0D6DdhM.js","./assets/cullingSource-CM7oB2Ef.js","./assets/html2canvas.esm-CBrSDip1.js","./assets/icon-192-qA6CMvfK.png","./assets/icon-512-DwyxxBVP.png","./assets/icon-B5EoKwz6.svg","./assets/index.es-g5swhi0o.js","./assets/manifest-DPTswWxn.webmanifest","./assets/purify.es-BwoZCkIS.js","./assets/store-CoAakLTY.js","./assets/sync-B_frZLSd.js","./assets/track-CzGi5FAy.js","./assets/u8-C1D4M1Bz.jpeg","./assets/workerApi-CIUV_xAo.js"];
 
-self.addEventListener('install', () => {
+self.addEventListener('install', (e) => {
   self.skipWaiting();
+  /* Best effort, one file at a time — a single 404 must not sink the rest.
+     {cache:'reload'} bypasses the HTTP cache, or a version bump could fill
+     the new cache with the same stale files the old one held. Precache only
+     SEEDS the store: HTML stays network-first below, so this cannot recreate
+     the stale-shell incident — a phone with signal always gets the live
+     page, whatever was seeded. */
+  e.waitUntil(
+    caches.open(VER).then((cache) =>
+      Promise.allSettled(
+        PRECACHE.map((url) =>
+          fetch(url, { cache: 'reload' })
+            .then((res) => {
+              if (!res || res.status !== 200) throw new Error('HTTP ' + (res && res.status));
+              return cache.put(url, res);
+            })
+            .catch(() => {})
+        )
+      )
+    )
+  );
 });
 
 self.addEventListener('activate', (e) => {

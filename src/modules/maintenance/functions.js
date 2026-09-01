@@ -58,14 +58,13 @@ export const MAINT_FUNCTIONS = [
       { key: 'batches', icon: '🌱', label: 'wk.fnBatches' },
       { key: 'workers', icon: '👷', label: 'wk.fnWorkers' },
       { key: 'gps',     icon: '📍', label: 'wk.fnGps' },
-      /* The one switch that is stored but not yet acted on for a worker. A
-         PIN sign-in is `anon`; the documents bucket takes uploads from
-         `authenticated`, and the anon key is public, so opening the bucket to
-         it would open it to anybody who reads the app bundle. Offered anyway,
-         because which functions a worker gets is the office's decision and
-         not this file's — and marked, so it is not discovered on a phone in a
-         plot. workerMaintSource.js is what actually refuses it. */
-      { key: 'photos',  icon: '📷', label: 'wk.fnPhotos', notYet: true },
+      /* This was the one switch stored but not acted on for a worker, and it
+         is not any more. A PIN sign-in is `anon` and the anon key is public,
+         so the documents bucket could not simply be opened to it; photos go
+         up through a ticket the database mints against the worker's own
+         token instead. See workerMaintSource.uploadPhotos, and
+         shared/RUN_ME_worker_photos.sql in the office repository. */
+      { key: 'photos',  icon: '📷', label: 'wk.fnPhotos' },
       { key: 'remark',  icon: '✏️', label: 'wk.fnRemark' },
     ],
   },

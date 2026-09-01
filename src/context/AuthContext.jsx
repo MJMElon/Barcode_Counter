@@ -1,7 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { applyCompanySwitches } from '../lib/portalSettings.js';
-import { isOnline } from '../lib/outbox.js';
 
 /**
  * The company's master switches for THIS portal — Worker Portal Manage →
@@ -86,16 +85,14 @@ function hasOpsAccess(profile) {
    loading screen in front of every entry. Anything doubtful — no token,
    unparseable — returns null and the normal async path decides.
 
-   An expired token is where OFFLINE changes the answer. ONLINE, expired means
-   supabase-js is about to refresh it (or the refresh token itself is bad and
-   a real sign-in is needed) — so it still returns null there and lets that
-   path run. OFFLINE, there is no refresh to have: the access token turns a
-   year old sitting in a nursery with no line the same way it turns an hour
-   old, and neither is a reason to hand a Field Conductor already standing in
-   the field a login screen that a bar of signal is the only way to use. RLS
-   is what actually protects a table, and a request made with a stale token
-   goes nowhere without a network to carry it — so trusting the token to
-   PAINT THE SCREEN costs nothing it was not already going to cost. */
+   An EXPIRED token is trusted, deliberately, online and off. Signed in is
+   meant to be a state you stay in — the login screen comes back for a
+   pressed Sign Out or a server that actually revoked the account, never for
+   a clock. Offline there is no refresh to have and a stale token goes
+   nowhere without a network to carry it; online supabase-js refreshes it in
+   the background and replaces what this painted, and if the refresh token is
+   genuinely dead the SIGNED_OUT event that raises is still honoured below.
+   RLS is what actually protects a table — this only decides what to draw. */
 function cachedSession() {
   try {
     const key = Object.keys(localStorage).find((k) => /^sb-.+-auth-token$/.test(k));
@@ -103,7 +100,6 @@ function cachedSession() {
     const raw = JSON.parse(localStorage.getItem(key));
     const s = (raw && (raw.currentSession || raw)) || null;
     if (!s || !s.access_token || !s.user) return null;
-    if (s.expires_at && Number(s.expires_at) * 1000 <= Date.now() && isOnline()) return null;
     return s;
   } catch (e) {
     return null;
@@ -178,12 +174,12 @@ export function AuthProvider({ children }) {
         answered = true;
         /* supabase-js answers null here for two very different reasons: nobody
            has ever signed in on this device, or somebody has but the token had
-           expired and the refresh it tried needed a network that is not there.
-           Offline cannot tell those apart by asking again, so it falls back to
-           the same tolerant read cachedSession() above already does — if
-           storage still has a token for SOMEBODY, that is who is standing
-           here, expired clock or not. */
-        const useSess = sess || (!isOnline() ? cachedSession() : null);
+           expired and the refresh it tried failed — no network, or a slow one.
+           So any null falls back to the tolerant read cachedSession() above
+           already does: if storage still has a token for SOMEBODY, that is who
+           is standing here, expired clock or not. A refresh token the server
+           actually REFUSED raises SIGNED_OUT below, and that still signs out. */
+        const useSess = sess || cachedSession();
         // Knowing there IS a session is enough to render the app. The ops gate
         // is a network round-trip; waiting for it put a loading screen in front
         // of every entry. It now resolves behind the app and only bounces
@@ -230,19 +226,24 @@ export function AuthProvider({ children }) {
         return;
       }
       /* INITIAL_SESSION can report null for the same reason getSession()
-         above can — an expired token with no network there to refresh it,
-         not a real sign-out. Only an actual SIGNED_OUT means somebody signed
-         out; anything else null falls back to the same tolerant read while
-         offline, so it does not undo what getSession() already recovered. */
-      const useSess = sess || (event !== 'SIGNED_OUT' && !isOnline() ? cachedSession() : null);
+         above can — an expired token whose refresh did not land, not a real
+         sign-out. Only an actual SIGNED_OUT means somebody signed out (the
+         button, or the server refusing the refresh token); anything else
+         null falls back to the same tolerant read, so it does not undo what
+         getSession() already recovered. */
+      const useSess = sess || (event !== 'SIGNED_OUT' ? cachedSession() : null);
       setSession(useSess);
       setLoading(false);
       if (event === 'SIGNED_OUT' || !useSess) {
         setAllowed(null);
         setPermissions(null);
-        // Signing out takes the cached access with it, or the next person to
-        // use this phone starts inside somebody else's.
-        try { localStorage.removeItem(PERMS_KEY); } catch (e) { /* nothing to do */ }
+        /* The cached permissions used to be removed here too. They stay now:
+           an offline re-login (offlineVault.js) puts the same person back in
+           with no way to re-fetch them, and without this cache every module
+           page would sit on LOADING. Keeping it is safe — cachedPermissions()
+           refuses to answer for a different userId, so the next person to
+           sign in on this phone cannot inherit them, and it is a screen gate,
+           not the security: RLS decides what actually reads and writes. */
         return;
       }
       // Defer to release the auth lock before querying shared_profiles.

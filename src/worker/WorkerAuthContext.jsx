@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import * as api from './workerApi.js';
+import { uploadIdPhoto } from './workerIdPhoto.js';
 import { visibleModules } from '../lib/portalSettings.js';
 
 /*
@@ -25,6 +26,10 @@ export function WorkerAuthProvider({ children }) {
   // simply having expired. The cover says which, because "check your signal"
   // and "sign in again" are different instructions.
   const [offline, setOffline] = useState(false);
+  /* Registered, but the photograph did not make it. Carried across the
+     re-render that signing up causes, so the pending screen can say so —
+     see signUp below. */
+  const [photoWarning, setPhotoWarning] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -66,9 +71,32 @@ export function WorkerAuthProvider({ children }) {
      for convenience: the answer to "did that work" is then the portal itself
      saying their details are with the office, rather than a message on a
      login screen they have to believe. */
-  const signUp = useCallback(async (name, pin) => {
+  /**
+   * Register, and put a face to the name if one was offered.
+   *
+   * The photograph is sent HERE rather than from the cover, and the ordering
+   * is the reason: setIdentity re-renders the portal around the new worker
+   * and takes the cover off the screen, so an upload started there would
+   * finish into a component nobody is looking at and report its failure to
+   * nothing at all. Both happen before the portal is handed over.
+   *
+   * A photograph that will not go up does NOT undo the registration — they
+   * are on the register, which is what they came to do, and the office can
+   * add a photo to their record afterwards. It sets a warning instead, which
+   * the screen they land on shows, because a worker who took a photograph
+   * and is shown only "welcome" will believe the office has their face.
+   */
+  const signUp = useCallback(async (name, pin, photo = null) => {
     const who = await api.signUp(name, pin);
     api.keepToken(who.token);
+    if (photo) {
+      try {
+        await uploadIdPhoto(who.token, photo);
+      } catch (e) {
+        console.warn('[worker] the photo did not upload:', e && e.message);
+        setPhotoWarning(true);
+      }
+    }
     setIdentity(who);
     setOffline(false);
     return who;
@@ -122,6 +150,10 @@ export function WorkerAuthProvider({ children }) {
     pending: !!(identity && identity.pending),
     loading,
     offline,
+    /* They registered, and their photograph did not go up with it. Shown on
+       the screen they land on rather than on the cover they have already
+       left behind. */
+    photoWarning,
     signIn,
     signUp,
     signOut,

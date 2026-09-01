@@ -1,7 +1,6 @@
 {
   "name": "MJM Nursery — 555 FC Portal",
   "short_name": "FC Portal",
-  "description": "555 Field Conductor Portal — scanning, collections, maintenance and PALMS for MJM Nursery.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

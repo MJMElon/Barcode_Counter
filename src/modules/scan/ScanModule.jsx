@@ -17,7 +17,8 @@ import {
   defaultProgress,
   mergeConsents,
   statusOf,
-  insertScanRecord,
+  saveScanRecord,
+  flushScanRecords,
   fetchScanRecords,
   subscribeScanRecords,
   unsubscribeScanRecords,
@@ -70,6 +71,7 @@ export default function ScanModule() {
     setSyncing(true);
     try {
       await flushDOQueue().catch(() => {});
+      await flushScanRecords().catch(() => {});
       const [data, today] = await Promise.all([fetchConsents(), fetchTodayBookingALs().catch(() => null)]);
       setServerConsents(data);
       if (today) setTodayALs(today);
@@ -199,8 +201,10 @@ export default function ScanModule() {
       }
       seenRef.current.add(code);
 
-      // Write to server so other devices see this scan in real time.
-      if (navigator.onLine) insertScanRecord(a.id, a.al_number, code).catch(() => {});
+      // Write to server so other devices see this scan in real time. With no
+      // line it QUEUES instead of being skipped — see saveScanRecord — so the
+      // other phones hear about it when the line returns rather than never.
+      saveScanRecord(a.id, a.al_number, code).catch(() => {});
 
       const cur = progressRef.current[a.id] || defaultProgress();
       const unique = cur.unique + 1;

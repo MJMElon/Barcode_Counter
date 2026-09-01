@@ -347,6 +347,12 @@ export function applyDailySelection(db, key, selected, by, date, ts) {
   open.forEach((e) => {
     if (!sel.includes(e.actN)) {
       e.end = date;
+      /* dirty = changed here and not yet delivered. sync's pull skips dirty
+         entries — otherwise pulling BEFORE push (the order that protects
+         office corrections) hands this close straight back to the server's
+         still-open copy, and the status the Field Conductor just saved
+         reverts in front of them. push clears it once the server has it. */
+      e.dirty = 1;
       changed = true;
     }
   });
@@ -369,7 +375,7 @@ export function startEntry(db, pid, actN, dateStr, by) {
      and sent three days later cannot be saved twice. */
   db.logs[pid].push({
     uid: newUid(), no: ++db.seq, actN, start: dateStr, end: null,
-    ideal: durFor(pid, activityByN(actN)), by,
+    ideal: durFor(pid, activityByN(actN)), by, dirty: 1,
   });
 }
 

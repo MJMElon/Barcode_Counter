@@ -114,6 +114,74 @@ export async function submitMaintenance(token, payload) {
 }
 
 /**
+ * A ticket to upload photos with.
+ *
+ * The one place this portal is allowed to write a file rather than a row, and
+ * it is worth saying why it needs a ticket at all. A worker holding a PIN is
+ * `anon`, and the anon key is printed in the app bundle — so a storage rule
+ * that lets `anon` write to the documents bucket lets ANYBODY write to it.
+ * That is why the photos switch sat stored-but-not-obeyed for so long.
+ *
+ * The ticket is the way round it: a random UUID, handed over only for a valid
+ * token whose photos switch is on, good for ten minutes and for one folder —
+ * worker_photos/<ticket>/ — and for nothing else in the bucket. The upload
+ * goes in there and the ticket is burnt straight after, so in practice the
+ * door is open for about as long as it takes to send two pictures.
+ *
+ * See shared/RUN_ME_worker_photos.sql in the office repository, which says
+ * all of this at greater length and also says what it does not defend
+ * against.
+ *
+ * Raises when the office has photos switched off for this worker. That is a
+ * refusal, not a failure, and the caller has to tell them rather than
+ * recording the job with the pictures quietly missing.
+ */
+export async function photoTicket(token) {
+  return unwrap(await supabase.rpc('worker_photo_ticket', { p_token: token }));
+}
+
+/**
+ * A ticket for the worker's OWN FACE, rather than for a job's photographs.
+ *
+ * A separate door on purpose. The one above is behind the Maintenance module
+ * and the photos switch, because that is what a picture of a job belongs to —
+ * and a worker who has just registered has every module switched off, which
+ * is what "waiting to be allocated" means. Asking the Maintenance switch about
+ * somebody's passport photo would refuse every new worker there has ever been.
+ *
+ * This is behind a valid session and nothing else, and a session comes only
+ * from signing in or signing up. Registration is still the only way in.
+ *
+ * One live ticket per worker: asking again cancels the last. A person has one
+ * face, so there is never a reason to hold two doors open.
+ */
+export async function idPhotoTicket(token) {
+  return unwrap(await supabase.rpc('worker_id_photo_ticket', { p_token: token }));
+}
+
+/**
+ * Put the uploaded face on the worker's own row, where the Worker System
+ * board reads it. An empty url takes it off again.
+ *
+ * The database checks the link rather than trusting it — it has to be a
+ * public link to a .jpg under worker_id_photos/ in our own bucket. Without
+ * that this would be "write any string you like into a column the office
+ * renders", which is a stored-content hole wearing a photograph's clothes.
+ */
+export async function setMyPhoto(token, url) {
+  return unwrap(await supabase.rpc('worker_set_my_photo', { p_token: token, p_url: url || '' }));
+}
+
+/** Burn a ticket once the photos are up. Best effort — it expires anyway. */
+export async function photoDone(token, ticket) {
+  try {
+    await supabase.rpc('worker_photo_done', { p_token: token, p_ticket: ticket });
+  } catch (e) {
+    /* ten minutes from now it is dead regardless */
+  }
+}
+
+/**
  * One finished job's walked track.
  *
  * Asked for a record at a time, when somebody opens that job and wants to see

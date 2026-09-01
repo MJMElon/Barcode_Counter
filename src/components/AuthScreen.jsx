@@ -3,6 +3,17 @@ import { supabase } from '../lib/supabase.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useLang } from '../context/LanguageContext.jsx';
 import { BOOK_COVER_CSS, COVER_BLUE } from './bookCover.js';
+import { hasOffline, openOffline, sealOffline } from '../lib/offlineVault.js';
+import { isOnline } from '../lib/outbox.js';
+
+/* A login that never reached the server, as opposed to one the server
+   refused. Supabase reports a dead network as status 0 or a fetch failure;
+   a wrong password comes back as a real answer (400). Only the first kind
+   is worth retrying against the phone's sealed copy. */
+function neverReachedServer(error) {
+  return !!error && (error.status === 0 || error.status === undefined ||
+    /fetch|network|load failed/i.test(String(error.message || '')));
+}
 
 // Login / Sign-up / Forgot-password / Recovery screen, on the shared Supabase
 // project — the same accounts as ai.mjmnursery.com.
@@ -30,6 +41,36 @@ export default function AuthScreen() {
 
   const note = (kind, text) => setMsg({ kind, text });
 
+  /* Sign in against the phone's sealed copy — the no-line path. The typed
+     password either decrypts the session saved at the last ONLINE login, or
+     nothing happens; see offlineVault.js. On success the saved session is
+     put back where supabase-js keeps it and the app reboots onto it. */
+  async function offlineUnlock() {
+    if (!hasOffline(email)) {
+      note('error', t('auth.offlineFirstNeedsLine'));
+      return;
+    }
+    const saved = await openOffline(email, password);
+    if (!saved || !saved.storageKey || !saved.session) {
+      note('error', t('auth.offlineWrongPw'));
+      return;
+    }
+    try { localStorage.setItem(saved.storageKey, JSON.stringify(saved.session)); } catch (e) { /* */ }
+    window.location.reload();
+  }
+
+  /* After a successful ONLINE login, seal what supabase-js just wrote so the
+     NEXT login can happen with no line. Best effort — a phone that cannot
+     seal simply keeps needing signal to sign in, which is where it started. */
+  async function sealAfterLogin(data) {
+    try {
+      const key = Object.keys(localStorage).find((k) => /^sb-.+-auth-token$/.test(k));
+      const raw = key ? JSON.parse(localStorage.getItem(key)) : null;
+      const session = raw || (data && data.session) || null;
+      if (key && session) await sealOffline(email, password, { storageKey: key, session });
+    } catch (e) { /* nothing to do */ }
+  }
+
   async function handleMain() {
     if (!email || !password) return note('error', t('auth.enterEmailPw'));
     setBusy(true);
@@ -45,10 +86,20 @@ export default function AuthScreen() {
         note('ok', t('auth.accountCreated'));
         setMode('login');
       }
+    } else if (!isOnline()) {
+      await offlineUnlock();
     } else {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) note('error', t('auth.loginErr', { msg: error.message }));
-      // On success the AuthContext listener flips the view.
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        /* navigator.onLine says true on plenty of dead connections, so a
+           login that never reached the server also falls back to the sealed
+           copy — a server that ANSWERED "wrong password" never does. */
+        if (neverReachedServer(error) && hasOffline(email)) await offlineUnlock();
+        else note('error', t('auth.loginErr', { msg: error.message }));
+      } else {
+        await sealAfterLogin(data);
+        // On success the AuthContext listener flips the view.
+      }
     }
     setBusy(false);
   }

@@ -52,6 +52,19 @@ const MAX_PX = 112;
  * looks: the walk is run from these buttons, and a second Start on the map
  * would be a rival recording of the same job.
  *
+ * ── The camera ──
+ *
+ * A square at the end of the strip, not another full-width button: with a
+ * walk running there are already three, and four labelled buttons across a
+ * 390px phone is four buttons nobody can hit. It carries a count once there
+ * is something on it, and the pictures show as thumbnails under the row so
+ * they can be looked at and taken off again — a photo you cannot see is a
+ * photo you will take twice.
+ *
+ * Nothing is uploaded here. The pictures ride along with the job and go up
+ * when it is recorded, which is what makes them survive a plot with no
+ * signal.
+ *
  * The buttons sit in a row across the bottom of the card rather than stacked
  * down its side: three of them stacked made a row taller than a thumb, and a
  * list where four jobs fit on a screen is a list that can be worked down.
@@ -59,6 +72,7 @@ const MAX_PX = 112;
 export default function TaskRow({
   task, tint, tracking, session, elapsed, denied, busy,
   onStart, onPause, onResume, onStop, onComplete, onMap, canStart = true, waitFor = null,
+  onPhoto, onDropPhoto, photos = null,
 }) {
   const { t, lang } = useLang();
   const [dx, setDx] = useState(0);
@@ -187,7 +201,7 @@ export default function TaskRow({
             start it. A drag that leaves a button never becomes a click on it,
             so both gestures still work. */}
         <div
-          className={`mt-3 grid gap-2 ${tracking ? 'grid-cols-3' : 'grid-cols-2'} transition-opacity ${
+          className={`mt-3 flex gap-2 [&>button]:flex-1 transition-opacity ${
             pulled > 12 ? 'opacity-0 pointer-events-none' : ''}`}
           onClick={(e) => e.stopPropagation()}
         >
@@ -241,7 +255,45 @@ export default function TaskRow({
               🗺️ {t('wk.openMap')}
             </button>
           )}
+          {onPhoto && (
+            <button
+              type="button" onClick={onPhoto} disabled={busy}
+              aria-label={t('wk.addPhoto')}
+              /* Fixed and square, and outside the flex-1 sharing above, so
+                 adding it never squeezes Start into something unreadable. */
+              className="!flex-none w-[52px] shrink-0 bg-white border border-slate-200
+                         active:bg-slate-50 text-slate-600 disabled:opacity-50
+                         font-black text-[11px] rounded-xl py-3 tabular-nums"
+            >
+              📷{photos && photos.length ? ` ${photos.length}` : ''}
+            </button>
+          )}
         </div>
+
+        {/* What has been taken for this job, small, and removable. */}
+        {photos && photos.length > 0 && (
+          <div
+            className={`mt-2 flex gap-2 flex-wrap transition-opacity ${
+              pulled > 12 ? 'opacity-0 pointer-events-none' : ''}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {photos.map((src, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => onDropPhoto && onDropPhoto(i)}
+                aria-label={t('wk.dropPhoto', { n: i + 1 })}
+                className="relative w-14 h-14 rounded-xl overflow-hidden border border-slate-200"
+              >
+                <img src={src} alt="" className="w-full h-full object-cover" />
+                <span className="absolute top-0 right-0 bg-slate-900/70 text-white
+                                 text-[11px] font-black leading-none px-1.5 py-1 rounded-bl-lg">
+                  ×
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Pulled in from the right by the thumb, and tappable once it is

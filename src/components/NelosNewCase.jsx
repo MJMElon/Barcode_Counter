@@ -49,6 +49,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { raiseCase } from '../lib/nelos.js';
+import { useLang } from '../context/LanguageContext.jsx';
 
 /* The four nurseries and the plots each one has, the same list the hub's
    dock and the Admin Portal's form offer, so all three raise forms ask the
@@ -81,6 +82,8 @@ const FIELD =
 const LABEL = 'block text-[9px] font-black uppercase tracking-widest text-slate-400 mt-3 mb-1';
 
 export default function NelosNewCase({ source = 'scan', me, onBack, onDone }) {
+  const { t, lang } = useLang();
+  const loc = lang === 'ms' ? 'ms-MY' : 'en-MY';
   const [modules, setModules] = useState(FALLBACK_MODULES);
   const [cats, setCats] = useState([]);
   const [people, setPeople] = useState([]);
@@ -100,7 +103,7 @@ export default function NelosNewCase({ source = 'scan', me, onBack, onDone }) {
 
   const today = new Date();
   const todayISO = today.toISOString().slice(0, 10);
-  const todayLabel = today.toLocaleDateString('en-MY', {
+  const todayLabel = today.toLocaleDateString(loc, {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
   });
 
@@ -193,7 +196,7 @@ export default function NelosNewCase({ source = 'scan', me, onBack, onDone }) {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > MAX_PHOTO) {
-      setErr('That photo is over 8 MB — take a smaller one.');
+      setErr(t('nel.errPhotoBig'));
       e.target.value = '';
       return;
     }
@@ -213,9 +216,9 @@ export default function NelosNewCase({ source = 'scan', me, onBack, onDone }) {
        means. A system with no case titles set up yet falls back to a typed
        line, so an empty nelos_categories cannot make this form unusable. */
     const title = (worksFor.length ? work : titleRef.current?.value.trim()) || '';
-    if (!assignTo) { setErr('Choose who this is for.'); return; }
+    if (!assignTo) { setErr(t('nel.errChooseWho')); return; }
     if (!title) {
-      setErr(worksFor.length ? 'Choose the work.' : 'Say what the case is.');
+      setErr(worksFor.length ? t('nel.errChooseWork') : t('nel.errSayWhat'));
       if (!worksFor.length) titleRef.current?.focus();
       return;
     }
@@ -237,7 +240,7 @@ export default function NelosNewCase({ source = 'scan', me, onBack, onDone }) {
           .from('nelos-photos')
           .upload(path, f, { contentType: f.type, upsert: false });
         if (upErr) {
-          setErr(`Photo upload failed — ${upErr.message}`);
+          setErr(t('nel.errPhotoUpload', { msg: upErr.message }));
           setBusy(false);
           return;
         }
@@ -262,13 +265,13 @@ export default function NelosNewCase({ source = 'scan', me, onBack, onDone }) {
         byId: me?.id || null,
       });
       if (error || !data) {
-        setErr(`Could not raise it — ${error?.message || 'the case log refused it'}`);
+        setErr(t('nel.errRaise', { msg: error?.message || t('nel.errRefused') }));
         setBusy(false);
         return;
       }
       onDone(data);
     } catch (e) {
-      setErr(`Could not raise it — ${e?.message || 'network'}`);
+      setErr(t('nel.errRaise', { msg: e?.message || t('nel.errNetwork') }));
       setBusy(false);
     }
   }
@@ -277,10 +280,10 @@ export default function NelosNewCase({ source = 'scan', me, onBack, onDone }) {
     <div className="p-4 pb-6">
       <button onClick={onBack}
         className="text-[11px] font-black uppercase tracking-widest text-violet-700 hover:text-violet-900 cursor-pointer">
-        ‹ Back
+        ‹ {t('common.back')}
       </button>
 
-      <h3 className="mt-2 text-[16px] font-black text-slate-800 leading-tight">Add New Case</h3>
+      <h3 className="mt-2 text-[16px] font-black text-slate-800 leading-tight">{t('nel.addNewCase')}</h3>
       {/* The date, said rather than asked. */}
       <div className="text-[11px] font-bold text-slate-400 mt-0.5">{todayLabel}</div>
 
@@ -288,16 +291,16 @@ export default function NelosNewCase({ source = 'scan', me, onBack, onDone }) {
         <div className="mt-3 px-3 py-2 rounded-lg text-[11.5px] font-black bg-rose-100 text-rose-800">{err}</div>
       )}
 
-      <label className={LABEL} htmlFor="nnc-to">Assign to</label>
+      <label className={LABEL} htmlFor="nnc-to">{t('nel.assignToLabel')}</label>
       <select id="nnc-to" className={FIELD} value={assignTo} onChange={(e) => pickAssignTo(e.target.value)}>
-        <option value="">— choose a system —</option>
+        <option value="">{t('nel.chooseSystem')}</option>
         {modules.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
       </select>
 
-      <label className={LABEL} htmlFor="nnc-work">Work</label>
+      <label className={LABEL} htmlFor="nnc-work">{t('nel.work')}</label>
       {worksFor.length ? (
         <select id="nnc-work" className={FIELD} value={work} onChange={(e) => setWork(e.target.value)}>
-          <option value="">— choose the work —</option>
+          <option value="">{t('nel.chooseWork')}</option>
           {worksFor.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
         </select>
       ) : (
@@ -305,44 +308,44 @@ export default function NelosNewCase({ source = 'scan', me, onBack, onDone }) {
            set up. Both are answered by saying so rather than by an empty
            dropdown that looks broken. */
         <input id="nnc-work" ref={titleRef} className={FIELD} disabled={!assignTo}
-          placeholder={assignTo ? 'No set titles for this system — type one' : 'Choose a system first'} />
+          placeholder={assignTo ? t('nel.noTitles') : t('nel.systemFirst')} />
       )}
 
-      <label className={LABEL} htmlFor="nnc-pic">PIC</label>
+      <label className={LABEL} htmlFor="nnc-pic">{t('nel.pic')}</label>
       <select id="nnc-pic" className={FIELD} value={pic} onChange={(e) => setPic(e.target.value)} disabled={!assignTo}>
         <option value="">
-          {assignTo && !picsFor.length ? 'Nobody pinned to this system yet' : 'Anyone in that system'}
+          {assignTo && !picsFor.length ? t('nel.noPeople') : t('nel.anyone')}
         </option>
         {picsFor.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
       </select>
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className={LABEL} htmlFor="nnc-nursery">Nursery</label>
+          <label className={LABEL} htmlFor="nnc-nursery">{t('nel.nursery')}</label>
           <select id="nnc-nursery" className={FIELD} value={nursery}
             onChange={(e) => { setNursery(e.target.value); setPlot(''); }}>
-            <option value="">— none —</option>
+            <option value="">{t('nel.none')}</option>
             {Object.keys(NURSERY_PLOTS).map((n) => <option key={n} value={n}>{NURSERY_LABEL[n]}</option>)}
           </select>
         </div>
         <div>
-          <label className={LABEL} htmlFor="nnc-plot">Plot</label>
+          <label className={LABEL} htmlFor="nnc-plot">{t('cull.plot')}</label>
           <select id="nnc-plot" className={FIELD} value={plot} onChange={(e) => setPlot(e.target.value)}
             disabled={!nursery}>
-            <option value="">{nursery ? '— none —' : 'Nursery first'}</option>
+            <option value="">{nursery ? t('nel.none') : t('nel.nurseryFirst')}</option>
             {(NURSERY_PLOTS[nursery] || []).map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
         </div>
       </div>
 
-      <label className={LABEL}>Photo</label>
+      <label className={LABEL}>{t('nel.photo')}</label>
       {photo ? (
         /* A fixed height, not max-h: the remove button is positioned against
            this box, and an image still decoding has no height of its own —
            which drops the ✕ over the field below it. */
         <div className="relative">
           <img src={photo.url} alt="" className="w-full h-40 object-cover rounded-xl border-[1.5px] border-slate-200 bg-slate-50" />
-          <button type="button" onClick={dropPhoto} aria-label="Remove photo"
+          <button type="button" onClick={dropPhoto} aria-label={t('nel.removePhoto')}
             className="absolute top-2 right-2 grid place-items-center w-8 h-8 rounded-full bg-slate-900/70 text-white text-lg leading-none cursor-pointer">
             ✕
           </button>
@@ -353,16 +356,16 @@ export default function NelosNewCase({ source = 'scan', me, onBack, onDone }) {
            control is a file picker. One control, both jobs. */
         <label className="flex items-center justify-center gap-2 w-full py-4 rounded-xl border-[1.5px] border-dashed border-slate-300 text-[12.5px] font-bold text-slate-500 cursor-pointer hover:border-violet-400 hover:text-violet-700">
           <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={pickPhoto} hidden />
-          <span>📷 Take or upload a photo</span>
+          <span>📷 {t('nel.takeOrUpload')}</span>
         </label>
       )}
 
-      <label className={LABEL} htmlFor="nnc-remarks">Remarks</label>
-      <textarea id="nnc-remarks" ref={remarksRef} rows={3} className={FIELD} placeholder="What you saw" />
+      <label className={LABEL} htmlFor="nnc-remarks">{t('nel.remarks')}</label>
+      <textarea id="nnc-remarks" ref={remarksRef} rows={3} className={FIELD} placeholder={t('nel.whatYouSaw')} />
 
       <button onClick={submit} disabled={busy}
         className="w-full mt-4 px-3.5 py-3 rounded-xl text-[12px] font-black uppercase tracking-wider text-white bg-violet-600 cursor-pointer disabled:opacity-50">
-        {busy ? 'Creating…' : 'Create New Case'}
+        {busy ? t('nel.creating') : t('nel.createNewCase')}
       </button>
     </div>
   );
