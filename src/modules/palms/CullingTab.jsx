@@ -201,7 +201,20 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
   const rateNow = rateFor({ balance: row?.balance, transplant: row?.transplant, inang: 0 });
   const rateAfter = rateFor({ balance: row?.balance, transplant: row?.transplant, inang });
   const left = known ? row.balance - inang : 0;
-  const action = known && inang > 0 ? actionFor(rateAfter) : null;
+  /* When to offer the button.
+     Counting pokok inang is what brings a block DOWN to ten percent, so the
+     button waited for a count. But a block already at or under ten percent
+     before anybody counts has nothing to bring down — it is ready, and the
+     drone flight is what records it having got there. Making the Field
+     Conductor key a number he does not have, into a plot that already passes,
+     to reach a button that was always going to say the same thing, is asking
+     him to do the arithmetic the calculator just did.
+
+     So: already passing, offer it straight away. Over the line, it still
+     takes a count, because that is the only thing that can change the answer.
+     rateAfter equals rateNow while nothing has been counted, so one call
+     covers both. */
+  const action = known && (inang > 0 || rateNow <= CULL_LIMIT) ? actionFor(rateAfter) : null;
 
   const press = (k) => {
     if (k === 'AC') { setTerms([]); setTyping(''); return; }
@@ -321,7 +334,17 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
      size they need to be, the keys share whatever is left, and nothing
      overflows on a short screen or floats in the middle of a tall one. */
   return (
-    <div className="max-w-[420px] mx-auto h-full">
+    <div
+      data-calc
+      /* The width is capped by the HEIGHT available, not just by 420px.
+         A calculator is a shape as much as a size: fixing the width and
+         letting the height collapse is what turned the keys into letterboxes
+         91px wide and 28 tall on a short laptop window. Tied to the height,
+         the whole thing narrows instead and the keys stay keys — full width
+         on a phone, where the height is there, and a narrower calculator on a
+         short window, which reads as deliberate rather than squashed. */
+      className="mx-auto h-full w-full max-w-[min(420px,calc((100dvh-84px)*0.55))]"
+    >
       <div className="bg-black rounded-[2rem] overflow-hidden shadow-2xl border border-[#1f2a38]
                       p-2.5 flex flex-col gap-1.5 h-full">
         {/* Which plot, and where its rate stands before any of today's
@@ -377,7 +400,7 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
           <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">
             {t('cull.balance')}
           </div>
-          <div className={`text-[clamp(22px,7vw,28px)] font-light tabular-nums leading-tight ${
+          <div className={`text-[clamp(19px,3.4dvh,28px)] font-light tabular-nums leading-tight ${
             broken ? 'text-amber-400' : 'text-slate-300'
           }`}>
             {fmtNum(row.balance)}
@@ -400,14 +423,14 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
             <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">
               {t('cull.selected')}
             </div>
-            <div className="text-slate-500 text-[13px] font-mono min-h-[18px] truncate">
+            <div className="text-slate-500 text-[13px] font-mono min-h-[14px] truncate">
               {[...terms, ...(typing === '' ? [] : [typing])].join(' + ') || ' '}
             </div>
             {/* Named, so a check on the running count does not have to find it
                 by whatever size it happens to be set at today. */}
             <div
               data-inang
-              className="text-white text-[clamp(26px,9vw,42px)] font-light tabular-nums leading-none truncate"
+              className="text-white text-[clamp(24px,5.2dvh,42px)] font-light tabular-nums leading-none truncate"
             >
               {inang ? fmtNum(inang) : '0'}
             </div>
@@ -431,7 +454,7 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
             <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">
               {t('cull.left')}
             </div>
-            <div className="text-[clamp(20px,6.5vw,26px)] font-light tabular-nums leading-tight text-slate-300">
+            <div className="text-[clamp(18px,3.1dvh,26px)] font-light tabular-nums leading-tight text-slate-300">
               {known ? fmtNum(left) : '—'}
             </div>
           </div>
@@ -439,7 +462,7 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
             <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">
               {t('cull.estRate')}
             </div>
-            <div className={`text-[clamp(20px,6.5vw,26px)] font-light tabular-nums leading-tight ${
+            <div className={`text-[clamp(18px,3.1dvh,26px)] font-light tabular-nums leading-tight ${
               !known || !inang ? 'text-slate-600'
                 : rateAfter > CULL_LIMIT ? 'text-rose-400' : 'text-emerald-400'
             }`}>
@@ -454,7 +477,7 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
         <button
           onClick={raise}
           disabled={!action || busy}
-          className={`w-full rounded-2xl py-3 font-black text-[13px] uppercase tracking-widest transition-colors ${
+          className={`w-full rounded-2xl py-2.5 font-black text-[13px] uppercase tracking-widest transition-colors ${
             !action
               ? 'bg-[#1c1c1e] text-slate-600 cursor-default'
               : action.tone === 'ok'
