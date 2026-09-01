@@ -203,7 +203,53 @@ export async function pull(db) {
       else db.history.push(row);
     }
   }
-  return { added, updated, buried };
+
+  const settled = settleAgainstLatestReport(db);
+  return { added, updated, buried, settled };
+}
+
+/* THE LATEST REPORT WINS — same rule as the office database's
+   palms_history_latest_wins trigger (mjm-ai-system:
+   shared/migration_palms_latest_wins.sql). Change one, change the other.
+
+   applyDailySelection already closes whatever a day report leaves out — but
+   only among the entries this phone HELD when the report was keyed. An open
+   entry it learns about afterwards (the office set a status, a seed loaded
+   one, another phone pushed one) sailed past that rule and ran forever, so
+   the office board kept showing a stage the Field Conductor had already
+   moved past.
+
+   So after every merge: a unit's single LATEST day report rules on every
+   open entry that STARTED BEFORE that report's date. In the report's list —
+   still running. Not in it — it was finished by then, and is closed at the
+   report's date. push() then carries the close up, so the office board
+   settles too.
+
+   Strictly BEFORE: an entry starting ON the report's date is never closed
+   by it, so an office correction made later the same day survives a
+   same-day report keyed from a stale screen. And only the latest report
+   rules — an old report replayed by an old phone closes nothing, because a
+   newer statement about that unit exists. */
+function settleAgainstLatestReport(db) {
+  const latest = new Map();
+  (db.history || []).forEach((h) => {
+    if (!h || !h.key || !h.at || h.demo) return;
+    const cur = latest.get(h.key);
+    if (!cur || String(h.at) > String(cur.at)) latest.set(h.key, h);
+  });
+  let settled = 0;
+  latest.forEach((rep, key) => {
+    const acts = (rep.acts || []).map(Number);
+    (db.logs[key] || []).forEach((e) => {
+      if (e.end === null && !e.demo
+          && String(e.start) < String(rep.at)
+          && !acts.includes(Number(e.actN))) {
+        e.end = rep.at;
+        settled++;
+      }
+    });
+  });
+  return settled;
 }
 
 /**
