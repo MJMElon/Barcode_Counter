@@ -198,6 +198,14 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
   const known = hasFigures(row);
   const broken = figuresBroken(row);
   const inang = terms.reduce((a, b) => a + b, 0) + (typing === '' ? 0 : Number(typing));
+  /* Whether a count has been MADE, which is not the same as whether it came
+     to anything. A Field Conductor who walks the plot and finds no pokok
+     inang at all has done the work and has an answer — nought — and that
+     answer has to be enterable, show a rate, and be sendable. Judging by the
+     total instead treated "I looked and there are none" as "I have not
+     looked yet", and left him with a dead button on a plot he had just
+     walked. */
+  const counted = terms.length > 0 || typing !== '';
   const rateNow = rateFor({ balance: row?.balance, transplant: row?.transplant, inang: 0 });
   const rateAfter = rateFor({ balance: row?.balance, transplant: row?.transplant, inang });
   const left = known ? row.balance - inang : 0;
@@ -214,7 +222,7 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
      takes a count, because that is the only thing that can change the answer.
      rateAfter equals rateNow while nothing has been counted, so one call
      covers both. */
-  const action = known && (inang > 0 || rateNow <= CULL_LIMIT) ? actionFor(rateAfter) : null;
+  const action = known && (counted || rateNow <= CULL_LIMIT) ? actionFor(rateAfter) : null;
 
   const press = (k) => {
     if (k === 'AC') { setTerms([]); setTyping(''); return; }
@@ -230,8 +238,15 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
       if (typing !== '') { setTerms((ts) => [...ts, Number(typing)]); setTyping(''); }
       return;
     }
-    // A count cannot start with a zero, and nothing sane needs seven digits.
-    setTyping((s) => (s === '' && k === '0' ? '' : (s + k).slice(0, 6)));
+    /* Nought is a count, so it can be keyed and it stands on its own. It is
+       replaced rather than prefixed by whatever is keyed next, the way any
+       calculator behaves — 0 then 5 is 5, not 05. Nothing sane needs seven
+       digits. */
+    if (k === '00') {
+      setTyping((s) => (s === '' || s === '0' ? '0' : (s + '00').slice(0, 6)));
+      return;
+    }
+    setTyping((s) => (s === '0' ? k : (s + k).slice(0, 6)));
   };
 
   /* On a laptop, use the laptop.
@@ -462,11 +477,13 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
             <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">
               {t('cull.estRate')}
             </div>
-            <div className={`text-[clamp(18px,3.1dvh,26px)] font-light tabular-nums leading-tight ${
-              !known || !inang ? 'text-slate-600'
+            <div
+              data-est
+              className={`text-[clamp(18px,3.1dvh,26px)] font-light tabular-nums leading-tight ${
+              !known || !counted ? 'text-slate-600'
                 : rateAfter > CULL_LIMIT ? 'text-rose-400' : 'text-emerald-400'
             }`}>
-              {known && inang ? fmtPct(rateAfter) : '—'}
+              {known && counted ? fmtPct(rateAfter) : '—'}
             </div>
           </div>
         </div>
