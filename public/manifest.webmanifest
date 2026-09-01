@@ -1,0 +1,26 @@
+{
+  "name": "MJM Nursery — FC Portal",
+  "short_name": "FC Portal",
+  "description": "555 Field Conductor Portal — scanning, collections, maintenance and PALMS for MJM Nursery.",
+  "id": "/",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a0f14",
+  "theme_color": "#0a0f14",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

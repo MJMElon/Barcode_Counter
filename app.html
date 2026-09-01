@@ -10,12 +10,41 @@
   <title>MJM Nursery — FC Portal</title>
   <link rel="icon" type="image/svg+xml" href="icon.svg" />
   <link rel="apple-touch-icon" href="icon.svg" />
+  <!-- WITHOUT THIS, "Add to Home Screen" IS JUST A BOOKMARK.
+       Android freezes whatever URL was open at the moment it was tapped, so
+       an icon installed from /app.html opens /app.html forever — and that is
+       not a page the published site has. start_url pins every install to the
+       root instead, whichever page it was installed from, and display
+       standalone makes it open as an app rather than a tab. -->
+  <link rel="manifest" href="manifest.webmanifest" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Outfit:wght@400;600;700;900&family=Caveat:wght@500;600;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet" />
 </head>
 <body>
   <div id="root"></div>
+  <script>
+    /* THIS FILE IS THE SOURCE ENTRY, AND IT IS ALSO PUBLISHED.
+       The build reads app.html and writes it out as index.html, but the
+       source stays committed at the repository root — and the branch-based
+       Pages builder publishes the root verbatim, so /app.html is a live URL
+       serving THIS file. Its module below is /src/main.jsx, which exists in
+       the repo and not in the build, so the app never mounts and the page
+       sits there blank.
+
+       Anyone whose home-screen icon captured /app.html lands here every
+       time. So on the live site this bounces to the built entry at the
+       root, carrying the hash — the route — with it. On localhost it does
+       nothing, because there /app.html IS the app. */
+    (function () {
+      try {
+        var dev = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+        if (!dev && /\/app\.html$/.test(location.pathname)) {
+          location.replace('./' + (location.hash || ''));
+        }
+      } catch (e) { /* never block the page over this */ }
+    })();
+  </script>
   <script>
     // Resilience + diagnostics for returning users. The previous version of this
     // site was an offline PWA, so a stale service worker / cache can serve a
