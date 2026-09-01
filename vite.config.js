@@ -1,7 +1,51 @@
-import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+
+/* KEEP THE WEB APP MANIFEST AT THE ROOT.
+ *
+ * app.html says <link rel="manifest" href="manifest.webmanifest">, and Vite
+ * resolves that like any other asset reference: it finds a manifest.webmanifest
+ * NEXT TO app.html — the repository root, where CI commits the previous build —
+ * and emits it as assets/manifest-<hash>.webmanifest.
+ *
+ * That quietly breaks the manifest, because every path INSIDE it is relative to
+ * the manifest's own URL. Moved under /assets/ it means:
+ *
+ *     start_url "./"       -> /assets/          (not the app)
+ *     scope     "./"       -> /assets/          (the app is outside its scope)
+ *     icons     icon-*.png -> /assets/icon-192.png, which does not exist
+ *
+ * An install then has no icon and opens a page that is not the portal — the
+ * exact failure the manifest was added to stop. It also publishes a manifest
+ * one generation stale, since the file it copied is the LAST build's output.
+ *
+ * public/manifest.webmanifest is already copied to dist/ verbatim, so the fix
+ * is to point the HTML back at that copy and drop the mangled one. Relative
+ * both ways, so it still works under a project sub-path.
+ */
+function keepManifestAtRoot(dist) {
+  const html = resolve(dist, 'app.html');
+  let s;
+  try {
+    s = readFileSync(html, 'utf8');
+  } catch (e) {
+    return;
+  }
+  const fixed = s.replace(/\.\/assets\/manifest-[^"']+\.webmanifest/g, './manifest.webmanifest');
+  if (fixed === s) return;
+  writeFileSync(html, fixed);
+  // And delete the copy nothing points at any more, so it never reaches the
+  // service worker's precache list below — a precached URL that 404s fails
+  // cache.addAll(), which fails the WHOLE install and leaves no offline shell.
+  try {
+    for (const f of readdirSync(resolve(dist, 'assets'))) {
+      if (/^manifest-.*\.webmanifest$/.test(f)) unlinkSync(resolve(dist, 'assets', f));
+    }
+  } catch (e) { /* no assets/ — nothing to clean up */ }
+  console.log('[manifest] served from the root, not assets/');
+}
 
 /* Injects the built file list into dist/sw.js after every build.
  *
@@ -20,6 +64,8 @@ function swPrecache() {
     name: 'sw-precache-manifest',
     closeBundle() {
       const dist = resolve(__dirname, 'dist');
+      // Before the file list is read: this deletes one.
+      keepManifestAtRoot(dist);
       let files;
       try {
         files = readdirSync(resolve(dist, 'assets')).map((f) => './assets/' + f);
