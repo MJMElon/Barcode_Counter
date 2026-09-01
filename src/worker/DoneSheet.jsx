@@ -42,6 +42,14 @@ export default function DoneSheet({ record, task, source, onClose }) {
      nursery's signal to be told what the row already said. */
   const walked = Number(record.gps_points || 0) > 0;
 
+  /* A record still sitting in the outbox carries its photos as data: URLs
+     rather than links, and those render in an <img> exactly the same way —
+     so a job finished in a plot with no signal shows its pictures back
+     immediately instead of looking as though they were lost. */
+  const photoUrls = String(record.photo_urls || '')
+    .split(',').map((u) => u.trim()).filter(Boolean)
+    .concat((record.photos || []).filter(Boolean));
+
   useEffect(() => {
     if (!walked || !source.loadTrack || record._pending) { setTrack(null); return undefined; }
     let live = true;
@@ -116,6 +124,27 @@ export default function DoneSheet({ record, task, source, onClose }) {
             <div>
               <div className={label}>{t('wk.remark')}</div>
               <div className={value}>{record.remark}</div>
+            </div>
+          )}
+
+          {/* The pictures taken while the job was done. Shown only when there
+              are some: an empty "Photos" heading on every job that never had
+              any reads as something missing rather than something absent.
+
+              A comma-separated list of links, the same way the FC Portal's
+              own board reads this column — the pictures live in the bucket,
+              and the row holds nothing but where they are. */}
+          {photoUrls.length > 0 && (
+            <div>
+              <div className={label}>{t('wk.donePhotos')}</div>
+              <div className="mt-1.5 flex gap-2 flex-wrap">
+                {photoUrls.map((u) => (
+                  <a key={u} href={u} target="_blank" rel="noreferrer"
+                     className="w-[86px] h-[86px] rounded-2xl overflow-hidden border border-slate-200 bg-slate-100">
+                    <img src={u} alt="" loading="lazy" className="w-full h-full object-cover" />
+                  </a>
+                ))}
+              </div>
             </div>
           )}
 

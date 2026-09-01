@@ -16,11 +16,14 @@
  *                 The module hides the control too, but a screen that hides a
  *                 button is not the same as a thing that cannot be done.
  *
- *   photos        no upload path exists for anon (the documents bucket takes
- *                 uploads from `authenticated` only), so any that arrive are
- *                 dropped rather than silently lost at the last moment.
+ *   photos        go up through a TICKET rather than straight into the
+ *                 bucket. See uploadPhotos below, and workerApi.photoTicket,
+ *                 for why an `anon` sign-in cannot simply be given the
+ *                 bucket.
  */
 
+import { dataUrlToBlob } from '../lib/image.js';
+import { supabase } from '../lib/supabase.js';
 import { PERMANENT, flushOutbox, isOnline, listJobs, looksOffline, queueJob } from '../lib/outbox.js';
 import { sortRecords, workTypeByKey } from '../modules/maintenance/helpers.js';
 import { batchKey, plotKey } from '../modules/maintenance/plotBatches.js';
@@ -57,9 +60,16 @@ function asBatchMap(rows) {
 /** What the phone actually sends when a job is recorded. */
 function payloadOf(args) {
   const { plot, workTypeKey, date, qty, chemical, remark, batches, weekNo, scheduleMonth,
-          gps } = args || {};
+          gps, photos } = args || {};
   const wt = workTypeByKey(workTypeKey);
   return {
+    /* The pictures themselves, as data: URLs, and NOT part of the row.
+       They travel in the queued job so a job recorded in a plot with no
+       signal still has its photos when the phone walks back into coverage —
+       which is the whole reason the outbox is IndexedDB and not
+       localStorage. send() lifts them out and turns them into links before
+       anything reaches the database. */
+    photos: (photos || []).filter(Boolean),
     plot_name:  plot && plot.plot_name,
     work_type:  workTypeKey,
     jenis:      wt ? wt.jenis : null,
@@ -84,9 +94,97 @@ function payloadOf(args) {
   };
 }
 
+/* Thrown when the office has photos switched off, or the database has not
+   had RUN_ME_worker_photos.sql run over it yet. Not a network failure, so
+   the job must not sit in the queue for ever waiting for one — the work goes
+   in without the pictures and the worker is told which half is missing. */
+const NO_PHOTOS = 'WORKER_PHOTOS_REFUSED';
+
+/**
+ * The pictures, up to the documents bucket, through a ticket.
+ *
+ * Three steps and each has a reason:
+ *
+ *   ask     worker_photo_ticket checks the token AND the photos switch, in
+ *           the database, where a tampered-with app cannot argue. This is the
+ *           gate; the camera button on the row is only a courtesy.
+ *   upload  into worker_photos/<ticket>/ — the only path in the bucket that
+ *           an `anon` sign-in can write, and only while the ticket lives.
+ *   burn    worker_photo_done, so the ten-minute window closes in seconds.
+ *
+ * Best effort per PICTURE, like the FC portal's own uploader: one photo that
+ * will not go up is left out rather than losing the record it belongs to. A
+ * refused TICKET is different and is raised, because that is the office
+ * having said no and it has to be visible.
+ */
+async function uploadPhotos(token, dataUrls, { plot_name, work_type, work_date }) {
+  let ticket;
+  try {
+    ticket = await api.photoTicket(token);
+  } catch (e) {
+    if (looksOffline(e)) throw e;                 // try the whole job again later
+    throw new Error(NO_PHOTOS);
+  }
+  if (!ticket) throw new Error(NO_PHOTOS);
+
+  const safe = (s) => String(s || '').replace(/[^0-9A-Za-z_-]+/g, '_');
+  const stem = `${safe(work_date)}_${safe(plot_name)}_${safe(work_type)}`;
+  const urls = [];
+  try {
+    for (let i = 0; i < dataUrls.length; i++) {
+      try {
+        // .jpg, because the storage rule insists on it — a bucket that can be
+        // handed anything by an anonymous caller is a bucket that will be.
+        const path = `worker_photos/${ticket}/${stem}_${Date.now()}_${i}.jpg`;
+        const { error } = await supabase.storage.from('documents')
+          .upload(path, dataUrlToBlob(dataUrls[i]), { contentType: 'image/jpeg', upsert: true });
+        if (error) { console.warn('[worker-maint] photo upload failed:', error.message); continue; }
+        const { data } = supabase.storage.from('documents').getPublicUrl(path);
+        if (data && data.publicUrl) urls.push(data.publicUrl);
+      } catch (e) {
+        console.warn('[worker-maint] photo upload failed:', e);
+      }
+    }
+  } finally {
+    await api.photoDone(token, ticket);
+  }
+  return urls;
+}
+
 export function makeWorkerMaintSource(token) {
-  async function send(args) {
-    await api.submitMaintenance(token, payloadOf(args));
+  /**
+   * One job, sent: the pictures up to storage, then the row that links to
+   * them. Used by submitRecord and again by the flush, so a record made with
+   * no signal takes exactly the same path when it finally goes.
+   *
+   * Answers whether the photos had to be left behind, rather than throwing
+   * over them — the WORK is the thing being recorded, and a picture that
+   * cannot be attached must not cost somebody their morning.
+   */
+  async function send(payload) {
+    const { photos, ...row } = payload || {};
+    const fresh   = (photos || []).filter((u) => u && String(u).startsWith('data:'));
+    const already = (photos || []).filter((u) => u && !String(u).startsWith('data:'));
+
+    let urls = already;
+    let dropped = false;
+    if (fresh.length) {
+      try {
+        urls = already.concat(await uploadPhotos(token, fresh, row));
+      } catch (e) {
+        if (e && e.message === NO_PHOTOS) {
+          console.warn('[worker-maint] photos are switched off, or not migrated — recording without them');
+          dropped = true;
+        } else {
+          throw e;                                 // offline: the whole job waits
+        }
+      }
+    }
+    await api.submitMaintenance(token, {
+      ...row,
+      photo_urls: urls.length ? urls.join(',') : null,
+    });
+    return { dropped };
   }
 
   return {
@@ -137,19 +235,17 @@ export function makeWorkerMaintSource(token) {
        reason, and is raised so the worker is told now rather than finding out
        nothing was ever recorded. */
     async submitRecord(args) {
-      if ((args.photos || []).length) {
-        console.warn('[worker-maint] photos are not offered to a PIN sign-in; dropping');
-      }
+      const payload = payloadOf(args);
       if (!isOnline()) {
-        await queueJob(WORKER_MAINT_JOB, payloadOf(args));
+        await queueJob(WORKER_MAINT_JOB, payload);
         return { queued: true };
       }
       try {
-        await send(args);
-        return { queued: false };
+        const { dropped } = await send(payload);
+        return { queued: false, photosDropped: dropped };
       } catch (e) {
         if (looksOffline(e)) {
-          await queueJob(WORKER_MAINT_JOB, payloadOf(args));
+          await queueJob(WORKER_MAINT_JOB, payload);
           return { queued: true };
         }
         throw e;
@@ -201,7 +297,10 @@ export function makeWorkerMaintSource(token) {
       return flushOutbox({
         [WORKER_MAINT_JOB]: async (payload) => {
           try {
-            await api.submitMaintenance(token, payload);
+            // The same send() the online path uses, so the photos a worker
+            // attached in a plot with no signal go up when the signal comes
+            // back rather than being dropped on the way out of the queue.
+            await send(payload);
           } catch (e) {
             if (looksOffline(e)) throw e;          // try again later
             throw new Error(PERMANENT);            // the database refused it
@@ -242,13 +341,14 @@ export function makeWorkerMaintSource(token) {
  * the office's decision, and worker_maint_roster answers it with names inside
  * the boundary and nothing else.
  *
- * `photos` is still forced off, and this one is not a judgement: there is no
- * upload path for a PIN sign-in at all. The documents bucket takes uploads
- * from `authenticated`, a worker is `anon`, and the anon key is public — so
- * opening that bucket to it would open it to anybody who reads the app
- * bundle. Honouring the switch needs a way for a worker to upload that does
- * not hand the internet a writable bucket, and until there is one the tick
- * is refused here rather than failing on the phone every time it is pressed.
+ * `photos` was forced off here too, and that was not a judgement either: there
+ * was no upload path for a PIN sign-in at all, because the documents bucket
+ * takes uploads from `authenticated` and a worker is `anon` with a public
+ * key. There is one now — a ticket, minted by the database against the
+ * worker's own token and good for one folder for ten minutes. See
+ * uploadPhotos above and shared/RUN_ME_worker_photos.sql. So the switch is
+ * left alone and answered honestly, which is what it looked like it did all
+ * along.
  */
 export function workerPermissions(boundary, actions, company) {
   const nurseries = boundary && boundary.nurseries;
@@ -265,7 +365,6 @@ export function workerPermissions(boundary, actions, company) {
         edit: false,
         delete: false,
         export: false,
-        photos: false,
       },
     },
   };

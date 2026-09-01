@@ -286,11 +286,12 @@ export default function WorkerSettings() {
                                   {!!fn.children && fnOn(d, fn.key) && (
                                     <div className="flex gap-2 flex-wrap mt-2 ml-4 pl-3 border-l-2 border-slate-200">
                                       {/* Every one of them settable. Which a
-                                          worker gets is the office's call,
-                                          so nothing is withheld here — but
-                                          one is stored ahead of being acted
-                                          on, and says so rather than being
-                                          discovered on a phone in a plot. */}
+                                          worker gets is the office's call, so
+                                          nothing is withheld here — and any
+                                          switch stored ahead of being acted on
+                                          says so, rather than being discovered
+                                          on a phone in a plot. Photos was the
+                                          last of those and is not any more. */}
                                       {fn.children.map((sub) => (
                                         <button key={sub.key}
                                                 title={sub.notYet ? t('wk.fnNotYet') : undefined}
@@ -307,9 +308,16 @@ export default function WorkerSettings() {
                                 </div>
                               ))}
                             </div>
-                            <div className="text-[11px] font-semibold text-slate-400 mb-4 -mt-2">
-                              {t('wk.fnNotYetHint')}
-                            </div>
+                            {/* The line explaining the asterisk, shown only
+                                while there is an asterisk to explain. With
+                                nothing marked it was a footnote about a mark
+                                that appears nowhere on the screen — furniture
+                                that reads as a warning. */}
+                            {MAINT_FUNCTIONS.some((f) => (f.children || []).some((c) => c.notYet)) && (
+                              <div className="text-[11px] font-semibold text-slate-400 mb-4 -mt-2">
+                                {t('wk.fnNotYetHint')}
+                              </div>
+                            )}
                           </>
                         )}
 

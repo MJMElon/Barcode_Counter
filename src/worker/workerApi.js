@@ -114,6 +114,42 @@ export async function submitMaintenance(token, payload) {
 }
 
 /**
+ * A ticket to upload photos with.
+ *
+ * The one place this portal is allowed to write a file rather than a row, and
+ * it is worth saying why it needs a ticket at all. A worker holding a PIN is
+ * `anon`, and the anon key is printed in the app bundle — so a storage rule
+ * that lets `anon` write to the documents bucket lets ANYBODY write to it.
+ * That is why the photos switch sat stored-but-not-obeyed for so long.
+ *
+ * The ticket is the way round it: a random UUID, handed over only for a valid
+ * token whose photos switch is on, good for ten minutes and for one folder —
+ * worker_photos/<ticket>/ — and for nothing else in the bucket. The upload
+ * goes in there and the ticket is burnt straight after, so in practice the
+ * door is open for about as long as it takes to send two pictures.
+ *
+ * See shared/RUN_ME_worker_photos.sql in the office repository, which says
+ * all of this at greater length and also says what it does not defend
+ * against.
+ *
+ * Raises when the office has photos switched off for this worker. That is a
+ * refusal, not a failure, and the caller has to tell them rather than
+ * recording the job with the pictures quietly missing.
+ */
+export async function photoTicket(token) {
+  return unwrap(await supabase.rpc('worker_photo_ticket', { p_token: token }));
+}
+
+/** Burn a ticket once the photos are up. Best effort — it expires anyway. */
+export async function photoDone(token, ticket) {
+  try {
+    await supabase.rpc('worker_photo_done', { p_token: token, p_ticket: ticket });
+  } catch (e) {
+    /* ten minutes from now it is dead regardless */
+  }
+}
+
+/**
  * One finished job's walked track.
  *
  * Asked for a record at a time, when somebody opens that job and wants to see

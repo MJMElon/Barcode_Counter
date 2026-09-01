@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLang } from '../context/LanguageContext.jsx';
 import { useOnline } from '../hooks/useOnline.js';
@@ -16,6 +16,7 @@ import {
   makeWorkerMaintSource, workerPermissions, workerPlotFilter,
 } from './workerMaintSource.js';
 import { canMaintFn } from '../modules/maintenance/functions.js';
+import { compressImage } from '../lib/image.js';
 import { periodLabel, periodTasks, splitDone } from './workerTasks.js';
 import DoneSheet from './DoneSheet.jsx';
 import PocketMode from './PocketMode.jsx';
@@ -64,6 +65,7 @@ export default function WorkerTasks() {
   const plotFilter = useMemo(() => workerPlotFilter(boundary), [boundary]);
 
   const mayGps = canMaintFn(permissions, 'gps');
+  const mayPhotos = canMaintFn(permissions, 'photos');
 
   const [plots, setPlots] = useState([]);
   const [records, setRecords] = useState([]);
@@ -77,6 +79,14 @@ export default function WorkerTasks() {
   const [mapOpen, setMapOpen] = useState(false);
   const [pocket, setPocket] = useState(false);
   const [openDone, setOpenDone] = useState(null);   // a finished job, opened
+  /* Pictures taken for a job that has not been recorded yet, as data: URLs,
+     keyed by task id. Held here rather than on the row so a re-render — a
+     sync landing, the clock ticking a walk on — cannot lose them, and so
+     they can be handed to submitRecord without the row having to know
+     anything about how a record is sent. */
+  const [photos, setPhotos] = useState({});
+  const pickFor = useRef(null);                      // which task the picker is for
+  const fileRef = useRef(null);
 
   /* Watching even while nothing is running, so the list knows how good the
      fix is BEFORE Start is pressed. Only asked for when this worker has GPS at
@@ -163,12 +173,77 @@ export default function WorkerTasks() {
    * the job is being finished now; the name is whoever's PIN opened the app.
    * `gps` is the walk, when there was one.
    */
+  /* ── The camera ────────────────────────────────────────────────────────
+     One hidden input for the whole list rather than one per row: twenty
+     jobs would otherwise mean twenty file inputs on a screen, and which
+     job a picture belongs to is remembered here instead.
+
+     `capture` opens the camera straight away. A worker photographing the
+     work they are standing in is not going hunting through a gallery, and
+     a phone that does not honour it falls back to the picker anyway. */
+  const MAX_PHOTOS = 3;
+
+  const askForPhoto = useCallback((task) => {
+    const have = (photos[task.id] || []).length;
+    if (have >= MAX_PHOTOS) {
+      setToast(t('wk.photoMax', { n: MAX_PHOTOS }));
+      setTimeout(() => setToast(null), 2600);
+      return;
+    }
+    pickFor.current = task.id;
+    if (fileRef.current) {
+      fileRef.current.value = '';        // so the same picture twice still fires
+      fileRef.current.click();
+    }
+  }, [photos, t]);
+
+  const photoChosen = useCallback(async (e) => {
+    const file = e.target.files && e.target.files[0];
+    const id = pickFor.current;
+    if (!file || !id) return;
+    try {
+      /* Shrunk on the phone, before it is kept anywhere. A camera hands over
+         several megabytes and what a record needs is evidence the work was
+         done — the same treatment, and the same helper, the FC Portal's own
+         form gives a photo. */
+      const small = await compressImage(file, { maxW: 1280, maxBytes: 300 * 1024 });
+      setPhotos((was) => ({ ...was, [id]: (was[id] || []).concat(small).slice(0, MAX_PHOTOS) }));
+    } catch (err) {
+      setToast(t('wk.photoFailed'));
+      setTimeout(() => setToast(null), 2600);
+    }
+  }, [t]);
+
+  const dropPhoto = useCallback((taskId, i) => {
+    setPhotos((was) => {
+      const list = (was[taskId] || []).filter((_, n) => n !== i);
+      const next = { ...was };
+      if (list.length) next[taskId] = list; else delete next[taskId];
+      return next;
+    });
+  }, []);
+
+  /* Let go of a job's pictures once they are somewhere safer. Never called
+     before the record is away — a failed save that had already emptied this
+     would take the photos with it. */
+  const dropAllPhotos = useCallback((taskId) => {
+    setPhotos((was) => {
+      if (!was[taskId]) return was;
+      const next = { ...was };
+      delete next[taskId];
+      return next;
+    });
+  }, []);
+
   const complete = useCallback(async (task, gps = null) => {
     setBusy(task.id);
     const plot = plots.find((p) => p.plot_name === task.plot)
       || { plot_name: task.plot, nursery_name: task.nursery || null };
+    const mine = photos[task.id] || [];
+    // How long the toast stays up. Bad news is read more slowly than good.
+    let linger = 2600;
     try {
-      const { queued } = await source.submitRecord({
+      const { queued, photosDropped } = await source.submitRecord({
         plot,
         workTypeKey: task.workTypeKey,
         date: today,
@@ -180,20 +255,30 @@ export default function WorkerTasks() {
         scheduleMonth: month,
         reportedBy: worker ? worker.name : '',
         workedBy: [],
-        photos: [],
+        photos: mine,
         gps,
       });
-      setToast(queued ? t('wk.doneOffline', { plot: task.plot })
-                      : t('wk.doneSaved', { plot: task.plot }));
+      /* The job went in but the pictures did not — the office has photos
+         switched off, or this database has not had the migration run over
+         it. Said out loud rather than swallowed: a worker who photographed
+         the work and is told only "saved" will believe the picture is on the
+         record, and find out months later that it never was. */
+      if (photosDropped) linger = 5000;
+      setToast(photosDropped ? t('wk.doneNoPhotos', { plot: task.plot })
+             : queued        ? t('wk.doneOffline', { plot: task.plot })
+                             : t('wk.doneSaved', { plot: task.plot }));
+      // Only once they are somewhere else — on the record, or in the queued
+      // job — is it safe to stop holding them here.
+      if (mine.length) dropAllPhotos(task.id);
       await refreshPending();
       if (!queued) await reload();
     } catch (e) {
       setToast((e && e.message) || t('wk.saveFailed'));
     } finally {
       setBusy(null);
-      setTimeout(() => setToast(null), 2600);
+      setTimeout(() => setToast(null), linger);
     }
-  }, [plots, source, today, week, month, worker, t, refreshPending, reload]);
+  }, [plots, source, today, week, month, worker, t, refreshPending, reload, photos, dropAllPhotos]);
 
   /* Start does both: it begins the walk AND puts the phone away. Pressing two
      buttons to do one thing is two chances to press only the first, and the
@@ -336,6 +421,9 @@ export default function WorkerTasks() {
                   onStop={() => stopTrack(task)}
                   onComplete={() => complete(task, track.trackingId === task.id ? track.stop() : null)}
                   onMap={mayGps ? () => setMapOpen(true) : null}
+                  onPhoto={mayPhotos ? () => askForPhoto(task) : null}
+                  onDropPhoto={(i) => dropPhoto(task.id, i)}
+                  photos={photos[task.id] || null}
                   canStart={track.canStart}
                   /* Why it cannot start, ON the button rather than in a
                      paragraph above the list. A grey button with no reason is
@@ -403,6 +491,20 @@ export default function WorkerTasks() {
         )}
 
       </div>
+
+      {/* One picker for the whole list. Which job it is for is remembered in
+          pickFor, not in the markup — twenty jobs must not mean twenty file
+          inputs on the page. */}
+      {mayPhotos && (
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={photoChosen}
+        />
+      )}
 
       {/* The phone in a pocket, still walking. Closes itself if the walk ends
           from anywhere else, so it can never be a black screen over nothing. */}
