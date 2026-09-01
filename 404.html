@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#0a0f14" />
+<title>MJM Nursery — FC Portal</title>
+<style>
+  html,body{height:100%;margin:0;background:#0a0f14;color:#00ff9d;
+    font:600 14px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    display:grid;place-items:center;text-align:center;padding:24px;}
+  a{color:#00ff9d}
+</style>
+</head>
+<body>
+<!-- ═══════════════════════════════════════════════════════════════════
+     THE HOME-SCREEN ICON THAT LANDED ON A 404
+
+     "Add to Home Screen" with no manifest is a plain bookmark: Android
+     freezes whatever URL was open at that moment. Somebody who installed
+     while on /app.html — the entry this repo's own notes tell you to open
+     in dev — got an icon pointing at a URL the published site may not
+     have. GitHub Pages then serves this page.
+
+     There is no 404 worth showing a Field Conductor standing in a plot.
+     Every URL on this site is the same app; the route lives in the hash.
+     So anything unknown goes to the root, carrying the hash with it, and
+     the app opens where they meant to be.
+
+     GitHub Pages serves this file for any path it does not have, under
+     both builders — the workflow copies public/ into dist, and dist back
+     into the repository root.
+     ═══════════════════════════════════════════════════════════════════ -->
+<noscript>This page has moved. <a href="/">Open the FC Portal</a>.</noscript>
+<div id="m">Opening the FC Portal…</div>
+<script>
+  (function () {
+    try {
+      /* The hash IS the route — HashRouter, see vite.config.js — so it is
+         carried across. A shortcut to /app.html#/worker still lands on the
+         worker portal. */
+      var to = '/' + (location.hash || '');
+      /* Never bounce off the root itself. If / is what 404'd, redirecting
+         to / is a loop, and a loop is worse than the message. */
+      if (location.pathname === '/' || location.pathname === '') {
+        document.getElementById('m').textContent =
+          'The FC Portal could not be loaded. Check your connection and try again.';
+        return;
+      }
+      location.replace(to);
+    } catch (e) {
+      location.href = '/';
+    }
+  })();
+</script>
+</body>
+</html>
