@@ -79,15 +79,22 @@ const rowOf = (unitKey, e) => ({
  */
 export async function push(db) {
   const rows = [];
+  const sentEntries = [];
   Object.keys(db.logs || {}).forEach((key) => {
     // e.demo is the sample data a fresh install seeds itself with. It exists
     // so an empty phone has something to look at; sending it would show the
     // office 52 plots of activity that never happened.
-    (db.logs[key] || []).forEach((e) => { if (e.uid && !e.demo) rows.push(rowOf(key, e)); });
+    (db.logs[key] || []).forEach((e) => {
+      if (e.uid && !e.demo) { rows.push(rowOf(key, e)); sentEntries.push(e); }
+    });
   });
   if (rows.length) {
     const { error } = await supabase.from(LOGS).upsert(rows, { onConflict: 'client_uid' });
     if (error) throw error;
+    // Delivered. Only now do these stop counting as local unsent changes —
+    // a failed push keeps the mark, and the next sync protects and resends
+    // them. (On failure the throw above skips this line.)
+    sentEntries.forEach((e) => { if (e.dirty) delete e.dirty; });
   }
 
   // The daily report: one row per unit per day, so a nursery saved twice in
@@ -181,6 +188,11 @@ export async function pull(db) {
       // Keep the device's counter ahead of anything it has just been handed,
       // or the next entry keyed in here reuses a number already in use.
       if (entry.no > (db.seq || 0)) db.seq = entry.no;
+    } else if (have.e.dirty) {
+      /* This phone changed the entry and has not delivered the change yet —
+         the local copy is NEWER than the server's, not staler. Taking the
+         server's dates here would revert a close saved seconds ago (pull
+         runs before push on purpose). push sends it and clears the mark. */
     } else if (have.e.start !== entry.start || (have.e.end || null) !== entry.end) {
       Object.assign(have.e, { start: entry.start, end: entry.end });
       updated++;
@@ -245,6 +257,7 @@ function settleAgainstLatestReport(db) {
           && String(e.start) < String(rep.at)
           && !acts.includes(Number(e.actN))) {
         e.end = rep.at;
+        e.dirty = 1;
         settled++;
       }
     });
