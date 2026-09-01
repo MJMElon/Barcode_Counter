@@ -188,6 +188,36 @@ export const BOOK_COVER_CSS = `
           font-family:var(--bk-hand);font-size:19px;line-height:1.15;
           padding:2px 2px 4px;margin-bottom:14px;border-bottom:2px solid;
         }
+        /* ── The photograph on the registration form ──────────────────────
+           Only the Worker Portal's cover puts a face on itself — a Field
+           Conductor already has an office account with a name on it. It
+           lives in this shared file anyway, because the cover is one design
+           and two copies of a stylesheet are two covers that stop matching
+           the first time one is edited.
+
+           A stuck-on photograph, tilted the other way from the button, so
+           it reads as something placed on the board rather than printed on
+           it. */
+        .bk-face-row{display:flex;align-items:center;gap:14px;margin-bottom:16px}
+        .bk-face{
+          width:74px;height:74px;flex:0 0 74px;border-radius:999px;
+          border:2px solid rgba(35,48,63,.25);background:rgba(255,255,255,.55);
+          display:grid;place-items:center;overflow:hidden;padding:0;cursor:pointer;
+          font-size:30px;color:rgba(35,48,63,.35);
+          transform:rotate(-1.5deg);box-shadow:2px 2px 0 rgba(35,48,63,.18);
+        }
+        .bk-face:active{transform:rotate(-1.5deg) translate(2px,2px);box-shadow:0 0 0}
+        .bk-face img{width:100%;height:100%;object-fit:cover;display:block}
+        .bk-face-side{min-width:0}
+        .bk-face-note{
+          font-family:var(--bk-hand);font-size:15px;line-height:1.15;
+          color:rgba(35,48,63,.55);margin-top:4px;
+        }
+        /* Not display:none — a hidden input that is not rendered cannot be
+           clicked open by the button beside it in every browser. (And no
+           backticks in here: this whole sheet is a template literal.) */
+        .bk-hidden-file{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+
         .bk-err{color:#8f1120;border-bottom-color:rgba(143,17,32,.45)}
         .bk-ok{color:#12603f;border-bottom-color:rgba(18,96,63,.45)}
         .bk-warn{color:#7a4a06;border-bottom-color:rgba(122,74,6,.45)}

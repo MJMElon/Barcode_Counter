@@ -26,7 +26,7 @@ import WorkerNav from './WorkerNav.jsx';
 export default function WorkerHome() {
   const { t } = useLang();
   const navigate = useNavigate();
-  const { modules, pending } = useWorker();
+  const { modules, pending, photoWarning } = useWorker();
 
   if (modules.maintenance) return <WorkerTasks />;
 
@@ -47,6 +47,18 @@ export default function WorkerHome() {
               {t('wk.pendingBody')}
             </div>
           </div>
+
+          {/* They took a photograph and it did not go up. Said here rather
+              than on the cover, which they left the instant they registered —
+              and said at all, because somebody who is shown only "your details
+              are with the office" will assume their photo went with them. The
+              registration itself worked, and the line says so. */}
+          {photoWarning && (
+            <div className="mt-3 bg-amber-50 border border-amber-200 rounded-2xl p-4
+                            text-[12.5px] font-semibold text-amber-900 leading-relaxed">
+              {t('wk.signedUpNoPhoto')}
+            </div>
+          )}
         </div>
       </div>
     );

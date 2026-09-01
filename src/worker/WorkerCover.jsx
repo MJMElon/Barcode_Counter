@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useLang } from '../context/LanguageContext.jsx';
 import { BOOK_COVER_CSS, COVER_OCHRE } from '../components/bookCover.js';
+import { compressImage } from '../lib/image.js';
 import { useWorker } from './WorkerAuthContext.jsx';
 
 /*
@@ -15,13 +16,28 @@ import { useWorker } from './WorkerAuthContext.jsx';
  * Payroll register, and asking them for anything more is asking them for
  * something they were never given.
  *
- * Under it, a way to put yourself ON that register: name and a PIN of your
- * own choosing, and nothing else, because everything else is the office's to
- * decide. What that makes is a row waiting to be allocated, which can see
- * nothing at all until somebody files it — see RUN_ME_worker_signup.sql in
- * the office repository. The form is the same two lines of the same cover
- * rather than a second screen: a worker who taps the wrong one should be able
- * to tap back without losing where they were.
+ * Under it, a way to put yourself ON that register: a name, a PIN of your own
+ * choosing, and a photograph — and nothing else, because everything else is
+ * the office's to decide. What that makes is a row waiting to be allocated,
+ * which can see nothing at all until somebody files it — see
+ * RUN_ME_worker_signup.sql in the office repository. The form is the same
+ * lines of the same cover rather than a second screen: a worker who taps the
+ * wrong one should be able to tap back without losing where they were.
+ *
+ * ── The photograph ──
+ *
+ * Optional, and offered because the person the office is about to file is a
+ * name on a board otherwise. It lands on the same mjmnpayroll_workers.photo_url
+ * the office's own Worker System writes, so a name arriving in "Waiting to be
+ * allocated" arrives with a face on it and whoever files them can see who they
+ * are filing.
+ *
+ * It goes up AFTER the registration has been accepted, using the session token
+ * that comes back with it — which is what keeps the bucket shut to people who
+ * have not registered. So the two can fail separately, and they are reported
+ * separately: a photograph that will not upload must not undo a registration
+ * that worked, and a worker who took one and is shown only "welcome" would
+ * reasonably believe the office has their face.
  */
 export default function WorkerCover() {
   const { t } = useLang();
@@ -31,6 +47,8 @@ export default function WorkerCover() {
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  const [photo, setPhoto] = useState(null);   // a data: URL, until it is sent
+  const fileRef = useRef(null);
 
   const cleanPin = (v) => v.toUpperCase().replace(/[^A-Z0-9]/g, '');
 
@@ -38,6 +56,24 @@ export default function WorkerCover() {
     setMode(next);
     setErr(null);
     setPin('');
+  }
+
+  /* `capture="user"` on the input opens the FRONT camera, which is the one
+     somebody photographs themselves with. A phone that does not honour it
+     falls back to the picker, which is also fine — plenty of people already
+     have a photograph of themselves. */
+  async function photoChosen(e) {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    try {
+      /* Square, small, and shrunk here rather than on the way out: this is a
+         face at 22px on the office's board, so 512 is generous, and the
+         nursery pays for every megabyte it stores. */
+      setPhoto(await compressImage(file, { maxW: 512, maxBytes: 120 * 1024 }));
+      setErr(null);
+    } catch (_) {
+      setErr(t('wk.photoFailed'));
+    }
   }
 
   async function handleSignIn() {
@@ -64,7 +100,14 @@ export default function WorkerCover() {
     setBusy(true);
     setErr(null);
     try {
-      await signUp(name.trim(), pin);
+      /* The photograph goes with it, and the CONTEXT sends it — not this
+         screen. Signing up sets the identity, which re-renders the portal
+         around the new worker and takes this cover off the screen, so an
+         upload started here would finish into a component nobody is looking
+         at and an error would be shown to nothing at all. The context does
+         both before it hands the portal over, and carries a warning to the
+         screen the worker actually lands on if the photo did not make it. */
+      await signUp(name.trim(), pin, photo);
     } catch (e) {
       setErr((e && e.message) || t('wk.signInFailed'));
     } finally {
@@ -93,6 +136,46 @@ export default function WorkerCover() {
           <div className="bk-lines">
             {offline && <div className="bk-note bk-warn">{t('wk.offline')}</div>}
             {err && <div className="bk-note bk-err">{err}</div>}
+
+            {/* Above the name, because it is the thing that says who this
+                is, and because a round photograph at the top of a form is
+                read as "you" without a label having to say so. Optional, and
+                looks it: an empty circle with a person in it is plainly a
+                thing you may fill in, not a field left blank. */}
+            {mode === 'up' && (
+              <div className="bk-face-row">
+                <button
+                  type="button"
+                  className="bk-face"
+                  onClick={() => fileRef.current && fileRef.current.click()}
+                  aria-label={t(photo ? 'wk.retakePhoto' : 'wk.addYourPhoto')}
+                >
+                  {photo
+                    ? <img src={photo} alt="" />
+                    : <span aria-hidden="true">👤</span>}
+                </button>
+                <div className="bk-face-side">
+                  <span
+                    className="bk-link"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => fileRef.current && fileRef.current.click()}
+                    onKeyDown={(e) => e.key === 'Enter' && fileRef.current && fileRef.current.click()}
+                  >
+                    {t(photo ? 'wk.retakePhoto' : 'wk.addYourPhoto')}
+                  </span>
+                  <div className="bk-face-note">{t('wk.photoOptional')}</div>
+                </div>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*"
+                  capture="user"
+                  className="bk-hidden-file"
+                  onChange={photoChosen}
+                />
+              </div>
+            )}
 
             {mode === 'up' && (
               <input
