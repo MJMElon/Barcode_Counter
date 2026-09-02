@@ -1,7 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLang } from '../context/LanguageContext.jsx';
-import { useOnline } from '../hooks/useOnline.js';
+import { useAutoSync, useOnline } from '../hooks/useOnline.js';
 import { withQueued } from '../modules/maintenance/data.js';
 import { todayStr, workTypeByKey, workTypeLabel } from '../modules/maintenance/helpers.js';
 import {
@@ -17,6 +17,7 @@ import {
 } from './workerMaintSource.js';
 import { canMaintFn } from '../modules/maintenance/functions.js';
 import { compressImage } from '../lib/image.js';
+import { agoText } from '../lib/ago.js';
 import { periodLabel, periodTasks, splitDone } from './workerTasks.js';
 import DoneSheet from './DoneSheet.jsx';
 import PocketMode from './PocketMode.jsx';
@@ -59,7 +60,10 @@ export default function WorkerTasks() {
   const { token, worker, boundary, actions, company, modules } = useWorker();
   const online = useOnline();
 
-  const source = useMemo(() => makeWorkerMaintSource(token), [token]);
+  /* Keyed by worker, because a supervisor's handset gets passed round a gang
+     and one man's plots must never be drawn into another man's list. */
+  const source = useMemo(
+    () => makeWorkerMaintSource(token, worker && worker.id), [token, worker]);
   const permissions = useMemo(
     () => workerPermissions(boundary, actions, company), [boundary, actions, company]);
   const plotFilter = useMemo(() => workerPlotFilter(boundary), [boundary]);
@@ -79,6 +83,9 @@ export default function WorkerTasks() {
   const [mapOpen, setMapOpen] = useState(false);
   const [pocket, setPocket] = useState(false);
   const [openDone, setOpenDone] = useState(null);   // a finished job, opened
+  /* { at } when the list was drawn from the phone's own copy; at === 0 means
+     this phone has never had a good read at all. */
+  const [stale, setStale] = useState(null);
   /* Pictures taken for a job that has not been recorded yet, as data: URLs,
      keyed by task id. Held here rather than on the row so a re-render — a
      sync landing, the clock ticking a walk on — cannot lose them, and so
@@ -103,13 +110,18 @@ export default function WorkerTasks() {
 
   const reload = useCallback(async () => {
     try {
-      const [{ plots: p, records: r }, s] = await Promise.all([
+      const [d, s] = await Promise.all([
         source.loadData(),
         source.loadSchedules(null, month),
       ]);
-      setPlots(p);
-      setRecords(r);
+      setPlots(d.plots);
+      setRecords(d.records);
       setSchedule(s);
+      /* Where the list came from. The screen looks identical either way, and
+         that is exactly the problem it solves: an empty list drawn from a
+         cache nobody has filled reads as "everything on the plan is done",
+         which is the one thing this screen must never say by accident. */
+      setStale(d.fromCache ? { at: d.cachedAt || 0 } : null);
       setError(null);
     } catch (e) {
       /* Offline is not an error here — the list is drawn from what was
@@ -148,8 +160,20 @@ export default function WorkerTasks() {
     return hits.length ? hits[0] : null;
   }, [allRecords]);
 
-  const sync = useCallback(async () => {
+  /* Send what is queued, and re-read the board only if something went.
+   *
+   * The re-read is the expensive half — three RPCs over a nursery's signal —
+   * and running it every minute whether or not anything was waiting would
+   * turn the auto-sync below into a poll. Asking the queue first is a local
+   * IndexedDB read, so a tick with nothing to send costs nothing and makes
+   * no request at all. `force` is the Sync button, where somebody has asked
+   * for a refresh and should get one. */
+  const sync = useCallback(async (force = false) => {
     if (syncing) return;
+    let waiting = [];
+    try { waiting = await source.pending(); } catch (_) { waiting = []; }
+    if (!waiting.length && !force) return;
+
     setSyncing(true);
     try { await source.flushQueue(); } catch (_) { /* try again next time */ }
     await refreshPending();
@@ -157,13 +181,22 @@ export default function WorkerTasks() {
     setSyncing(false);
   }, [source, syncing, refreshPending, reload]);
 
-  // A quiet retry every minute, so a worker walking back into signal does not
-  // have to know there is anything to press.
-  useEffect(() => {
-    if (!online || !pending.length) return undefined;
-    const id = setInterval(() => { sync(); }, 60000);
-    return () => clearInterval(id);
-  }, [online, pending.length, sync]);
+  /* A quiet retry every minute, AND the moment the line comes back.
+   *
+   * It used to be a bare interval that only started once there was something
+   * queued and the browser already thought it was online — so a worker
+   * walking out of a plot with a morning's work on the phone waited up to a
+   * minute after reconnecting before anything was sent, and if the tab was
+   * reopened at exactly the wrong moment, longer. useAutoSync is the FC
+   * portal's own rhythm: fire on mount, every minute while online, and
+   * immediately on the browser's `online` event, which is the event that
+   * actually means "there is a line now".
+   *
+   * Cheap to run with nothing queued — sync() asks the local IndexedDB
+   * whether anything is waiting and returns without a request if not — so
+   * there is no need to gate it on `pending`, and gating on it was how the
+   * reconnect got missed. */
+  useAutoSync(sync, 60000);
 
   /**
    * Finish a job: write the record the schedule already describes.
@@ -353,7 +386,7 @@ export default function WorkerTasks() {
         </div>
 
         {/* Anything the queue is still holding, and whether there is signal. */}
-        {(pending.length > 0 || !online) && (
+        {(pending.length > 0 || !online || stale) && (
           <div className={`rounded-2xl border px-4 py-3 flex items-center gap-3 ${
             pending.length ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'}`}>
             <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${online ? 'bg-amber-500' : 'bg-slate-400'}`} />
@@ -361,12 +394,20 @@ export default function WorkerTasks() {
               <div className="text-[12px] font-black text-slate-700">
                 {pending.length ? t('mt.pendingN', { n: pending.length }) : t('mt.offline')}
               </div>
+              {/* Three situations, three sentences. A list drawn off the
+                  phone has to SAY so, and a phone with nothing on it has to
+                  say that too — otherwise the empty list below reads as an
+                  empty plan, which on this screen is an instruction to go
+                  home. */}
               <div className="text-[10px] font-bold text-slate-400">
-                {online ? t('mt.pendingHint') : t('mt.offlineHint')}
+                {stale && !stale.at ? t('wk.neverLoaded')
+                 : stale            ? t('wk.showingCached', { when: agoText(stale.at, t) })
+                 : online           ? t('mt.pendingHint')
+                                    : t('mt.offlineHint')}
               </div>
             </div>
             {online && pending.length > 0 && (
-              <button onClick={sync} disabled={syncing}
+              <button onClick={() => sync(true)} disabled={syncing}
                 className="shrink-0 bg-amber-500 disabled:opacity-50 text-white font-black text-[10px] uppercase tracking-widest rounded-xl px-3 py-2">
                 {syncing ? t('mt.syncing') : t('mt.syncNow')}
               </button>
@@ -380,7 +421,18 @@ export default function WorkerTasks() {
           </div>
         )}
 
-        {!loading && !todo.length && (
+        {/* Nothing to do — or nothing loaded. The green "well done" panel was
+            shown for both, and on a phone that had never read the plan it
+            told a worker his period was finished before he had started it. */}
+        {!loading && !todo.length && stale && !stale.at && (
+          <div className="bg-amber-50 border border-amber-200 rounded-3xl px-5 py-7 text-center">
+            <div className="text-[14px] font-black text-amber-900 leading-relaxed">
+              {t('wk.neverLoaded')}
+            </div>
+          </div>
+        )}
+
+        {!loading && !todo.length && !(stale && !stale.at) && (
           <div className="bg-emerald-50 rounded-3xl px-5 py-7 text-center">
             <div className="text-[15px] font-black text-emerald-700">
               {done.length ? t('wk.periodClear') : t('wk.periodEmpty')}

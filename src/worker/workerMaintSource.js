@@ -30,6 +30,10 @@ import { batchKey, plotKey } from '../modules/maintenance/plotBatches.js';
 import { applicableSchedules } from '../modules/maintenance/schedule.js';
 import { applyCompanySwitches } from '../lib/portalSettings.js';
 import * as api from './workerApi.js';
+import {
+  cacheBatches, cacheData, cacheRoster, cacheSchedules,
+  cachedBatches, cachedData, cachedRoster, cachedSchedules,
+} from './workerOffline.js';
 
 /* Its own queue kind, separate from the FC portal's 'maint_record'. The two
    can sit in one browser — a Field Conductor's phone that a worker borrowed —
@@ -151,7 +155,7 @@ async function uploadPhotos(token, dataUrls, { plot_name, work_type, work_date }
   return urls;
 }
 
-export function makeWorkerMaintSource(token) {
+export function makeWorkerMaintSource(token, workerId = null) {
   /**
    * One job, sent: the pictures up to storage, then the row that links to
    * them. Used by submitRecord and again by the flush, so a record made with
@@ -188,18 +192,53 @@ export function makeWorkerMaintSource(token) {
   }
 
   return {
+    /* The list, and what has already been done against it.
+     *
+     * Kept on the phone after every good read and served from there when the
+     * network cannot answer. Without this a worker who reopened the portal in
+     * a plot was shown an empty list under "Everything on the plan is done.
+     * Well done." — which is not a blank screen, it is a wrong instruction,
+     * and this screen IS the instruction.
+     *
+     * `fromCache` lets the list say which it is showing. A REFUSAL is still
+     * raised: "you are not signed in", "the module is switched off for you"
+     * are answers the worker has to be given, and covering them with
+     * yesterday's copy would hide a supervisor's decision behind a screen
+     * that looks like it is working. */
     async loadData() {
-      const [plots, records] = await Promise.all([
-        api.plots(token),
-        api.maintRecords(token, 500),
-      ]);
-      return { plots: plots || [], records: asRecords(records) };
+      const fallback = () => {
+        const hit = cachedData(workerId);
+        return {
+          plots: (hit && hit.plots) || [],
+          records: asRecords((hit && hit.records) || []),
+          fromCache: true,
+          cachedAt: (hit && hit.at) || 0,
+        };
+      };
+      if (!isOnline()) return fallback();
+      try {
+        const [plots, records] = await Promise.all([
+          api.plots(token),
+          api.maintRecords(token, 500),
+        ]);
+        const out = { plots: plots || [], records: asRecords(records) };
+        cacheData(workerId, out);
+        return out;
+      } catch (e) {
+        if (looksOffline(e)) return fallback();
+        throw e;
+      }
     },
 
     async loadPlotBatches() {
+      const fallback = () => (cachedBatches(workerId) || { map: new Map() }).map;
+      if (!isOnline()) return fallback();
       try {
-        return asBatchMap(await api.plotBatches(token));
+        const map = asBatchMap(await api.plotBatches(token));
+        cacheBatches(workerId, map);
+        return map;
       } catch (e) {
+        if (looksOffline(e)) return fallback();
         // The office's balance view may not exist yet. The board copes with
         // no batches; it must not fail to open over it.
         console.warn('[worker-maint] batches unavailable:', e && e.message);
@@ -219,9 +258,17 @@ export function makeWorkerMaintSource(token) {
        Returning the raw rows instead left every week chip empty, because the
        board was handed a shape it does not read. */
     async loadSchedules(_keys, monthLabel) {
+      /* The plan matters more here than anywhere: it IS the to-do list. Lose
+         it and the screen has nothing to put on the list, and says the period
+         is clear. Cached per month, which is the unit the board asks for. */
+      const fallback = () => (cachedSchedules(workerId, monthLabel) || { rows: [] }).rows;
+      if (!isOnline()) return fallback();
       try {
-        return applicableSchedules(await api.schedules(token), monthLabel);
+        const rows = applicableSchedules(await api.schedules(token), monthLabel);
+        cacheSchedules(workerId, monthLabel, rows);
+        return rows;
       } catch (e) {
+        if (looksOffline(e)) return fallback();
         console.warn('[worker-maint] schedules unavailable:', e && e.message);
         return [];
       }
@@ -281,9 +328,14 @@ export function makeWorkerMaintSource(token) {
     },
 
     async loadWorkers() {
+      const fallback = () => (cachedRoster(workerId) || { rows: [] }).rows;
+      if (!isOnline()) return fallback();
       try {
-        return await api.maintRoster(token);
+        const rows = await api.maintRoster(token);
+        cacheRoster(workerId, rows || []);
+        return rows;
       } catch (e) {
+        if (looksOffline(e)) return fallback();
         console.warn('[worker-maint] roster unavailable:', e && e.message);
         return [];
       }

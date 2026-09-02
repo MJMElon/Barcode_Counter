@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import * as api from './workerApi.js';
 import { uploadIdPhoto } from './workerIdPhoto.js';
+import { cacheIdentity, cachedIdentity, clearWorkerCache } from './workerOffline.js';
 import { visibleModules } from '../lib/portalSettings.js';
 
 /*
@@ -38,17 +39,43 @@ export function WorkerAuthProvider({ children }) {
       setLoading(false);
       return;
     }
+    /* Draw the portal from what this phone was last told, BEFORE asking.
+     *
+     * The token was already kept when the read failed — "a worker in a plot
+     * with no signal has not been signed out, they are just out of reach" —
+     * but the identity was not, so `identity` stayed null and the portal
+     * showed the PIN cover anyway. A worker was locked out of the very list
+     * he was standing in the plot to work down, and keying his PIN again did
+     * not help, because signing in is a network call too.
+     *
+     * This is a screen gate, not the security. Every worker_* function
+     * re-checks the token in the database on every call, so a phone drawing
+     * itself from a cached identity can show a button and still not record a
+     * thing it is not allowed to. Same reasoning as cachedPermissions() on
+     * the FC side. */
+    const known = cachedIdentity();
+    if (known) setIdentity(known);
+
     api
       .whoami(token)
       .then((who) => {
         if (!alive) return;
-        if (who) setIdentity(who);
-        else api.keepToken(null); // expired or signed out elsewhere
+        if (who) {
+          setIdentity(who);
+          cacheIdentity(who);          // switches the office changed overnight
+        } else {
+          /* A real "you are signed out" — the token expired, or somebody took
+             their PIN off the register. That is an ANSWER, not a failure, and
+             it must clear the cached copy or the phone would go on drawing a
+             portal for somebody the office has closed. */
+          api.keepToken(null);
+          clearWorkerCache();
+          setIdentity(null);
+        }
         setOffline(false);
       })
       .catch(() => {
-        // The token is kept: a worker in a plot with no signal has not been
-        // signed out, they are just out of reach. It is tried again next time.
+        // Out of reach, not signed out. Whatever was cached above stands.
         if (alive) setOffline(true);
       })
       .finally(() => {
@@ -62,6 +89,7 @@ export function WorkerAuthProvider({ children }) {
   const signIn = useCallback(async (pin) => {
     const who = await api.signIn(pin);
     api.keepToken(who.token);
+    cacheIdentity(who);          // so tomorrow's plot with no signal still opens
     setIdentity(who);
     setOffline(false);
     return who;
@@ -97,6 +125,7 @@ export function WorkerAuthProvider({ children }) {
         setPhotoWarning(true);
       }
     }
+    cacheIdentity(who);
     setIdentity(who);
     setOffline(false);
     return who;
@@ -106,6 +135,10 @@ export function WorkerAuthProvider({ children }) {
     const token = identity && identity.token;
     setIdentity(null);
     api.keepToken(null);
+    /* Everything, not just the token. The next person to pick this phone up
+       must not be shown the last one's plots, and must certainly not be drawn
+       a portal as them. */
+    clearWorkerCache();
     await api.signOut(token);
   }, [identity]);
 

@@ -95,7 +95,34 @@ async function noteFailure(uid, message) {
  */
 export const PERMANENT = 'OUTBOX_PERMANENT';
 
-export async function flushOutbox(handlers) {
+/* ── One flush at a time, across the whole app ─────────────────────────────
+ *
+ * Two flushes running at once both read the queue before either removes
+ * anything from it, so both send the same job — the same morning's work
+ * posted twice, and its photographs uploaded twice.
+ *
+ * That is not hypothetical. It happens the moment the phone reconnects: the
+ * `online` event starts an automatic flush at the same instant a worker,
+ * seeing the bar come back, presses Sync. A React `if (syncing) return` does
+ * not help, because state set in one call is not visible to the other in the
+ * same tick — the guard has to live here, next to the queue it protects.
+ *
+ * Chained rather than dropped: the second caller waits and then runs, so a
+ * flush asked for while another is in flight still happens rather than being
+ * silently skipped. It simply finds the queue already empty, which is the
+ * correct outcome and costs one IndexedDB read.
+ */
+let chain = Promise.resolve();
+
+export function flushOutbox(handlers) {
+  const run = () => doFlush(handlers);
+  const next = chain.then(run, run);
+  // Never let one caller's failure break the chain for the next.
+  chain = next.then(() => {}, () => {});
+  return next;
+}
+
+async function doFlush(handlers) {
   const result = { sent: 0, failed: 0, dropped: 0, left: 0 };
   let jobs;
   try { jobs = await listJobs(); } catch { return result; }

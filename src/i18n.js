@@ -603,6 +603,8 @@ const en = {
   'wk.trkPointsN': '{n} points',
   'wk.openMap': 'Map',
   // ── Photos of the work ──
+  'wk.showingCached': 'Showing the list this phone loaded {when}. Work still saves.',
+  'wk.neverLoaded': 'The list has not been loaded onto this phone yet — this is not "no work". Open the portal where there is signal before going out.',
   'wk.addPhoto': 'Photo',
   'wk.dropPhoto': 'Remove photo {n}',
   'wk.photoMax': 'Up to {n} photos on one job.',
@@ -1319,6 +1321,8 @@ const ms = {
   'wk.trkPointsN': '{n} titik',
   'wk.openMap': 'Peta',
   // ── Gambar kerja ──
+  'wk.showingCached': 'Menunjukkan senarai yang telefon ini muat {when}. Kerja tetap disimpan.',
+  'wk.neverLoaded': 'Senarai kerja belum dimuat ke telefon ini — ini bukan bermakna tiada kerja. Buka portal di kawasan bertalian sebelum keluar.',
   'wk.addPhoto': 'Gambar',
   'wk.dropPhoto': 'Buang gambar {n}',
   'wk.photoMax': 'Paling banyak {n} gambar untuk satu kerja.',
