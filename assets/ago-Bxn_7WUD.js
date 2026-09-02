@@ -1,0 +1,1 @@
+function u(a,o){const s=Date.now()-(Number(a)||0);if(!a||s<0)return o("ago.unknown");const n=Math.floor(s/6e4);if(n<2)return o("ago.justNow");if(n<60)return o("ago.minutes",{n});const r=Math.floor(n/60);if(r<24)return o("ago.hours",{n:r});const t=Math.floor(r/24);return o("ago.days",{n:t})}export{u as a};
