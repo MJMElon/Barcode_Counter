@@ -3,6 +3,10 @@
 
 import { dataUrlToBlob } from '../../lib/image.js';
 import { PERMANENT, flushOutbox, isOnline, listJobs, looksOffline, queueJob } from '../../lib/outbox.js';
+import {
+  cacheBatches, cacheData, cacheSchedules, cacheWorkers,
+  cachedBatches, cachedData, cachedSchedules, cachedWorkers,
+} from './offline.js';
 import { fetchAllRows, supabase } from '../../lib/supabase.js';
 import { sortRecords, workTypeByKey } from './helpers.js';
 import { batchKey, batchesByPlot, plotKey } from './plotBatches.js';
@@ -48,7 +52,27 @@ function isPermissionDenied(error) {
   return code === '42501' || /permission denied|not authori[sz]ed|insufficient privilege/i.test(m);
 }
 
+/* What to answer when the network cannot be reached: the last good read, and
+   a flag saying so. `fromCache` is what lets the board say "showing what was
+   last loaded" instead of drawing an empty week as though it were an empty
+   plan. A phone that has never had a good read answers with nothing AND
+   fromCache true — "nothing has been loaded onto this phone" is still a
+   different sentence from "there is nothing to do". */
+function offlineData() {
+  const hit = cachedData();
+  return {
+    plots: (hit && hit.plots) || [],
+    records: sortRecords((hit && hit.records) || []),
+    fromCache: true,
+    cachedAt: (hit && hit.at) || 0,
+  };
+}
+
 export async function loadMaintenanceData() {
+  // No signal at all: do not even try. The failure takes seconds the person
+  // standing in the plot does not have.
+  if (!isOnline()) return offlineData();
+
   const [plotsRes, recRes] = await Promise.all([
     supabase.from('shared_plots').select('nursery_name, plot_name').order('plot_name'),
     // Recent work is all a Field Conductor needs on a phone; the office keeps
@@ -59,15 +83,25 @@ export async function loadMaintenanceData() {
       .order('work_date', { ascending: false })
       .limit(500),
   ]);
-  if (plotsRes.error) throw plotsRes.error;
+  /* A dropped connection falls back; a REFUSAL does not. "The table is not
+     there" and "you are not allowed" are things the person has to be told,
+     and answering them with yesterday's copy would hide a broken deploy
+     behind a screen that looks like it is working. */
+  if (plotsRes.error) {
+    if (looksOffline(plotsRes.error)) return offlineData();
+    throw plotsRes.error;
+  }
   if (recRes.error) {
+    if (looksOffline(recRes.error)) return offlineData();
     if (isMissingTable(recRes.error)) throw new Error(SETUP_NEEDED);
     throw recRes.error;
   }
-  return {
+  const out = {
     plots: plotsRes.data || [],
     records: sortRecords(recRes.data || []),
   };
+  cacheData(out);
+  return out;
 }
 
 /**
@@ -354,6 +388,14 @@ export function hasRejectColumns(rows) {
 export async function loadSchedules(nurseryKeys, monthLabel) {
   const keys = (nurseryKeys || []).filter(Boolean);
   if (!keys.length) return [];
+
+  /* The plan matters most of all offline: it is the LIST OF WORK, and
+     without it the week card draws four empty jobs and says everything is
+     done. Cached per month, because that is the unit the board asks for and
+     a conductor may page back to last month's while standing in a plot. */
+  const fallback = () => (cachedSchedules(monthLabel) || { rows: [] }).rows;
+  if (!isOnline()) return fallback();
+
   // Every month this nursery has ever had a plan for, not just this one: the
   // office carries a plan forward without writing a row until it is saved, so
   // the applicable month has to be worked out here. There is at most one row
@@ -363,10 +405,17 @@ export async function loadSchedules(nurseryKeys, monthLabel) {
     .select('nursery, month, payload')
     .in('nursery', keys);
   if (error) {
+    if (looksOffline(error)) return fallback();
     if (isMissingTable(error)) return [];
     throw error;
   }
-  return applicableSchedules(data || [], monthLabel);
+  /* applicableSchedules picks the plan that applies and migrates the older
+     payload shapes. Its OUTPUT is cached, not the raw rows: it is what the
+     board reads, it is smaller, and doing the work once online beats doing
+     it on a phone that is already struggling. */
+  const rows = applicableSchedules(data || [], monthLabel);
+  cacheSchedules(monthLabel, rows);
+  return rows;
 }
 
 /**
@@ -382,11 +431,23 @@ export async function loadSchedules(nurseryKeys, monthLabel) {
  * waiting on a migration to be run.
  */
 export async function loadPlotBatches() {
+  /* What is standing in each plot, so the record form can offer the batches
+     rather than ask somebody to type one. Cached like the rest: without it
+     the form still saves, but the batch has to be remembered rather than
+     picked, which is exactly the typing this module exists to avoid. */
+  const fallback = () => (cachedBatches() || { map: new Map() }).map;
+  if (!isOnline()) return fallback();
+
   const view = await fetchAllRows(() => supabase
     .from('shared_plot_batch_balance')
     .select('plot_key, plot_name, batch_name, qty')
     .order('plot_key', { ascending: true }));
-  if (!view.error) return mapFromBalances(view.data || []);
+  if (!view.error) {
+    const map = mapFromBalances(view.data || []);
+    cacheBatches(map);
+    return map;
+  }
+  if (looksOffline(view.error)) return fallback();
 
   /* The long way round is for a view that is NOT THERE — never created, not
      granted, renamed. It is emphatically NOT for a view that merely failed to
@@ -413,7 +474,9 @@ export async function loadPlotBatches() {
 
   console.warn('[maintenance] plot balance view is not there, reading the ledger:',
     view.error.message);
-  return loadPlotBatchesFromLedger();
+  const map = await loadPlotBatchesFromLedger();
+  cacheBatches(map);
+  return map;
 }
 
 /** The view's rows in the shape the form already expects. */
@@ -481,16 +544,26 @@ async function loadPlotBatchesFromLedger() {
  * simply does not appear.
  */
 export async function loadWorkers() {
+  /* The colleagues a job can be credited to. Cached with the rest, because
+     "record offline" has to mean the WHOLE form: without this the tick list
+     is empty in the plot, and the conductor either credits nobody or keys a
+     name — which is the typing the list exists to remove. */
+  const fallback = () => (cachedWorkers() || { rows: [] }).rows;
+  if (!isOnline()) return fallback();
+
   const { data, error } = await supabase
     .from('mjmnpayroll_workers')
     .select('id, worker_no, full_name, nursery, section, role, job_title, maint_general, active')
     .eq('active', true)
     .order('full_name');
   if (error) {
+    if (looksOffline(error)) return fallback();
     if (isMissingTable(error)) return [];
     throw error;
   }
-  return data || [];
+  const rows = data || [];
+  cacheWorkers(rows);
+  return rows;
 }
 
 /* One write for the whole answer, because it IS one answer: a record is

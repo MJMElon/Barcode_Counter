@@ -3,9 +3,11 @@ import { fmtNum, fmtPct } from './cullingData.js';
 import { CULL_LIMIT, actionFor, caseBody } from './cullingActions.js';
 // Every figure on this screen comes from here.
 import {
-  diagnose, figuresBroken, figuresFor, hasFigures, loadPlots, plantedNear, rateFor,
+  blocksCachedAt, diagnose, figuresBroken, figuresFor, hasFigures, lastLoadWasCached,
+  loadPlots, plantedNear, rateFor,
 } from './cullingSource.js';
 import { todayStr } from './data.js';
+import { agoText } from '../../lib/ago.js';
 import { openCasePlots } from '../../lib/nelos.js';
 import { submitCase } from './cullingOffline.js';
 
@@ -66,11 +68,22 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
   const [terms, setTerms] = useState([]);      // the counts already entered
   const [typing, setTyping] = useState('');    // the one being keyed now
   const [busy, setBusy] = useState(false);
+  /* { at } when the blocks on screen came off the device rather than the
+     office; at === 0 means this phone has never had a good read. */
+  const [stale, setStale] = useState(null);
 
   // Best effort: a read that fails leaves the screen empty rather than broken.
   useEffect(() => {
     let live = true;
-    loadPlots().then((p) => { if (live) { setRows(p || []); refresh(); } }, () => {});
+    loadPlots().then((p) => {
+      if (!live) return;
+      setRows(p || []);
+      /* Where these figures came from, so the screen can say so. An empty
+         list means one of two very different things and only the source
+         knows which. */
+      setStale(lastLoadWasCached() ? { at: blocksCachedAt() } : null);
+      refresh();
+    }, () => {});
     openCasePlots({ source: 'scan' }).then((s) => { if (live) setRaised(s); }, () => {});
     /* A plot that ought to be on this list and is not has been stopped by one
        of the rules behind it, and the screen cannot say which — it simply
@@ -333,9 +346,17 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
   }
 
   if (!plots.length) {
+    /* Two very different sentences, and the screen used to say the first one
+       for both. "No plot is at Pengambilan" is a fact about the nursery; a
+       phone that has never loaded anything knows no such fact, and telling a
+       Field Conductor there is no culling to do is how an afternoon gets
+       skipped. */
     return (
-      <div className="bg-[#111821] border border-[#1f2a38] text-slate-400 rounded-3xl px-4 py-10 text-center text-sm font-bold">
-        {t('cull.noPlots')}
+      <div className={`rounded-3xl px-4 py-10 text-center text-sm font-bold border ${
+        stale && !stale.at
+          ? 'bg-[#2a1f11] border-[#4a361c] text-amber-300'
+          : 'bg-[#111821] border-[#1f2a38] text-slate-400'}`}>
+        {stale && !stale.at ? t('cull.neverLoaded') : t('cull.noPlots')}
       </div>
     );
   }
@@ -362,6 +383,18 @@ export default function CullingTab({ t, staffName, userId, flash, nurseryKeys })
     >
       <div className="bg-black rounded-[2rem] overflow-hidden shadow-2xl border border-[#1f2a38]
                       p-2.5 flex flex-col gap-1.5 h-full">
+        {/* Figures from the device, not the office. One thin line, because a
+            conductor counting pokok inang does not want a banner — but it has
+            to be there: the numbers a rate is judged against were true when
+            they were loaded, and a batch collected since would make this
+            screen confidently wrong. Counting still works, and still saves. */}
+        {stale && stale.at > 0 && (
+          <div className="mx-1 rounded-lg bg-[#2a1f11] border border-[#4a361c] px-2.5 py-1
+                          text-[10px] font-bold text-amber-300/90 text-center">
+            {t('cull.showingCached', { when: agoText(stale.at, t) })}
+          </div>
+        )}
+
         {/* Which plot, and where its rate stands before any of today's
             counting. Apple puts the clock here; the plot is what this
             calculator is always about, so it takes that place. */}

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAutoSync, useOnline } from '../../hooks/useOnline.js';
+import { agoText } from '../../lib/ago.js';
 import TopNav from '../../components/TopNav.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useLang } from '../../context/LanguageContext.jsx';
@@ -111,6 +112,10 @@ export default function MaintenanceModule({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [setup, setSetup] = useState(false);
+  /* { at } when the board is drawn from the device's own copy rather than a
+     fresh read; at === 0 means this phone has never had one. null when the
+     figures came from the office just now. */
+  const [stale, setStale] = useState(null);
   const [nursery, setNursery] = useState('');
   const [editing, setEditing] = useState(null); // { record? } — open sheet
   const [toast, setToast] = useState(null);
@@ -189,6 +194,12 @@ export default function MaintenanceModule({
       const d = await source.loadData();
       setPlots(d.plots);
       setRecords(d.records);
+      /* Whether what is on screen came off the device rather than the
+         office. The board looks identical either way, and that is the
+         problem it solves: an empty week drawn from a cache that was never
+         filled reads as "you're all clear", which is the one thing it must
+         not be mistaken for. */
+      setStale(d.fromCache ? { at: d.cachedAt || 0 } : null);
       setError(null);
       setSetup(false);
     } catch (e) {
@@ -555,7 +566,7 @@ export default function MaintenanceModule({
         {/* What has been recorded but not yet sent. Shown rather than hidden:
             a Field Conductor needs to know their morning is safe, and that it
             has not reached the office yet. */}
-        {(pending.length > 0 || !online) && (
+        {(pending.length > 0 || !online || stale) && (
           <div className={`rounded-2xl border px-4 py-3 flex items-center gap-3 ${
             pending.length ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'}`}>
             <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${online ? 'bg-amber-500' : 'bg-slate-400'}`} />
@@ -563,8 +574,19 @@ export default function MaintenanceModule({
               <div className="text-[12px] font-black text-slate-700">
                 {pending.length ? t('mt.pendingN', { n: pending.length }) : t('mt.offline')}
               </div>
+              {/* Three different sentences, because they are three different
+                  situations and only one of them is "all is well".
+
+                  A board drawn from the device has to SAY it is, and when
+                  the device has nothing it has to say that too — otherwise
+                  the empty week below reads as an empty plan. That is the
+                  whole bug: the screen looked the same whether the office
+                  had scheduled nothing or the phone had loaded nothing. */}
               <div className="text-[10px] font-bold text-slate-400">
-                {online ? t('mt.pendingHint') : t('mt.offlineHint')}
+                {stale && !stale.at ? t('mt.neverLoaded')
+                 : stale            ? t('mt.showingCached', { when: agoText(stale.at, t) })
+                 : online           ? t('mt.pendingHint')
+                                    : t('mt.offlineHint')}
               </div>
             </div>
             {online && pending.length > 0 && (
@@ -599,13 +621,21 @@ export default function MaintenanceModule({
                   onNext={() => stepWeek(1)}
                   onNow={() => setView({ month: nowMonth, week: nowWeek })}
                   onOpen={(week, workType) => setSheet({ week, workType })}
+                  /* Nothing on the device AND no plan read: the week is empty
+                     because nothing was loaded, not because nothing is due. */
+                  noPlan={!!(stale && !stale.at) || (!!stale && !schedule.length)}
                 />
                 {/* The three answers the month's list used to carry. They are
                     about the plan, not about the four weeks it was drawn as,
                     so they outlive it. */}
                 {!timelineNurseries.length ? (
                   <div className="bg-white border border-slate-200 rounded-2xl px-4 py-5 text-center text-[13px] font-bold text-slate-400">
-                    {t('mt.noPlots')}
+                    {/* "No nursery is open to you yet" is a statement about
+                        PERMISSIONS, and it used to be shown for a phone that
+                        simply had not loaded anything — sending a Field
+                        Conductor to ask an admin for access he already has.
+                        With nothing on the device, say that instead. */}
+                    {stale && !stale.at ? t('mt.neverLoaded') : t('mt.noPlots')}
                   </div>
                 ) : !schedule.length ? (
                   <div className="bg-white border border-slate-200 rounded-2xl px-4 py-5 text-center text-[13px] font-bold text-slate-400">

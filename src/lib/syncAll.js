@@ -74,6 +74,27 @@ export async function syncAll() {
     const m = await import('../modules/palms/cullingSource.js');
     await m.loadPlots();
   });
+  /* Maintenance was PUSH-only here, which made the button a half-truth: a
+     Field Conductor pressed Sync, walked out of coverage, opened Maintenance
+     and found an empty board — because nothing had ever pulled the plan, the
+     plots or the records down. The month asked for is the one he is standing
+     in, which is the one the board opens on.
+
+     The nursery keys are the ones his own access allows, read the same way
+     the module reads them, so this loads exactly what he will be shown and
+     not the whole estate. */
+  await run('maintenance board', async () => {
+    const m = await import('../modules/maintenance/data.js');
+    const { monthLabelOf } = await import('../modules/maintenance/schedule.js');
+    const { nurseryKey } = await import('./access.js');
+    const { plots } = await m.loadMaintenanceData();
+    // Nice to have, not the point — neither should sink the pull.
+    await m.loadPlotBatches().catch(() => {});
+    await m.loadWorkers().catch(() => {});
+    const names = [...new Set((plots || []).map((p) => p.nursery_name).filter(Boolean))];
+    const keys = [...new Set(names.flatMap((n) => [n, nurseryKey(n)]))];
+    if (keys.length) await m.loadSchedules(keys, monthLabelOf(m.todayStr()));
+  });
   await run('consents & bookings', async () => {
     const m = await import('../modules/scan/store.js');
     await m.fetchConsents();

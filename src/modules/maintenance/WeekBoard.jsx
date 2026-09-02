@@ -40,6 +40,11 @@ function NavArrow({ dir, onClick, label }) {
  */
 export default function WeekBoard({
   month, week, isNow, counts, doneCounts, onPrev, onNext, onNow, onOpen,
+  /* True when this phone is drawing a plan it has never actually loaded.
+     Without it the footer says "you're all clear" over four empty jobs,
+     which is the difference between a conductor going home and a conductor
+     finding some signal. */
+  noPlan = false,
 }) {
   const { t, lang } = useLang();
   const wkCounts = counts || {};
@@ -138,7 +143,11 @@ export default function WeekBoard({
       </div>
 
       <div className="px-4 py-1.5 border-t border-slate-100 text-[9px] font-bold text-slate-400 flex justify-between gap-3">
-        <span className="truncate">{totalDue ? t('mt.tapToRecord') : t('mt.weekClear')}</span>
+        <span className="truncate">
+          {totalDue ? t('mt.tapToRecord')
+           : noPlan  ? t('mt.weekNoPlan')
+                     : t('mt.weekClear')}
+        </span>
         {totalDue > 0 && (
           <span className="shrink-0 tabular-nums">{t('mt.weekTally', { done: totalDone, n: totalDue })}</span>
         )}

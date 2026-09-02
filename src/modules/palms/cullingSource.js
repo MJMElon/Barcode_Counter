@@ -182,20 +182,45 @@ export async function pengambilanPlots() {
   return out;
 }
 
+/* Whether the last loadPlots() answered from the device rather than the
+ * office, and how old that copy is.
+ *
+ * The screen needs this and could not work it out for itself. An empty list
+ * was drawn as "No plot is at Pengambilan yet" whatever the reason for it —
+ * so a phone that had simply never loaded anything told a Field Conductor
+ * there was no culling to do, which is a statement about the nursery made
+ * from a fact about the network. Same bug the Maintenance board had.
+ */
+let _lastFromCache = false;
+
+export function lastLoadWasCached() {
+  return _lastFromCache;
+}
+
+/** When the device's copy of the blocks was taken, or 0 for never. */
+export function blocksCachedAt() {
+  return (cachedBlocks() || { at: 0 }).at || 0;
+}
+
 export async function loadPlots() {
   /* Standing in a plot is where there is no signal, so the last good read is
      kept on the device and served when a read cannot be made. Every read here
      answers null on failure rather than "nothing", so a partial failure falls
      back whole instead of quietly listing an empty nursery — and, worse,
      saving that emptiness over the cache. */
-  if (!isOnline()) return (cachedBlocks() || { rows: [] }).rows;
+  if (!isOnline()) {
+    _lastFromCache = true;
+    return (cachedBlocks() || { rows: [] }).rows;
+  }
 
   const [atPengambilan, planted, finished, dos] = await Promise.all([
     pengambilanPlots(), loadTransplanting(), loadFinished(), loadDeliveryOrders(),
   ]);
   if (!atPengambilan || !planted || !finished || !dos) {
+    _lastFromCache = true;
     return (cachedBlocks() || { rows: [] }).rows;
   }
+  _lastFromCache = false;
 
   const today = new Date().toISOString().slice(0, 10);
 
