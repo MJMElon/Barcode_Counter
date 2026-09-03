@@ -145,6 +145,11 @@ export function weekDates(week, mLabel) {
 }
 
 /** Which week a day of the month belongs to — the 29th onwards is week 4. */
+/* SHARED WITH THE OFFICE. weekNoOfDay() in mjm-ai-system
+   nursery_ops/plot_maintenance_script.js is the same arithmetic, and the
+   office files a round's ticks under the block this returns — so the two
+   drifting apart means a worker sent out in the wrong week for a job that
+   was planned correctly. Change one, change the other. */
 export function weekOfDate(dateStr) {
   const day = parseInt(String(dateStr || '').slice(8, 10), 10);
   if (!day) return 0;
