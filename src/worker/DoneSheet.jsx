@@ -149,13 +149,31 @@ export default function DoneSheet({ record, task, source, onClose }) {
           )}
 
           {/* Whether the conductor has been past it yet. Read only — signing
-              off is not a worker's to do. */}
-          <div className={`rounded-2xl px-4 py-3 ${record.verified_at
-            ? 'bg-emerald-50 border border-emerald-200' : 'bg-slate-100 border border-slate-200'}`}>
-            <div className="text-[12px] font-black text-slate-700">
-              {record.verified_at ? t('wk.verifiedBy', { name: record.verified_by || '' })
-                                  : t('wk.notVerifiedYet')}
+              off is not a worker's to do.
+
+              THREE answers, not two. Rejecting a record clears verified_at —
+              deliberately, a record is in exactly one of three states — so a
+              record that had been SENT BACK fell into the else branch and
+              read "not checked yet": the most reassuring of the three things
+              this box could say, and the only false one. A worker whose work
+              had been refused was told it was still in the queue. */}
+          <div className={`rounded-2xl px-4 py-3 border ${
+            record.rejected_at ? 'bg-rose-50 border-rose-200'
+            : record.verified_at ? 'bg-emerald-50 border-emerald-200'
+                                 : 'bg-slate-100 border-slate-200'}`}>
+            <div className={`text-[12px] font-black ${
+              record.rejected_at ? 'text-rose-800' : 'text-slate-700'}`}>
+              {record.rejected_at
+                ? t('wk.sentBackBy', { name: record.rejected_by || '' })
+                : record.verified_at
+                  ? t('wk.verifiedBy', { name: record.verified_by || '' })
+                  : t('wk.notVerifiedYet')}
             </div>
+            {record.rejected_at && record.reject_reason && (
+              <div className="text-[12.5px] font-bold text-rose-900 mt-1 leading-snug">
+                {record.reject_reason}
+              </div>
+            )}
           </div>
 
           {/* The walk. */}

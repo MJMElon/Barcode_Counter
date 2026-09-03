@@ -141,8 +141,12 @@ export default function WorkerTasks() {
 
   const tasks = useMemo(
     () => periodTasks(schedule, week, { plotFilter }), [schedule, week, plotFilter]);
+  /* `me` is what decides whose repair a sent-back job is. It is the name on
+     the worker's own row — the same string worker_submit_maint writes into
+     reported_by — so the two are being compared like with like. */
   const { todo, done } = useMemo(
-    () => splitDone(tasks, allRecords, { week, month }), [tasks, allRecords, week, month]);
+    () => splitDone(tasks, allRecords, { week, month, me: worker && worker.name }),
+    [tasks, allRecords, week, month, worker]);
 
   const label = periodLabel(week, month, daysInMonthLabel(month));
 
@@ -472,6 +476,12 @@ export default function WorkerTasks() {
                   onResume={track.resume}
                   onStop={() => stopTrack(task)}
                   onComplete={() => complete(task, track.trackingId === task.id ? track.stop() : null)}
+                  /* Sent back by the conductor, and this worker's to redo.
+                     The row says so and says why: "work not finished" and
+                     "wrong plot" send somebody to do very different things,
+                     and a repair with no reason on it is the same mistake
+                     made twice. */
+                  sentBack={task.sentBack || null}
                   onMap={mayGps ? () => setMapOpen(true) : null}
                   onPhoto={mayPhotos ? () => askForPhoto(task) : null}
                   onDropPhoto={(i) => dropPhoto(task.id, i)}
@@ -527,8 +537,22 @@ export default function WorkerTasks() {
                           {task.chemical}
                         </div>
                       )}
+                      {/* Somebody ELSE's record on this plot was sent back.
+                          It stays here rather than vanishing: two workers
+                          must not both walk out to the same plot, and a job
+                          that disappears off one man's screen because it is
+                          another man's repair is a job nobody can account
+                          for. It is not on his to-do list, and it says why. */}
+                      {task.sentBack && (
+                        <div className="text-[11px] font-bold text-rose-600 mt-0.5 truncate">
+                          {t('wk.sentBackOther', { who: task.sentBack.who || '' })}
+                        </div>
+                      )}
                     </div>
-                    <span className="text-emerald-600 text-[16px] font-black shrink-0" aria-hidden="true">✓</span>
+                    <span className={`text-[16px] font-black shrink-0 ${
+                      task.sentBack ? 'text-rose-500' : 'text-emerald-600'}`} aria-hidden="true">
+                      {task.sentBack ? '↩' : '✓'}
+                    </span>
                   </button>
                 );
               })}

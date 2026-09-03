@@ -72,7 +72,7 @@ const MAX_PX = 112;
 export default function TaskRow({
   task, tint, tracking, session, elapsed, denied, busy,
   onStart, onPause, onResume, onStop, onComplete, onMap, canStart = true, waitFor = null,
-  onPhoto, onDropPhoto, photos = null,
+  onPhoto, onDropPhoto, photos = null, sentBack = null,
 }) {
   const { t, lang } = useLang();
   const [dx, setDx] = useState(0);
@@ -136,10 +136,30 @@ export default function TaskRow({
         onPointerCancel={up}
         onClick={click}
         style={{ touchAction: 'pan-y' }}
-        className={`relative bg-white border border-slate-200 rounded-2xl px-3.5 py-3
-                    shadow-[0_2px_10px_rgba(0,0,0,.05)] select-none
+        className={`relative bg-white rounded-2xl px-3.5 py-3 overflow-hidden
+                    shadow-[0_2px_10px_rgba(0,0,0,.05)] select-none border
+                    ${sentBack ? 'border-rose-300' : 'border-slate-200'}
                     ${busy ? 'opacity-60' : ''}`}
       >
+        {/* A job the conductor refused, come back to be done again.
+            Across the top of the card rather than tucked beside the plot
+            name: this is not a detail of the row, it is what the row IS —
+            the difference between walking out to spray a plot and walking
+            out to put right what was wrong with it. The REASON is on it,
+            because "work not finished" and "wrong plot" send somebody to do
+            very different things. */}
+        {sentBack && (
+          <div className="-mx-3.5 -mt-3 mb-3 px-3.5 py-2 rounded-t-2xl bg-rose-50 border-b border-rose-200">
+            <div className="text-[10px] font-black uppercase tracking-widest text-rose-700">
+              {t('wk.sentBack')}
+            </div>
+            <div className="text-[12px] font-bold text-rose-900 leading-snug mt-0.5">
+              {sentBack.reason || t('wk.sentBackNoReason')}
+              {sentBack.by ? ` — ${sentBack.by}` : ''}
+            </div>
+          </div>
+        )}
+
         <div className="flex items-start gap-3">
           <span className={`w-11 h-11 rounded-2xl grid place-items-center shrink-0 ${tone.bg}`}>
             <WorkIcon workKey={task.workTypeKey} className={`w-7 h-7 ${tone.fg}`} />

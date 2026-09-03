@@ -604,6 +604,10 @@ const en = {
   'wk.openMap': 'Map',
   // ── Photos of the work ──
   'wk.showingCached': 'Showing the list this phone loaded {when}. Work still saves.',
+  'wk.sentBack': 'Sent back — do this again',
+  'wk.sentBackNoReason': 'The conductor did not accept this record.',
+  'wk.sentBackOther': 'Sent back to {who}',
+  'wk.sentBackBy': 'Sent back by {name} — do this work again',
   'wk.neverLoaded': 'The list has not been loaded onto this phone yet — this is not "no work". Open the portal where there is signal before going out.',
   'wk.addPhoto': 'Photo',
   'wk.dropPhoto': 'Remove photo {n}',
@@ -1322,6 +1326,10 @@ const ms = {
   'wk.openMap': 'Peta',
   // ── Gambar kerja ──
   'wk.showingCached': 'Menunjukkan senarai yang telefon ini muat {when}. Kerja tetap disimpan.',
+  'wk.sentBack': 'Dihantar balik — buat semula',
+  'wk.sentBackNoReason': 'Penyelia tidak menerima rekod ini.',
+  'wk.sentBackOther': 'Dihantar balik kepada {who}',
+  'wk.sentBackBy': 'Dihantar balik oleh {name} — buat kerja ini semula',
   'wk.neverLoaded': 'Senarai kerja belum dimuat ke telefon ini — ini bukan bermakna tiada kerja. Buka portal di kawasan bertalian sebelum keluar.',
   'wk.addPhoto': 'Gambar',
   'wk.dropPhoto': 'Buang gambar {n}',

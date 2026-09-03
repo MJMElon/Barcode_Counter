@@ -11,7 +11,7 @@
  * next and match neither the plan nor the record.
  */
 import { WORK_TYPES } from '../modules/maintenance/helpers.js';
-import { isDone, mergeWeekTasks } from '../modules/maintenance/schedule.js';
+import { mergeWeekTasks, monthLabelOf, weekOfDate } from '../modules/maintenance/schedule.js';
 
 /** A job's identity: the plot AND what is going on it. */
 export const idOf = (t) => `${t.workTypeKey}|${t.plot}|${t.chemical || ''}`;
@@ -60,22 +60,72 @@ export function periodTasks(schedule, week, { plotFilter = null } = {}) {
     || String(a.chemical).localeCompare(String(b.chemical)));
 }
 
+/** Does this record answer this task? The same match isDone makes. */
+function answers(r, task, week, month) {
+  return r.work_type === task.workTypeKey
+    && r.plot_name === task.plot
+    && (!task.chemical || !r.chemical || r.chemical === task.chemical
+        || String(r.chemical).indexOf(task.chemical) !== -1)
+    && (r.week_no ? r.week_no === week : weekOfDate(r.work_date) === week)
+    && monthLabelOf(r.work_date) === month;
+}
+
+/** Two names for the same person, compared the way a register spells them. */
+const sameName = (a, b) =>
+  !!a && !!b && String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+
 /**
  * The same list, split by whether it has been recorded.
  *
  * `records` must already include whatever the outbox is still holding — a job
  * done in a plot with no signal is DONE, and showing it as outstanding is how
  * it gets done twice.
+ *
+ * ── Work the conductor sent back ──
+ *
+ * A record swiped left in the Verify Hub is a record REFUSED: the work has
+ * not been accepted, so the job is not finished. The FC Portal has always
+ * read it that way (MaintenanceModule filters `accepted` before anything
+ * counts) and the worker's phone never did — so a sent-back job sat under
+ * "Completed" with a green tick and nobody redid it.
+ *
+ * It goes back to the person who recorded it, and to nobody else. That is a
+ * decision about how the nursery is run, not a fact about the software: the
+ * man who did it is the man who fixes it. It has one consequence worth
+ * stating, because it is the cost of that choice — if he is off sick, the
+ * plot stays unrepaired and no other phone shows it as outstanding. The
+ * office sees it on the FC board either way.
+ *
+ * For everybody ELSE on that ground it stays under Completed, marked as sent
+ * back. Not hidden: two workers must not both walk out to a plot, and a job
+ * that vanished off one man's screen because it is another man's repair is a
+ * job nobody can account for.
+ *
+ * `me` is the name on the worker's own row — what worker_submit_maint writes
+ * into reported_by. Absent, nothing is treated as a repair, which is the
+ * behaviour this had before and is the safe way to be wrong.
  */
-export function splitDone(tasks, records, { week, month }) {
+export function splitDone(tasks, records, { week, month, me = null }) {
   const todo = [];
   const done = [];
   (tasks || []).forEach((task) => {
-    const d = isDone(records, {
-      workTypeKey: task.workTypeKey, plot: task.plot,
-      chemical: task.chemical, week, month,
-    });
-    (d ? done : todo).push(task);
+    const hits = (records || []).filter((r) => answers(r, task, week, month));
+    if (!hits.length) { todo.push(task); return; }
+
+    // Any record that was NOT sent back finishes the job, whoever made it.
+    if (hits.some((r) => !r.rejected_at)) { done.push(task); return; }
+
+    /* Everything matching was refused. Whose repair is it? */
+    const mine = hits.find((r) => sameName(r.reported_by, me)
+                               || sameName(r.worked_by, me));
+    if (mine) {
+      todo.push({ ...task, sentBack: {
+        by: mine.rejected_by || '', reason: mine.reject_reason || '', at: mine.rejected_at } });
+    } else {
+      done.push({ ...task, sentBack: {
+        by: hits[0].rejected_by || '', reason: hits[0].reject_reason || '',
+        at: hits[0].rejected_at, mine: false, who: hits[0].reported_by || '' } });
+    }
   });
   return { todo, done };
 }
